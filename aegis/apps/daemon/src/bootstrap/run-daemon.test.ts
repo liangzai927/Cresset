@@ -10,7 +10,7 @@ import { join } from "node:path";
 import { VirtualClock } from "@aegis/clock";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { IpcClient, readHandshakeFile } from "../ipc/client.js";
-import { AlreadyRunningError, type RunningDaemon, runDaemon } from "./run-daemon.js";
+import { AlreadyRunningError, DAEMON_VERSION, type RunningDaemon, runDaemon } from "./run-daemon.js";
 
 let dir: string;
 let running: RunningDaemon | null = null;
@@ -53,6 +53,11 @@ describe("启动序列（详细设计 §3）", () => {
     const hs = readHandshakeFile(running.paths.handshakeFile);
     expect(hs.token.length).toBeGreaterThan(20);
     expect(hs.protocolVersion).toBe(1);
+    // 诊断字段：界面"服务版本"与打包验证都依赖它们。
+    // daemonEntry 在真实进程里是 main.js；vitest 内嵌运行时 process.argv[1] 是测试入口，
+    // 因此这里只断言进程级字段，入口路径由打包验证覆盖。
+    expect(hs.daemonVersion).toBe(DAEMON_VERSION);
+    expect(hs.nodeExecPath).toBe(process.execPath);
     expect(hs.endpoint).toBe(running.paths.ipcEndpoint);
   });
 

@@ -268,4 +268,10 @@ export interface HandshakeFile {
   endpoint: string;
   dataDir: string;
   startedAt: number;
+  /** daemon 版本（界面"服务版本"与排障用） */
+  daemonVersion: string;
+  /** daemon 实际使用的 Node 可执行文件；用于确认打包产物没有回退到系统 Node */
+  nodeExecPath: string;
+  /** daemon 入口脚本绝对路径；用于确认打包产物加载的是 Resources/daemon/main.js */
+  daemonEntry: string;
 }

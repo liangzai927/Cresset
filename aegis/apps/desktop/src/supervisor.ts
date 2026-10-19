@@ -38,8 +38,13 @@ import { type RestartPlan, RestartPolicy, type RestartPolicyOptions } from "./re
 export interface Handshake {
   endpoint: string;
   token: string;
-  daemonVersion: string;
   pid: number;
+  /** daemon 版本；旧版握手文件可能没有 */
+  daemonVersion?: string;
+  /** daemon 实际使用的 Node；用于确认打包产物用了随附运行时 */
+  nodeExecPath?: string;
+  /** daemon 入口脚本绝对路径；用于确认打包产物加载的是包内入口 */
+  daemonEntry?: string;
 }
 
 /** daemon 生命周期状态（供界面展示） */
@@ -366,10 +371,21 @@ export function resolveDaemonEntry(opts: {
  *   - 打包后二进制路径随版本变化
  *   - `node:sqlite` 等内置模块行为与系统 Node 不一致（实测过）
  *
- * 探测顺序：显式配置 → 环境变量 → 常见 nvm/系统路径 → PATH 上的 node。
+ * 探测顺序：显式配置 → **打包随附的 Node** → 环境变量 → 常见 nvm/系统路径。
+ *
+ * @param explicit 显式指定的 Node 路径（优先级最高）
+ * @param resourcesPath 打包后的 `Contents/Resources`；存在 `node/bin/node` 时优先使用它，
+ *   这样打好的应用不依赖用户机器上的 Node 版本
  */
-export function resolveNodeExecPath(explicit?: string): string | null {
+export function resolveNodeExecPath(explicit?: string, resourcesPath?: string): string | null {
   if (explicit && existsSync(explicit)) return explicit;
+
+  // 打包态：随附 Node 必须优先于系统 Node。否则用户机器升级/卸载 Node 后，
+  // 24/7 常驻的 daemon 会在下次重启时静默起不来。
+  if (resourcesPath) {
+    const bundled = join(resourcesPath, "node", "bin", "node");
+    if (existsSync(bundled)) return bundled;
+  }
 
   const fromEnv = process.env.AEGIS_NODE_PATH;
   if (fromEnv && existsSync(fromEnv)) return fromEnv;

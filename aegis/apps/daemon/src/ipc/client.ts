@@ -25,6 +25,10 @@ export interface HandshakeFileShape {
   endpoint: string;
   dataDir: string;
   startedAt: number;
+  /** 旧版 daemon 可能没有这三个诊断字段，因此按可选读取 */
+  daemonVersion?: string;
+  nodeExecPath?: string;
+  daemonEntry?: string;
 }
 
 /** 读取并校验握手文件；内容不完整时抛错（而不是返回半截数据） */

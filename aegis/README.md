@@ -2,7 +2,7 @@
 
 > 24 小时常驻的桌面 Agent：下层是替我盯着世界的**哨兵**，上层是一支有明确角色、可并行工作、能把活互相交接直到交付的**员工团队**；所有外发给模型的数据都经过**脱敏网关**。
 
-**当前阶段：R4 进行中** —— 崩溃自恢复已完成；剩余打包分发与签名。
+**当前阶段：R4 进行中** —— 崩溃自恢复与 ad-hoc 打包已完成；剩余正式签名、公证与分发。
 
 | 里程碑 | 状态 |
 | --- | --- |
@@ -10,9 +10,9 @@
 | R1 运行时基础 | ✅ 完成 |
 | R2 调度引擎 | ✅ 完成：recurrence ｜ scheduler ｜ notify ｜ daemon 接入 ｜ CLI |
 | **R3 桌面外壳 + 界面** | ✅ **完成**：Electron 三层 ｜ 原生通知 ｜ 三块界面 ｜ 托盘 |
-| R4 系统集成（打包/自启/自恢复） | 🚧 进行中：自启 ✅ ｜ 崩溃自恢复 ✅ ｜ 打包/签名 待做 |
+| R4 系统集成（打包/自启/自恢复） | 🚧 进行中：自启 ✅ ｜ 崩溃自恢复 ✅ ｜ 打包（ad-hoc）✅ ｜ 正式签名/公证 待做 |
 
-**当前验证状态**：`pnpm verify` 全绿 ｜ **12 个工作区包** ｜ **306 测试通过** ｜ 注释占比 19.7%
+**当前验证状态**：`pnpm verify` 全绿 ｜ **12 个工作区包** ｜ **309 测试通过** ｜ 注释占比 19.7%
 **桌面验证**：`pnpm verify:desktop` 11 项集成检查全部通过（含 SIGKILL 后自动重启）
 
 ### 一条命令启动
@@ -187,6 +187,8 @@ pnpm verify                  # 依赖方向门禁 + typecheck + lint + 测试
 | --- | --- |
 | `pnpm verify` | **全量校验（提交前跑这个）**：门禁 → 解析 → 类型 → lint → 测试 → 构建 |
 | `pnpm build` | 构建全部产物（类型检查 + esbuild 打包 + 生成 .d.ts） |
+| `pnpm package` | 组装 `dist/Aegis.app`（随附 Node + ad-hoc 签名） |
+| `pnpm package:verify` | 组装后真实启动打包产物自检 |
 | `pnpm start` | 运行 daemon（当前为 R1 运行时） |
 | `node apps/daemon/dist/main.js --check` | 执行启动序列后立即停止（安装后自检） |
 | `node apps/daemon/dist/main.js --print-paths` | 打印路径解析结果（诊断数据目录/socket 位置） |
@@ -202,6 +204,35 @@ pnpm verify                  # 依赖方向门禁 + typecheck + lint + 测试
 
 > ⚠️ **沙箱限制**：`pnpm spike` 中的 S4/S5 需要写 `~/Library/LaunchAgents` 与读取系统统一日志。
 > 在文件沙箱内运行时这两项会报 `blocked`（**不是**失败），需在真实/提权会话下运行才能得到完整结论。
+
+---
+
+## 打包（macOS，R4）
+
+```bash
+pnpm package                                 # 构建 + 组装 dist/Aegis.app + ad-hoc 签名
+AEGIS_E2E_NO_SANDBOX=1 pnpm package:verify   # 外层已有文件沙箱时（DSH/CI）真实启动自检
+open dist/Aegis.app
+```
+
+产物是一个自包含的 `.app`，不依赖用户机器上的 Node：
+
+```
+Aegis.app/Contents/Resources/
+├── app/                     Electron 主进程 + preload + renderer
+├── daemon/                  daemon 产物（入口 main.js）
+├── node/bin/node            随附 Node 运行时（ADR-01）
+└── node_modules/@aegis/*    工作区包（app 与 daemon 共用解析）
+```
+
+| 细节 | 说明 |
+| --- | --- |
+| Node 运行时 | `resolveNodeExecPath()` 在打包态优先用 `Resources/node/bin/node`；只有开发态才回退到系统 Node |
+| daemon 入口 | `resolveDaemonEntry()` 优先用 `Resources/daemon/main.js`；开机自启的 plist 也指向它 |
+| 签名 | 默认 ad-hoc（`codesign -s -`），保证本机可启动；改 Info.plist/Resources 会使 Electron 原签名失效，必须重签 |
+| 正式分发 | `pnpm package --sign "Developer ID Application: ..."`，之后仍需公证（notarization）与 DMG |
+| 通知 | ad-hoc/未签名仍会被 macOS 拒绝系统通知，只能走窗口兜底；正式签名后才会恢复 |
+| 产物位置 | `dist/Aegis.app`（约 423MB，`dist/` 已被 git 忽略） |
 
 ---
 

@@ -345,7 +345,7 @@ function onboardingMarkerPath(): string {
 
 /** 自启配置。执行的是 **daemon**（不是界面）—— 见 packages/platform/src/autostart.ts 的说明 */
 function autostartOptions(): AutostartOptions | null {
-  const nodeExec = resolveNodeExecPath();
+  const nodeExec = resolveNodeExecPath(undefined, process.resourcesPath);
   if (!nodeExec) return null;
   const repoRoot = join(import.meta.dirname, "..", "..", "..");
   const entry = resolveDaemonEntry({ repoRoot, resourcesPath: process.resourcesPath });
@@ -381,7 +381,7 @@ async function ipcGetOnboarding(): Promise<{
 async function ipcSetAutostart(enabled: boolean): Promise<{ ok: boolean; detail: string }> {
   const opts = autostartOptions();
   if (!opts) {
-    return { ok: false, detail: "找不到系统 Node 或 daemon 入口，无法设置开机自启" };
+    return { ok: false, detail: "找不到 Node 运行时或 daemon 入口，无法设置开机自启" };
   }
   const r = enabled ? installAutostart(opts) : uninstallAutostart(opts);
   log(r.ok ? "info" : "warn", "main.autostart_set", { enabled, ok: r.ok, detail: r.detail });
@@ -739,10 +739,10 @@ async function bootstrap(): Promise<void> {
   // 顺序很关键：监督者一旦被创建就可以报告状态（"启动中"->"运行中"），
   // 窗口据此显示准确信息。若先建窗口再建监督者，界面首次查询会得到
   // "未运行"并弹出红色横幅 —— 明明正在启动，却吓用户一跳（实测）。
-  const nodeExec = resolveNodeExecPath();
+  const nodeExec = resolveNodeExecPath(undefined, process.resourcesPath);
   if (!nodeExec) {
     log("error", "main.node_not_found", {
-      hint: "未找到系统 Node。设置 AEGIS_NODE_PATH 环境变量指向 node 可执行文件。",
+      hint: "未找到 Node 运行时。开发态请设置 AEGIS_NODE_PATH；打包态应包含 Resources/node/bin/node。",
     });
   } else {
     const repoRoot = join(import.meta.dirname, "..", "..", "..");

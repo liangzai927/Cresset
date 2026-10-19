@@ -20,13 +20,13 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 阶段 | **R4 进行中**（崩溃自恢复已完成），下一步 R4 打包分发 |
+| 阶段 | **R4 进行中**（自启/崩溃自恢复/ad-hoc 打包已完成），剩余正式签名与公证 |
 | 版本 | daemon `0.2.0-r2` ／ 桌面 `0.3.0-r3` |
-| 校验 | `pnpm verify` 全绿（306 测试）＋ `pnpm verify:desktop` 11/11 |
-| 启动 | `pnpm dev`（智能增量构建后启动） |
+| 校验 | `pnpm verify` 全绿（309 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
+| 启动 | `pnpm dev`（智能增量构建后启动；打包产物为 `dist/Aegis.app`） |
 | 数据目录 | `~/Library/Application Support/Aegis`（含 `desktop.log`） |
-| 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复 |
-| **未实现** | 系统通知（macOS 拒绝未签名应用，用窗口提醒兜底）、打包签名、监测器(M2)、LLM+知识库(M3)、员工层(M4) |
+| 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复/打包（ad-hoc） |
+| **未实现** | 系统通知（macOS 拒绝未签名应用，用窗口提醒兜底）、正式签名/公证/DMG、监测器(M2)、LLM+知识库(M3)、员工层(M4) |
 | 已知坑 | 见 README 的 F1–F27 与 C-1–C-11 |
 
 ### 接手时先看这三处
@@ -38,7 +38,8 @@
 ### 当前的"悬而未决"
 
 - **系统通知需要正式签名**：需 Apple Developer 账号；否则只能用窗口提醒兜底（已实现）
-- **R4 打包**未开始：electron-builder 或手写 `.app` 包装（已有一个可用的手工包装实验）
+- **R4 打包已落地 ad-hoc `.app`**：`tools/package-app.mjs` 可重复产出 `dist/Aegis.app`；
+  正式 Developer ID 签名、公证与 DMG 尚未做
 - **产品名**仍是占位的 Aegis（集中在 `packages/product/src/index.ts`）
 
 ---
@@ -58,6 +59,42 @@
 ---
 
 ## 记录（新的在最上面）
+
+### 2026-10-19 · R4 打包：可双击的 Aegis.app（ad-hoc）
+**里程碑**：R4
+**改了什么**：
+- 新增 `tools/package-app.mjs`：构建 → ditto Electron.app → 改 Info.plist →
+  复制 app/daemon/工作区包/随附 Node → ad-hoc 签名 → 真实启动自检
+- 产物布局：`Resources/{app,daemon,node/bin/node,node_modules/@aegis/*}`
+- `resolveNodeExecPath()` 支持 `Resources/node/bin/node`，打包态优先于系统 Node；
+  `main.ts` 两处传入 `process.resourcesPath`，开机自启的 plist 也改用包内运行时
+- 握手文件新增 `daemonVersion` / `nodeExecPath` / `daemonEntry`：
+  修掉界面"服务版本"一直为 null 的问题，也让打包验证能证明 daemon 用的是包内运行时
+- `package.json` 增加 `package` / `package:verify`；新增 3 个路径解析测试
+**为什么**：R4 的"装上就不管"需要一个不依赖开发目录的 `.app`。
+手写打包而不是引入 electron-builder，是因为当前只需要 macOS，
+且 `@aegis/*` external 的产物规则已经稳定；
+随附 Node 是为了避免用户机器 Node 版本漂移（ADR-01）。
+ad-hoc 签名先保证本机可启动；正式分发仍需要 Developer ID + 公证。
+**验证**：
+- `pnpm verify`：309 通过 / 9 跳过
+- `AEGIS_E2E_NO_SANDBOX=1 pnpm package:verify`：
+  组装 423MB、`codesign --verify --deep --strict` 通过、
+  真实启动截图 24505 字节、daemon `0.2.0-r2`、
+  握手证明使用 `Resources/node/bin/node` 与 `Resources/daemon/main.js`
+- 随附 Node `v24.17.0` 复制后直接执行 `-v` 校验
+**踩到的坑**：
+- 改 Info.plist/Resources 会让 Electron 原有签名失效，必须 `codesign --force --deep` 重签
+- 复制 Electron.app 必须用 `ditto`：Frameworks 里的符号链接用 cpSync 不可靠
+- 最初想用 `ps` 证明用了随附 Node，外层沙箱直接 EPERM；
+  改为 daemon 在握手文件里自报 `nodeExecPath`/`daemonEntry`，更可靠也更有诊断价值
+- Electron 的 `default_app.asar` 必须删掉，避免"到底加载了哪个 app"的歧义
+- 打包自检仍需 `AEGIS_E2E_NO_SANDBOX=1`（外层沙箱）；正常 `open Aegis.app` 不需要
+**留给下次**：
+- 正式 Developer ID 签名 + 公证 + DMG；系统通知要等正式签名后才会恢复
+- 应用图标仍是 Electron 默认；当前 `.app` 只含 arm64（跟随开发机），Intel/通用包未做
+- 打包后的开机自启尚未在真机验证（plist 会指向包内 Node/daemon，应加一项自检）
+- launchd KeepAlive 与监督者双重重启的协调（打包阶段更明显）
 
 ### 2026-10-19 · R4 崩溃自恢复：退避封顶且永不放弃
 **里程碑**：R4

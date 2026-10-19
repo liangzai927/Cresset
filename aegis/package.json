@@ -12,6 +12,8 @@
     "desktop": "node tools/run-desktop.mjs",
     "daemon": "node apps/daemon/dist/main.js",
     "build": "node tools/build.mjs",
+    "package": "node tools/package-app.mjs",
+    "package:verify": "node tools/package-app.mjs --verify",
     "verify": "pnpm run boundaries && pnpm run comments && pnpm run devlog:check && pnpm run typecheck && pnpm run build && pnpm run resolve && pnpm run lint && pnpm run test",
     "verify:desktop": "node tools/verify-desktop.mjs",
     "boundaries": "node tools/check-boundaries.mjs",

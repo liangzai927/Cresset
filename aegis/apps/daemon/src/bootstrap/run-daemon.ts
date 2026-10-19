@@ -292,6 +292,9 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
     endpoint: paths.ipcEndpoint,
     dataDir: paths.dataDir,
     startedAt,
+    daemonVersion: DAEMON_VERSION,
+    nodeExecPath: process.execPath,
+    daemonEntry: process.argv[1] ?? "",
   };
   // token 只写进 0600 的握手文件，不走命令行参数/环境变量（那些会出现在进程列表）
   writeFileSync(paths.handshakeFile, `${JSON.stringify(handshake, null, 2)}\n`, { mode: 0o600 });

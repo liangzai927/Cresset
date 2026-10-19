@@ -11,13 +11,19 @@
  * 因此整条时间线是确定性的、毫秒级跑完，不依赖真实 sleep 或真实 daemon。
  */
 
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { VirtualClock } from "@aegis/clock";
 import { type DataPaths, resolveDataPaths } from "@aegis/product";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { DaemonSupervisor, type SupervisedChild, type SupervisorOptions } from "./supervisor.js";
+import {
+  DaemonSupervisor,
+  resolveDaemonEntry,
+  resolveNodeExecPath,
+  type SupervisedChild,
+  type SupervisorOptions,
+} from "./supervisor.js";
 
 /** 受控的假子进程：测试显式触发 exit / error 回调 */
 class FakeChild implements SupervisedChild {
@@ -266,5 +272,35 @@ describe("生命周期边界", () => {
     const h = createHarness();
     writeFileSync(h.paths.handshakeFile, '{"endpoint": "unix:///tmp/half');
     expect(h.supervisor.readHandshake()).toBeNull();
+  });
+});
+
+describe("打包态路径解析", () => {
+  it("Resources/node/bin/node 存在时优先使用随附 Node", () => {
+    const resources = join(dir, "Resources");
+    mkdirSync(join(resources, "node", "bin"), { recursive: true });
+    const bundled = join(resources, "node", "bin", "node");
+    writeFileSync(bundled, "");
+
+    expect(resolveNodeExecPath(undefined, resources)).toBe(bundled);
+  });
+
+  it("Resources/daemon/main.js 存在时优先于开发态入口", () => {
+    const resources = join(dir, "Resources");
+    mkdirSync(join(resources, "daemon"), { recursive: true });
+    const packaged = join(resources, "daemon", "main.js");
+    writeFileSync(packaged, "");
+
+    expect(resolveDaemonEntry({ repoRoot: dir, resourcesPath: resources })).toBe(packaged);
+  });
+
+  it("资源目录里没有 daemon 时回退到开发态路径", () => {
+    const resources = join(dir, "EmptyResources");
+    mkdirSync(resources, { recursive: true });
+    const devEntry = join(dir, "apps", "daemon", "dist", "main.js");
+    mkdirSync(join(dir, "apps", "daemon", "dist"), { recursive: true });
+    writeFileSync(devEntry, "");
+
+    expect(resolveDaemonEntry({ repoRoot: dir, resourcesPath: resources })).toBe(devEntry);
   });
 });
