@@ -1,0 +1,16 @@
+# macOS 与编辑器
+.DS_Store
+.vscode/
+.idea/
+*.log
+
+# 依赖与构建产物
+node_modules/
+dist/
+*.tsbuildinfo
+
+# 运行时数据（绝不应入库）
+.aegis-data/
+*.db
+*.db-wal
+*.db-shm
