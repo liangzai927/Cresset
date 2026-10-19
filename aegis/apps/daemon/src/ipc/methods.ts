@@ -140,7 +140,16 @@ export function toTaskView(task: Task, scheduler: Scheduler): TaskView {
     untilWall: task.recurrence.untilWall,
     countLimit: task.recurrence.countLimit,
   };
-  const nextFireAt = scheduler.nextFireAt(task);
+  const recurrenceNext = scheduler.nextFireAt(task);
+  // 「稍后提醒」是独立通知，不修改任务 recurrence；把 pending snooze 也算作下一次，
+  // 否则一次性任务一旦触发就会从列表消失，用户会以为 snooze 被清除了。
+  const pendingNext = scheduler.daos.notifications.earliestPendingForTask(task.id);
+  const nextFireAt =
+    recurrenceNext === null
+      ? pendingNext
+      : pendingNext === null
+        ? recurrenceNext
+        : Math.min(recurrenceNext, pendingNext);
   const nextFireWall = nextFireAt === null ? null : wallString(utcToWall(nextFireAt, task.recurrence.tzid));
 
   return {
@@ -180,18 +189,19 @@ export function createMethods(scheduler: Scheduler): Record<string, (params: unk
         .parse(params ?? {});
 
       const onlyEnabled = p.filter !== "paused";
-      // 默认/今天视图只显示"还会再响"的任务。已结束的一次性任务留在通知历史里，
-      // 不占提醒列表；显式传 all 才把它们列出来（CLI/诊断用）。
+      // 默认/今天视图只显示"还会再响"的任务（含等待中的 snooze）；已结束的一次性任务
+      // 留在通知历史里，不占提醒列表。显式传 all 才把它们列出来（CLI/诊断用）。
       const list = tasks
         .list({ onlyEnabled })
-        .filter((t) => p.filter === "all" || p.filter === "paused" || scheduler.nextFireAt(t) !== null);
+        .map((t) => toTaskView(t, scheduler))
+        .filter((v) => p.filter === "all" || p.filter === "paused" || v.nextFireAt !== null);
       const limit = p.limit ?? 100;
       // 分页用偏移量编码在 cursor 里（游标语义简单化：本阶段数据量小，偏移足够）
       const offset = p.cursor ? Number(p.cursor) || 0 : 0;
       const page = list.slice(offset, offset + limit);
       const nextOffset = offset + page.length;
       return {
-        items: page.map((t) => toTaskView(t, scheduler)),
+        items: page,
         nextCursor: nextOffset < list.length ? String(nextOffset) : null,
       };
     },

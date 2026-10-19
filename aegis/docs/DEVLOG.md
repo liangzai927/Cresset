@@ -22,7 +22,7 @@
 | --- | --- |
 | 阶段 | **R4 进行中**（自启/崩溃自恢复/ad-hoc 打包/备份导出已完成），剩余正式签名与公证 |
 | 版本 | daemon `0.2.0-r2` ／ 桌面 `0.3.0-r3` |
-| 校验 | `pnpm verify` 全绿（324 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
+| 校验 | `pnpm verify` 全绿（325 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
 | 启动 | `pnpm dev`（智能增量构建后启动；打包产物为 `dist/Aegis.app`） |
 | 数据目录 | `~/Library/Application Support/Aegis`（含 `desktop.log`） |
 | 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复/启动看门狗/打包（ad-hoc）/备份导出 |
@@ -60,6 +60,24 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-19 · R4 修复：稍后提醒期间任务从列表消失
+**里程碑**：R4
+**症状**：点「稍后提醒」后，任务从提醒列表消失，用户以为 snooze 被清除。
+**根因**：snooze 是新建一条 pending notification，不修改任务的 recurrence；
+`task.list` 只按 `scheduler.nextFireAt(task)` 过滤，一次性任务本身已经没有下一次，
+于是被当成"已结束"隐藏。
+**改了什么**：
+- `NotificationDao.earliestPendingForTask(taskId)`：查该任务最早的 pending/delivering
+  `reminder` 通知时刻（join occurrence）。
+- `toTaskView`：`nextFireAt` 取 recurrence 与 pending snooze 的较早者；
+  这样 snooze 期间列表显示下一次会响的时间。
+- `task.list` 改为先构造 view 再按 `nextFireAt` 过滤。
+- 扩展 snooze 集成测试：请求 snooze 后任务仍在 `task.list` 中，且 `nextFireAt ≈ now+5min`。
+**为什么**：用户需要看到"它待会还会再响"；否则会误以为操作失败并重复创建提醒。
+**验证**：`pnpm verify` 325 通过 / 9 跳过；另有 snooze 定时投递单测。
+**留给下次**：snooze 通知真正投递后，pending 查询消失；此时由提醒卡片接管，
+若用户继续 snooze 会重新出现。无需在列表里保留"已结束"状态。
+
 ### 2026-10-19 · R4：完成一次性提醒后从列表移除
 **里程碑**：R4
 **症状**：点「完成」后，一次性提醒仍以"已结束 / 已触发 1 次"留在提醒列表里。
@@ -71,7 +89,7 @@
 - 新增 1 个集成测试：一次性完成从列表移除，重复提醒保留。
 **为什么**：提醒列表是"现在还要我关注的事"；已结束的一次性任务没有下一次，
 留着只会变成噪音。软删除保留任务行，历史通知仍可查。
-**验证**：`pnpm verify` 324 通过 / 9 跳过。
+**验证**：`pnpm verify` 325 通过 / 9 跳过；另有 snooze 定时投递单测。
 **踩到的坑**：旧的一次性任务已经 `delivered`，`markCompleted` 返回 false；
 完成逻辑不能只看这个布尔值，必须判断任务是否是 one-time 并主动软删除。
 **留给下次**：如果将来要"显示已结束"开关，走 `filter: "all"`；不要恢复默认列表噪音。

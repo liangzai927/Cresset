@@ -191,6 +191,35 @@ describe("dispatch：到点派发（TC-M1-01）", () => {
     expect(native.sent[0]?.occurrenceId).toBe(delivered?.occurrenceId);
   });
 
+  it("★ snooze 通知在指定时间真正投递", async () => {
+    const s = makeScheduler();
+    addTask(s, { rrule: null, dtstartWall: "2026-03-01T09:00" });
+    await clock.advance(9 * HOUR);
+    await s.tick();
+    expect(native.sent).toHaveLength(1);
+
+    const delivered = s.daos.notifications.listRecent(1)[0];
+    expect(delivered?.occurrenceId).toEqual(expect.any(String));
+    s.daos.notifications.createWithOutbox({
+      occurrenceId: delivered?.occurrenceId ?? "",
+      kind: "reminder",
+      title: "稍后提醒",
+      body: null,
+      priority: "normal",
+      scheduledFor: clock.wall() + 60_000,
+    });
+
+    // 未到时间：不应提前响
+    await s.tick();
+    expect(native.sent).toHaveLength(1);
+
+    await clock.advance(60_000);
+    const tick = await s.tick();
+    expect(tick.delivered).toBe(1);
+    expect(native.sent).toHaveLength(2);
+    expect(native.sent[1]?.title).toBe("稍后提醒");
+  });
+
   it("★ 同一实例不会被派发两次（跨多轮 tick）", async () => {
     const s = makeScheduler();
     addTask(s, { rrule: null, dtstartWall: "2026-03-01T09:00" });

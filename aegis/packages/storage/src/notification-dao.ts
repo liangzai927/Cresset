@@ -163,6 +163,27 @@ export class NotificationDao {
   }
 
   /**
+   * 某个任务最早的待投递提醒时刻（只算 reminder、pending/delivering）。
+   *
+   * 用途：「稍后提醒」不会改任务的 recurrence，一次任务本身已经没有下一次触发；
+   * 若只看 recurrence，界面会把等待中的 snooze 误判为"已结束"并从列表隐藏。
+   * 把 pending 通知的时刻也算进 nextFireAt，snooze 期间任务仍然可见。
+   */
+  earliestPendingForTask(taskId: string): number | null {
+    const row = rowOf<{ next: number | null }>(
+      this.#db.prepare(
+        `SELECT MIN(n.scheduled_for) AS next
+           FROM notification n
+           JOIN occurrence o ON o.id = n.occurrence_id
+          WHERE o.task_id = ? AND n.kind = 'reminder'
+            AND n.state IN ('pending','delivering')`,
+      ),
+      taskId,
+    );
+    return row?.next ?? null;
+  }
+
+  /**
    * 取"到点该投递"的通知。
    *
    * 判定条件是 `state='pending' AND scheduled_for <= now` ——

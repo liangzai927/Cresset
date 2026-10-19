@@ -412,6 +412,14 @@ describe("R2：调度器接入与 RPC 方法", () => {
     expect(row?.scheduled_for).toBeGreaterThanOrEqual(now + 5 * 60_000 - 2_000);
     expect(row?.scheduled_for).toBeLessThanOrEqual(Date.now() + 5 * 60_000 + 2_000);
 
+    // snooze 期间任务不能从列表消失：nextFireAt 应指向新的 pending 通知
+    const list = (await client.call("task.list", {})) as {
+      items: Array<{ id: string; nextFireAt: number | null }>;
+    };
+    const view = list.items.find((t) => t.id === created.id);
+    expect(view).toBeDefined();
+    expect(view?.nextFireAt).toBeGreaterThanOrEqual(now + 5 * 60_000 - 2_000);
+
     client.close();
     await daemon.stop("test");
     rmSync(dataDir, { recursive: true, force: true });
