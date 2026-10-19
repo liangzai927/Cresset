@@ -28,8 +28,11 @@
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { SystemClock } from "@aegis/clock";
 import { type DataPaths, resolveDataPaths } from "@aegis/product";
+import { createBackup } from "./bootstrap/backup.js";
+import { DAEMON_VERSION } from "./bootstrap/run-daemon.js";
 import { IpcClient, readHandshakeFile } from "./ipc/client.js";
 
 /** CLI 退出码：0 成功、1 用法错误、2 运行时错误（便于脚本判断） */
@@ -59,6 +62,7 @@ function usage(): string {
     "  rm <id>                       删除提醒",
     "  start / stop                  启动 / 停止 daemon",
     "  paths                         打印数据目录",
+    "  backup --out <目录>            导出一致性数据备份（不包含钥匙串）",
     "",
     "示例：",
     '  aegis add "交周报" --at 明天9:00 --weekly 5',
@@ -483,6 +487,8 @@ export async function runCli(argv: string[]): Promise<number> {
       process.stdout.write(`数据目录：${p.dataDir}\n数据库：${p.dbFile}\n日志：${p.logsDir}\n`);
       return EXIT_OK;
     }
+    case "backup":
+      return cmdBackup(args);
     case undefined:
     case "help":
     case "--help":
@@ -492,6 +498,55 @@ export async function runCli(argv: string[]): Promise<number> {
     default:
       usageError(`未知命令：${command}`);
   }
+}
+
+/**
+ * `backup --out <目录> [--data-dir <目录>]`
+ *
+ * 备份可在 daemon 运行时执行：数据库使用 SQLite 一致性快照；
+ * 不包含钥匙串、握手文件、日志等运行期材料。
+ */
+function cmdBackup(args: string[]): number {
+  let out: string | undefined;
+  let dataDir: string | undefined;
+  for (let i = 0; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--out") {
+      out = args[++i];
+      if (!out) usageError("backup --out 需要一个目录");
+    } else if (arg === "--data-dir") {
+      dataDir = args[++i];
+      if (!dataDir) usageError("backup --data-dir 需要一个目录");
+    } else {
+      usageError(`backup 不认识的参数：${arg}`);
+    }
+  }
+  if (!out) usageError("backup 需要 --out <目录>");
+
+  const paths = dataDir ? resolveDataPaths({ dataDir }) : dataPaths();
+  try {
+    const manifest = createBackup({
+      paths,
+      outDir: out,
+      clock: new SystemClock(),
+      daemonVersion: DAEMON_VERSION,
+    });
+    process.stdout.write(
+      `✓ 备份完成：${resolve(out)}\n` +
+        `  文件：${manifest.files.length} 个，共 ${formatBytes(manifest.totalBytes)}\n` +
+        "  校验：manifest.json 内含每个文件的 sha256\n",
+    );
+    return EXIT_OK;
+  } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+  }
+}
+
+/** 人类可读体积（备份摘要用） */
+function formatBytes(bytes: number): string {
+  if (bytes < 1_024) return `${bytes} B`;
+  if (bytes < 1_024 * 1_024) return `${(bytes / 1_024).toFixed(1)} KB`;
+  return `${(bytes / 1_024 / 1_024).toFixed(1)} MB`;
 }
 
 /** 便于测试：从文件读取握手内容（不做校验） */

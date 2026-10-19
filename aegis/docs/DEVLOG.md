@@ -20,12 +20,12 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 阶段 | **R4 进行中**（自启/崩溃自恢复/ad-hoc 打包已完成），剩余正式签名与公证 |
+| 阶段 | **R4 进行中**（自启/崩溃自恢复/ad-hoc 打包/备份导出已完成），剩余正式签名与公证 |
 | 版本 | daemon `0.2.0-r2` ／ 桌面 `0.3.0-r3` |
-| 校验 | `pnpm verify` 全绿（315 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
+| 校验 | `pnpm verify` 全绿（320 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
 | 启动 | `pnpm dev`（智能增量构建后启动；打包产物为 `dist/Aegis.app`） |
 | 数据目录 | `~/Library/Application Support/Aegis`（含 `desktop.log`） |
-| 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复/启动看门狗/打包（ad-hoc） |
+| 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复/启动看门狗/打包（ad-hoc）/备份导出 |
 | **未实现** | 系统通知（macOS 拒绝未签名应用，用窗口提醒兜底）、正式签名/公证/DMG、监测器(M2)、LLM+知识库(M3)、员工层(M4) |
 | 已知坑 | 见 README 的 F1–F27 与 C-1–C-11 |
 
@@ -59,6 +59,35 @@
 ---
 
 ## 记录（新的在最上面）
+
+### 2026-10-19 · R4：数据备份导出（一致性快照 + manifest）
+**里程碑**：R4
+**改了什么**：
+- 新增 `apps/daemon/src/bootstrap/backup.ts`：
+  - `VACUUM INTO` 生成 SQLite 一致性快照（源库在 WAL 下打开也可用）；
+  - 导出 `config.json` / `ui-onboarded.json` / `blobs/`；
+  - `manifest.json` 记录格式版本、时间、daemon 版本与每个文件的 sha256；
+  - 先写临时目录、校验通过后 `rename`；目录 0700、文件 0600；
+  - 明确排除 `handshake.json` / `channel.json` / `daemon.lock` / 日志 / `-wal` / `-shm`；
+  - 拒绝 blobs 中的符号链接（避免恢复端读到备份目录外）。
+- CLI 新增 `aegis backup --out <目录> [--data-dir <目录>]`；`isCliInvocation`/help 同步。
+- 新增 5 个测试。
+**为什么**：M1 要求配置与数据可备份。直接拷贝 `aegis.db` 在 WAL 下可能拿到不一致的
+中间状态；备份包含个人数据，必须收紧权限；运行期 token/日志不属于数据，不能带出去。
+**验证**：
+- `pnpm verify`：320 通过 / 9 跳过
+- 单测：WAL 源库快照仍能读出已提交数据、权限 0700/0600、运行期文件被排除、
+  目标已存在拒绝、源库缺失、blobs 符号链接拒绝
+- CLI 端到端：`--check` 初始化 → `backup --out` → 产物 `aegis.db` + `manifest.json`，
+  daemon 版本 `0.2.0-r2`
+**踩到的坑**：
+- `VACUUM INTO` 的路径是 SQL 字面量，单引号必须转义；
+- 符号链接原样复制会让备份"看起来有文件"但实际指向目录外，直接拒绝；
+- 目标已存在时不覆盖，避免把上一份备份重命名覆盖。
+**留给下次**：
+- 恢复/导入属于 M8；压缩或加密备份暂不做；
+- 界面上的"导出备份"按钮（IPC）尚未接；
+- R5 14 天验收 → M2。
 
 ### 2026-10-19 · R4 修复：尊重 daemon 的 0 退出，避免与 stop/launchd 抢重启
 **里程碑**：R4

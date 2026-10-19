@@ -12,9 +12,9 @@
 | R1 运行时基础 | ✅ 完成 |
 | R2 调度引擎 | ✅ 完成：recurrence ｜ scheduler ｜ notify ｜ daemon 接入 ｜ CLI |
 | **R3 桌面外壳 + 界面** | ✅ **完成**：Electron 三层 ｜ 原生通知 ｜ 三块界面 ｜ 托盘 |
-| R4 系统集成（打包/自启/自恢复） | 🚧 进行中：自启 ✅ ｜ 自恢复（崩溃/启动卡死）✅ ｜ 打包（ad-hoc）✅ ｜ 正式签名/公证 待做 |
+| R4 系统集成（打包/自启/自恢复） | 🚧 进行中：自启 ✅ ｜ 自恢复（崩溃/启动卡死）✅ ｜ 打包（ad-hoc）✅ ｜ 备份导出 ✅ ｜ 正式签名/公证 待做 |
 
-**当前验证状态**：`pnpm verify` 全绿 ｜ **12 个工作区包** ｜ **315 测试通过** ｜ 注释占比 19.6%
+**当前验证状态**：`pnpm verify` 全绿 ｜ **12 个工作区包** ｜ **320 测试通过** ｜ 注释占比 19.5%
 **桌面验证**：`pnpm verify:desktop` 11 项集成检查全部通过（含 SIGKILL 后自动重启）
 
 ### 一条命令启动
@@ -191,6 +191,7 @@ pnpm verify                  # 依赖方向门禁 + typecheck + lint + 测试
 | `pnpm build` | 构建全部产物（类型检查 + esbuild 打包 + 生成 .d.ts） |
 | `pnpm package` | 组装 `dist/Aegis.app`（随附 Node + ad-hoc 签名） |
 | `pnpm package:verify` | 组装后真实启动打包产物自检 |
+| `node apps/daemon/dist/main.js backup --out <目录>` | 导出一致性数据备份（不含钥匙串，daemon 可运行中） |
 | `pnpm start` | 运行 daemon（当前为 R1 运行时） |
 | `node apps/daemon/dist/main.js --check` | 执行启动序列后立即停止（安装后自检） |
 | `node apps/daemon/dist/main.js --print-paths` | 打印路径解析结果（诊断数据目录/socket 位置） |
