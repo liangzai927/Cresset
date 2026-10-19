@@ -15,6 +15,11 @@ packages/contracts/src/index.ts        ← 被引用的领域类型（Task/Occur
 **规则**：daemon 与 UI 都从这里导入类型；**禁止**各自定义一份结构。
 契约变更必须同步快照测试 —— 两侧版本漂移是这类系统最典型的故障。
 
+**先查再设计**：新增能力前先 grep `RPC_METHODS`，确认契约是否已经存在。
+例如 `backup.export` 在设计阶段就写进了契约，R4 实现时应直接补 handler，
+不要再造一个 `backup.create`。结果字段不够时，扩展既有 schema 并同步
+daemon / preload / API 类型 / UI 测试，而不是另起方法。
+
 ## 2. 传输与协议
 
 | 项 | 约定 |
@@ -90,12 +95,14 @@ export const RpcErrorCode = {
 
 ## 7. 新增一个 IPC 方法的完整清单
 
+- [ ] 先 grep `RPC_METHODS`，确认没有同义契约可复用（避免 `backup.export` 旁边又造 `backup.create`）
 - [ ] 在 `packages/ipc-contract` 的 `RPC_METHODS` 加 `params` / `result` schema
 - [ ] 若涉及新视图结构，同时定义 `XxxViewSchema`（**不要直接暴露数据库行**）
 - [ ] 在 `apps/daemon` 的 `IpcServer.methods` 注册 handler
 - [ ] handler 内**必须**：先做参数校验（Zod，服务端不信任客户端）、再执行业务、错误转成领域错误
 - [ ] 若会改变状态，考虑是否需要 `broadcast` 事件通知其他客户端
 - [ ] 写测试：正常调用 + 未握手被拒 + 非法参数 + 未知方法
+- [ ] 若扩展了 `result` 字段：同步 daemon 返回值、preload 类型、`api-types.ts` 与 UI 使用点
 - [ ] 更新本技能 §4/§5 的表格
 - [ ] 若是破坏性变更（改字段名/语义）→ 提升 `PROTOCOL_VERSION` 并在 commit body 说明
 

@@ -20,7 +20,7 @@
 ### 一条命令启动
 
 ```bash
-cd /Users/liuwenliang/lwl/ai/aegis
+cd /Users/liuwenliang/lwl/Cresset/aegis
 pnpm dev
 ```
 
@@ -327,6 +327,7 @@ aegis/
 | F7 | 钥匙串读取必须带 `-w`（否则弹 GUI 授权，无人值守会卡死） | 且 `security` 的钥匙串路径须为最后一个位置参数 |
 | F8 | `security` 的查找/删除会扫**整个钥匙串搜索列表**，行为不确定（R1 实测出现"delete 报成功、find 仍能查到"） | **必须显式指定钥匙串**（约束 C-9），已落到 `MacOsKeychain` 默认行为 |
 | F9 | 类方法作为回调传递会**丢失 `this`**（`lock.acquire(..., clock.wall)` 报 `#wall undefined`） | 传参时一律用箭头函数包装（`const now = () => clock.wall()`） |
+| F10 | 同一个 dataDir 只能有一个 daemon；旧 checkout 的 daemon 会长期占着 UDS，新进程可能被误认为"已在运行" | supervisor 用 `daemonEntry` 校验并驱逐外部实例；迁移前先完全退出旧 daemon |
 
 ---
 
@@ -343,6 +344,9 @@ aegis/
 ---
 
 ## 下一步
+
+> 以下是 R0/R2 时期的历史计划；**当前闸门**见文首里程碑表：
+> R4 只剩正式签名/公证 → R5 14 天验收 → 之后才是 M2。
 
 ### R0 已完成，无阻断项
 

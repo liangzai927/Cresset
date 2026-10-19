@@ -7,11 +7,13 @@ description: Aegis 的 Git 工作流与提交前检查规范。**初始化仓库
 
 ## 1. 仓库现状与初始化
 
-仓库位于 `/Users/liuwenliang/lwl/ai/aegis`。
+仓库根目录是 `/Users/liuwenliang/lwl/Cresset`，Aegis 代码在 `aegis/`。
+旧路径 `/Users/liuwenliang/lwl/ai/aegis` 是历史 checkout，不要再从那里提交或启动 daemon。
 
 ```bash
-cd /Users/liuwenliang/lwl/ai/aegis
-git init
+cd /Users/liuwenliang/lwl/Cresset
+git status                    # 根仓库是唯一真相源
+# 如果尚未初始化才执行 git init；当前仓库已存在
 git add -A
 git commit -m "chore(repo): 初始化仓库，固化 R0+R1 基线"
 pnpm hooks:install      # 安装 commit-msg hook（克隆后必须执行一次）
@@ -21,6 +23,15 @@ pnpm hooks:install      # 安装 commit-msg hook（克隆后必须执行一次�
 `.aegis-data/`、`*.db*`、`*.log`、`.DS_Store`。
 
 **提交前必须确认没有被忽略但仍需纳入的文件**（如新增的 `tools/*.mjs`）。
+
+### 1.1 ⚠️ 嵌套 `aegis/.git` 是历史残留
+
+当前工作区的 `aegis/.git` 是一个**没有 remote 的旧嵌套仓库**，不跟踪当前工作。
+唯一真相源是 `/Users/liuwenliang/lwl/Cresset/.git`。
+
+- 不要在 `aegis/` 下执行 `git commit` / `git push`；
+- 需要提交时先 `cd /Users/liuwenliang/lwl/Cresset`；
+- 看到 `git -C aegis status` 有大量修改时，不要慌：那只是旧仓库与新根仓库的差异。
 
 ## 2. 分支模型（单人项目，保持简单）
 
@@ -121,10 +132,10 @@ docs(scheduler): 更新详细设计 §6 的状态机说明
 
 ## 8. 与 DSH 工作区的关系（当前环境特有）
 
-项目位于 `/Users/liuwenliang/lwl/ai/aegis`，而 DSH 的文件沙箱锚定在会话工作区。
+Git 根目录是 `/Users/liuwenliang/lwl/Cresset`，而 DSH 的文件沙箱锚定在会话工作区。
 如果会话工作区不是这个目录，**每次写文件都需要用户授权**。
 
-**建议**：把 DSH 会话工作区切到 `/Users/liuwenliang/lwl/ai`，之后无需反复授权。
+**建议**：把 DSH 会话工作区切到 `/Users/liuwenliang/lwl/Cresset`，之后无需反复授权。
 
 若必须在当前工作区外操作，把批量改动**先暂存在工作区内，最后一次 `mv` 搬入**，
 避免每个文件触发一次审批。

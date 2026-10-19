@@ -60,6 +60,23 @@ lock.acquire(note, now);
 
 配合 `detectSkew()` 断言"判定为 suspended 还是 wall_jumped"。
 
+### 2.3 ⚠️ 断言"两端 undefined"会假通过
+
+```ts
+// ❌ 如果映射/透传坏了，两边都是 undefined，这条断言仍然通过
+expect(native.sent[0]?.occurrenceId).toBe(delivered?.occurrenceId);
+```
+
+跨进程/跨层字段（`occurrenceId`、token、路径）必须至少有一端断言类型或非空：
+
+```ts
+expect(delivered?.occurrenceId).toEqual(expect.any(String));
+expect(native.sent[0]?.occurrenceId).toBe(delivered?.occurrenceId);
+```
+
+同理，链路测试不能只测"两端函数各自正常"：用真实 `/notify` 请求或 daemon RPC
+把 `daemon → channel → renderer` 串起来跑一次。
+
 ## 3. 每个改动必测的四类用例
 
 | # | 类型 | 判据 | 例子 |

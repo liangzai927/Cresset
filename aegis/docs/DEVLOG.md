@@ -60,6 +60,21 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-19 · docs：校准工作区路径与技能教训
+**里程碑**：R4（文档/流程）
+**改了什么**：
+- `AGENTS.md`、`README.md`、`aegis-git-workflow` 的路径改为
+  git 根 `/Users/liuwenliang/lwl/Cresset` + 代码子目录 `aegis/`；
+- `AGENTS.md` 增加 C-12，README 增加 F10：旧 checkout 的 daemon 会占用同一 UDS；
+- `aegis-task-workflow` 增加工作区迁移检查；`aegis-ipc-contracts` 增加"先查既有契约"；
+  `aegis-testing-standards` 增加"两端 undefined 假通过"；`aegis-code-review` 增加外部实例检查；
+- 明确 `aegis/.git` 是旧嵌套仓库，根仓库才是唯一真相源。
+**为什么**：今天真实踩到旧路径 `/Users/liuwenliang/lwl/ai/aegis` 的 daemon 占着 socket，
+新进程被误认为已在运行，界面长期连旧代码；同时 `backup.export` 证明"契约已存在、
+不要另造方法"。把这两类教训固化进技能，避免下个会话重踩。
+**验证**：`pnpm devlog:check`；文档路径检查无残留旧路径。
+**留给下次**：R4 正式签名/公证（需 Apple 账号）→ R5 14 天验收 → M2；不要提前写 M2。
+
 ### 2026-10-19 · R4：设置页导出备份
 **里程碑**：R4
 **改了什么**：

@@ -125,6 +125,7 @@ pnpm verify
 | C-9 | 钥匙串必须**显式指定**（否则查找/删除会扫整个搜索列表，行为不确定） |
 | C-10 | `channel.json` 必须 **0600**；daemon 必须校验其 `pid` 存活与 endpoint 为回环地址 |
 | C-11 | **用到 Electron 的验证必须真启动 GUI**（`pnpm verify:desktop`）；单元测试证明不了"窗口能开" |
+| C-12 | 同一数据目录只能有一个 daemon；旧 checkout 的 daemon 会一直占着 UDS，新进程可能被误认为"已在运行"。迁移工作区后先停旧 daemon，supervisor 会用 `daemonEntry` 校验并驱逐外部实例 |
 
 另有四条 Electron 相关陷阱（都是实测踩过的）：
 
@@ -146,6 +147,17 @@ pnpm verify
 
 ## 工作区位置提示
 
-项目位于 `/Users/liuwenliang/lwl/ai/aegis`。若 DSH 会话工作区不是该目录，
-写文件会需要用户授权 —— 建议把工作区切到 `/Users/liuwenliang/lwl/ai`。
-批量改动时可先暂存在工作区内，最后一次性 `mv` 搬入，避免逐文件审批。
+**Git 根目录**：`/Users/liuwenliang/lwl/Cresset`，Aegis 代码在 `aegis/`。
+旧路径 `/Users/liuwenliang/lwl/ai/aegis` 是历史 checkout，**不要从那里启动 daemon** ——
+它会占用同一个用户数据目录的 UDS，导致新进程被拒绝或界面连到旧代码。
+
+迁移/切换 checkout 后先确认旧进程已停止：
+
+```bash
+lsof -U | grep "Application Support/Aegis/daemon.sock"
+```
+
+DSH 会话工作区应设为 `/Users/liuwenliang/lwl/Cresset`。
+
+`aegis/.git` 是**没有 remote 的旧嵌套仓库**，不跟踪当前工作；不要在它里面提交。
+唯一真相源是 `/Users/liuwenliang/lwl/Cresset/.git`。
