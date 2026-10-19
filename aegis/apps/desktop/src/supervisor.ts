@@ -9,6 +9,7 @@
  * | daemon 已在运行（例如 CLI 先启动的） | 直接连上，不重复拉起 |
  * | daemon 崩溃 | 按 NFR-R2 退避重启（首次 2 秒、上限 8 秒），**永不放弃** |
  * | 崩溃后稳定运行满 60 秒 | 重置连续失败计数，下次崩溃重新从 2 秒开始 |
+ * | 启动后 30 秒仍无握手（卡死） | SIGKILL 后复用同一套退避重启 |
  * | 应用退出 | **不杀 daemon** —— 它必须继续 24 小时运行 |
  *
  * ## 为什么 UI 不拥有 daemon 的生命周期
@@ -58,7 +59,7 @@ export type DaemonState =
 /**
  * 监督者需要的最小进程句柄。
  *
- * 只暴露"拉起后真正用到的三件事"（pid、unref、退出/错误回调），
+ * 只暴露"拉起后真正用到的几件事"（pid、unref、退出/错误回调、终止），
  * 这样单测可以注入一个完全受控的假进程，而不必 mock `node:child_process`
  * 或真的 fork 一个 daemon。
  */
@@ -71,6 +72,8 @@ export interface SupervisedChild {
   onExit(listener: (code: number | null, signal: NodeJS.Signals | null) => void): void;
   /** 注册启动失败回调（只触发一次） */
   onError(listener: (error: Error) => void): void;
+  /** 请求终止子进程（启动卡死时由看门狗调用）；返回是否成功发出信号 */
+  kill(signal?: NodeJS.Signals): boolean;
 }
 
 /** 拉起子进程的函数签名；测试可注入假实现 */
@@ -89,6 +92,14 @@ export interface SupervisorOptions {
   restartMaxMs?: number;
   /** 连续运行多久视为稳定并重置失败计数（毫秒），默认 60000 */
   stableAfterMs?: number;
+  /**
+   * 启动看门狗：子进程拉起后多久仍没有握手就终止并重试（毫秒），默认 30000。
+   *
+   * 为什么需要它：进程可能"活着但卡死"（例如迁移异常、事件循环被占满），
+   * 此时没有 exit 事件，只靠崩溃重启永远不会触发。30 秒给数据库迁移留足时间，
+   * 又不会让用户面对一个永远"启动中"的界面。
+   */
+  startupTimeoutMs?: number;
   /** 时间与定时器来源；测试注入 VirtualClock（禁止裸 Date.now/setTimeout） */
   clock?: Clock;
   /** 进程拉起函数；测试注入假进程 */
@@ -106,9 +117,12 @@ export class DaemonSupervisor {
   readonly #spawnProcess: SpawnProcess;
   readonly #probeProcess: (pid: number) => boolean;
   readonly #policy: RestartPolicy;
+  readonly #startupTimeoutMs: number;
   #state: DaemonState = { kind: "stopped" };
   #child: SupervisedChild | null = null;
   #cancelRestart: (() => void) | null = null;
+  /** 当前正在计时的启动看门狗；记录 child 防止旧进程的定时器误杀新进程 */
+  #startupWatchdog: { child: SupervisedChild; cancel: () => void } | null = null;
   #stopped = false;
 
   constructor(opts: SupervisorOptions) {
@@ -117,6 +131,12 @@ export class DaemonSupervisor {
     this.#spawnProcess =
       opts.spawnProcess ?? ((command, args, spawnOpts) => toSupervisedChild(spawn(command, args, spawnOpts)));
     this.#probeProcess = opts.isProcessAlive ?? isProcessAlive;
+
+    const startupTimeoutMs = opts.startupTimeoutMs ?? 30_000;
+    if (startupTimeoutMs <= 0) {
+      throw new RangeError(`startupTimeoutMs 必须大于 0（收到 ${startupTimeoutMs}）`);
+    }
+    this.#startupTimeoutMs = startupTimeoutMs;
 
     const policyOpts: RestartPolicyOptions = {};
     if (opts.restartBaseMs !== undefined) policyOpts.baseDelayMs = opts.restartBaseMs;
@@ -157,12 +177,26 @@ export class DaemonSupervisor {
   }
 
   /**
+   * 记录"daemon 已就绪"并停掉启动看门狗。
+   *
+   * 只有握手 pid 与当前子进程一致时才取消看门狗 —— 若握手来自另一个
+   * 已存在的 daemon（例如 launchd 先启动的），当前子进程的看门狗仍应保留，
+   * 否则会留下一个卡死的重复进程。
+   */
+  #adoptRunning(handshake: Handshake, spawnedByUs: boolean): void {
+    if (this.#child && handshake.pid === this.#child.pid) {
+      this.#cancelStartupWatchdog(this.#child);
+    }
+    this.#setState({ kind: "running", handshake, spawnedByUs });
+  }
+
+  /**
    * 确保 daemon 在运行。
    *
    * 三条路径：
    *   1. 已有可用的握手文件 → 直接认为在跑（可能是 CLI 启动的）
    *   2. 没有 → 拉起一个新进程，等待握手文件出现
-   *   3. 超时 → 返回 unavailable 并告知原因
+   *   3. 超时 → 返回 unavailable 并告知原因（启动看门狗仍在计时）
    *
    * 若当前正等待一次自动重启，本方法会**取消那个定时器并立即尝试** ——
    * 用户的显式操作优先于退避计划，不必再等几秒。
@@ -173,7 +207,7 @@ export class DaemonSupervisor {
     this.#cancelPendingRestart();
     const existing = this.readHandshake();
     if (existing && this.#probeProcess(existing.pid)) {
-      this.#setState({ kind: "running", handshake: existing, spawnedByUs: false });
+      this.#adoptRunning(existing, false);
       return this.#state;
     }
 
@@ -188,7 +222,7 @@ export class DaemonSupervisor {
     while (this.#clock.wall() < deadline) {
       const hs = this.readHandshake();
       if (hs && this.#probeProcess(hs.pid)) {
-        this.#setState({ kind: "running", handshake: hs, spawnedByUs: true });
+        this.#adoptRunning(hs, true);
         return this.#state;
       }
       await this.#clock.sleep(120);
@@ -196,7 +230,7 @@ export class DaemonSupervisor {
 
     this.#setState({
       kind: "unavailable",
-      reason: `daemon 在 ${timeoutMs}ms 内未就绪（检查数据目录权限或端口占用）`,
+      reason: `daemon 在 ${timeoutMs}ms 内未就绪（${formatDelay(this.#startupTimeoutMs)}内仍无握手将自动终止并重试）`,
     });
     return this.#state;
   }
@@ -205,6 +239,9 @@ export class DaemonSupervisor {
   spawnDaemon(): void {
     if (this.#stopped) return;
     if (this.#child && this.#child.pid !== undefined && this.#probeProcess(this.#child.pid)) return;
+
+    // 上一个子进程已死但 exit 事件可能还没到；先清掉它的看门狗，避免误杀新进程
+    this.#cancelStartupWatchdog();
 
     const args = [this.#opts.daemonEntry, "--data-dir", this.#opts.paths.dataDir];
     this.#log("info", "supervisor.spawn", { exec: this.#opts.nodeExecPath, args });
@@ -240,6 +277,7 @@ export class DaemonSupervisor {
     const onTerminated = (reason: string): void => {
       if (terminated) return;
       terminated = true;
+      this.#cancelStartupWatchdog(child);
       if (this.#child === child) this.#child = null;
       this.#log("warn", "supervisor.daemon_exit", { reason });
       if (this.#stopped) return;
@@ -253,6 +291,8 @@ export class DaemonSupervisor {
       this.#log("error", "supervisor.spawn_failed", { message: err.message });
       onTerminated(`拉起失败：${err.message}`);
     });
+
+    this.#armStartupWatchdog(child);
   }
 
   /**
@@ -292,15 +332,76 @@ export class DaemonSupervisor {
   }
 
   /**
+   * 给刚拉起的子进程装上启动看门狗。
+   *
+   * 超时后**先看握手文件**：如果 daemon 只是慢了一步，就正常转入 running；
+   * 仍无握手才 SIGKILL。这样不会误杀一个已经启动但握手晚到的正常进程。
+   */
+  #armStartupWatchdog(child: SupervisedChild): void {
+    this.#cancelStartupWatchdog();
+
+    const cancel = this.#clock.setTimer(this.#startupTimeoutMs, () => {
+      const watchdog = this.#startupWatchdog;
+      if (!watchdog || watchdog.child !== child) return;
+      this.#startupWatchdog = null;
+
+      if (this.#child !== child) return;
+
+      const hs = this.readHandshake();
+      if (hs && hs.pid === child.pid && this.#probeProcess(hs.pid)) {
+        this.#adoptRunning(hs, true);
+        return;
+      }
+
+      const reason = `daemon 启动 ${formatDelay(this.#startupTimeoutMs)}仍未就绪，已终止并等待重启`;
+      this.#log("error", "supervisor.startup_timeout", {
+        pid: child.pid,
+        timeoutMs: this.#startupTimeoutMs,
+      });
+      this.#setState({ kind: "unavailable", reason });
+
+      // SIGKILL 而不是 SIGTERM：卡死的进程可能连信号处理都跑不到。
+      // daemon 的数据库写入在事务里，强杀后由 SQLite 回滚；重启会回收陈旧锁。
+      let killed = false;
+      let killError: string | null = null;
+      try {
+        killed = child.kill("SIGKILL");
+      } catch (err) {
+        // 定时器回调里的异常会冒到 Electron 主进程；这里必须自己收口并留日志
+        killError = err instanceof Error ? err.message : String(err);
+      }
+      if (!killed) {
+        // 进程可能已经退出但 exit 事件还没到；若真的杀不掉，至少留下可排查的日志。
+        this.#log("error", "supervisor.startup_kill_failed", {
+          pid: child.pid,
+          ...(killError ? { message: killError } : {}),
+        });
+      }
+    });
+
+    this.#startupWatchdog = { child, cancel };
+  }
+
+  /** 取消启动看门狗；传入 child 时只取消属于该子进程的计时器 */
+  #cancelStartupWatchdog(child?: SupervisedChild): void {
+    const watchdog = this.#startupWatchdog;
+    if (!watchdog) return;
+    if (child && watchdog.child !== child) return;
+    watchdog.cancel();
+    this.#startupWatchdog = null;
+  }
+
+  /**
    * 停止监督（**不杀 daemon**）。
    *
    * 应用退出时调用。刻意留空对 daemon 的操作 —— 见文件头说明。
-   * 同时取消所有待触发的重启定时器，避免应用退出后还留下一个
-   * 会拉起新 daemon 的计时器。
+   * 同时取消所有待触发的重启与启动超时定时器，避免应用退出后还留下
+   * 会拉起/杀掉 daemon 的计时器。
    */
   dispose(): void {
     this.#stopped = true;
     this.#cancelPendingRestart();
+    this.#cancelStartupWatchdog();
     // 注意：这里**不** kill 子进程。detached + unref 保证它会继续运行。
     this.#child = null;
   }
@@ -328,6 +429,7 @@ function toSupervisedChild(child: ChildProcess): SupervisedChild {
     onError: (listener) => {
       child.once("error", listener);
     },
+    kill: (signal) => child.kill(signal),
   };
 }
 

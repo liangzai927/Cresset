@@ -30,6 +30,7 @@ class FakeChild implements SupervisedChild {
   readonly pid: number;
   #onExit: ((code: number | null, signal: NodeJS.Signals | null) => void) | null = null;
   #onError: ((error: Error) => void) | null = null;
+  #killed: NodeJS.Signals[] = [];
 
   constructor(pid: number) {
     this.pid = pid;
@@ -45,6 +46,16 @@ class FakeChild implements SupervisedChild {
 
   onError(listener: (error: Error) => void): void {
     this.#onError = listener;
+  }
+
+  kill(signal: NodeJS.Signals = "SIGTERM"): boolean {
+    this.#killed.push(signal);
+    return true;
+  }
+
+  /** 看门狗实际发出的信号（断言"有没有杀、用什么信号"） */
+  get killedWith(): readonly NodeJS.Signals[] {
+    return this.#killed;
   }
 
   /** 模拟进程退出（调用方负责先把它从存活表里移除） */
@@ -79,11 +90,15 @@ afterEach(() => {
 });
 
 /** 构造一个所有外部依赖都可控的监督者 */
-function createHarness(overrides: Partial<SupervisorOptions> = {}): Harness {
+function createHarness(
+  overrides: Partial<SupervisorOptions> = {},
+  harnessOptions: { autoHandshake?: boolean } = {},
+): Harness {
   const clock = new VirtualClock();
   const paths = resolveDataPaths({ dataDir: dir });
   const spawned: FakeChild[] = [];
   const livePids = new Set<number>();
+  const autoHandshake = harnessOptions.autoHandshake ?? true;
 
   const options: SupervisorOptions = {
     paths,
@@ -99,16 +114,19 @@ function createHarness(overrides: Partial<SupervisorOptions> = {}): Harness {
       const child = new FakeChild(pid);
       spawned.push(child);
       livePids.add(pid);
-      // daemon 启动后的第一件事就是写握手；这里同步模拟，避免测试真的等
-      writeFileSync(
-        paths.handshakeFile,
-        JSON.stringify({
-          endpoint: "unix:///tmp/fake-daemon.sock",
-          token: "test-token-must-be-long-enough",
-          daemonVersion: "test",
-          pid,
-        }),
-      );
+      // daemon 启动后的第一件事就是写握手；这里同步模拟，避免测试真的等。
+      // autoHandshake=false 用于模拟"进程活着但卡死"。
+      if (autoHandshake) {
+        writeFileSync(
+          paths.handshakeFile,
+          JSON.stringify({
+            endpoint: "unix:///tmp/fake-daemon.sock",
+            token: "test-token-must-be-long-enough",
+            daemonVersion: "test",
+            pid,
+          }),
+        );
+      }
       return child;
     },
     isProcessAlive: (pid) => livePids.has(pid),
@@ -225,6 +243,69 @@ describe("崩溃后自动重启", () => {
     expect(h.supervisor.state.kind === "crashed" && h.supervisor.state.reason).toContain("ENOENT");
     await h.clock.advance(2_000);
     expect(h.spawned).toHaveLength(2);
+  });
+});
+
+describe("启动看门狗（活着但卡死）", () => {
+  it("★ 启动 5 秒仍无握手：SIGKILL 子进程并安排重启", async () => {
+    const h = createHarness({ startupTimeoutMs: 5_000 }, { autoHandshake: false });
+    const initial = await h.supervisor.ensureRunning(1_000);
+    expect(initial.kind).toBe("unavailable");
+
+    const child = lastChild(h);
+    expect(h.clock.pendingTimers()).toBe(1); // 只有启动看门狗，没有重启定时器
+
+    await h.clock.advance(4_000);
+    expect(child.killedWith).toEqual(["SIGKILL"]);
+    expect(h.supervisor.state.kind).toBe("unavailable");
+    expect(h.supervisor.state.kind === "unavailable" && h.supervisor.state.reason).toContain("仍未就绪");
+
+    // 真实进程被 SIGKILL 后 exit 事件会到达；这里手动模拟，验证会排下一次重启
+    h.livePids.delete(child.pid);
+    child.emitExit(null, "SIGKILL");
+    expect(h.supervisor.state).toMatchObject({ kind: "crashed", restarts: 1 });
+    expect(h.clock.pendingTimers()).toBe(1);
+    h.supervisor.dispose();
+  });
+
+  it("看门狗到点前收到握手：转入 running，不杀进程", async () => {
+    const h = createHarness({ startupTimeoutMs: 5_000 }, { autoHandshake: false });
+    await h.supervisor.ensureRunning(1_000);
+    const child = lastChild(h);
+
+    // 进程启动很慢，但在看门狗到点前完成了握手
+    writeFileSync(
+      h.paths.handshakeFile,
+      JSON.stringify({
+        endpoint: "unix:///tmp/late-daemon.sock",
+        token: "late-token-must-be-long-enough",
+        daemonVersion: "test",
+        pid: child.pid,
+      }),
+    );
+
+    await h.clock.advance(4_000);
+    expect(child.killedWith).toEqual([]);
+    expect(h.supervisor.state.kind).toBe("running");
+    expect(h.clock.pendingTimers()).toBe(0);
+    h.supervisor.dispose();
+  });
+
+  it("dispose 取消启动看门狗，不再杀子进程", async () => {
+    const h = createHarness({ startupTimeoutMs: 5_000 }, { autoHandshake: false });
+    await h.supervisor.ensureRunning(1_000);
+    const child = lastChild(h);
+    expect(h.clock.pendingTimers()).toBe(1);
+
+    h.supervisor.dispose();
+    expect(h.clock.pendingTimers()).toBe(0);
+
+    await h.clock.advance(10_000);
+    expect(child.killedWith).toEqual([]);
+  });
+
+  it("startupTimeoutMs 必须大于 0", () => {
+    expect(() => createHarness({ startupTimeoutMs: 0 })).toThrow(RangeError);
   });
 });
 
