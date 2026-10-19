@@ -1,23 +1,25 @@
 /**
- * 网关判定与 M1 fail-closed 实现
- *
- * 本文件**不做真实网络调用**：真实调用的编排在 `model-gateway.ts`。
- * 这里保留 `evaluateOutbound`（UI 预览/测试判定）与 `FailClosedGateway`
- * （M1 的默认出口，任何外发都硬失败）。
+ * 网关实现（M0 骨架）：fail-closed 的唯一外发出口。
  */
 import { createHash } from "node:crypto";
+import type { DataClass } from "@aegis/contracts";
 import { applyPlaceholders, builtinDetectors, runDetectors } from "./detectors.js";
 import {
   type ClassificationPolicy,
   DEFAULT_GATEWAY_POLICY,
   DefaultClassificationPolicy,
   type Detector,
-  exceedsOutboundPolicy,
   type GatewayPolicy,
   OutboundBlockedError,
   type OutboundDecision,
   type OutboundRequest,
 } from "./index.js";
+
+const CLASS_ORDER: Record<DataClass, number> = { L0: 0, L1: 1, L2: 2, L3: 3 };
+
+function classRank(c: DataClass): number {
+  return CLASS_ORDER[c] ?? 99;
+}
 
 /** 网关可注入项（检测器、策略、分级器），便于测试不同策略组合 */
 export interface GatewayOptions {
@@ -42,7 +44,7 @@ export interface OutboundAuditRecord {
   redactionCount: number;
   policyVersion: string;
   payloadSha256: string;
-  outcome: "allowed" | "blocked" | "failed";
+  outcome: "allowed" | "blocked";
 }
 
 /** 策略版本；写入审计，便于回溯当时的判定依据是哪一版规则 */
@@ -73,7 +75,7 @@ export function evaluateOutbound(
   const detectorSummary = [...summary.entries()].map(([category, count]) => ({ category, count }));
 
   let reason: string | undefined;
-  if (exceedsOutboundPolicy(dataClass, policy.maxOutboundClass)) {
+  if (classRank(dataClass) > classRank(policy.maxOutboundClass)) {
     reason =
       dataClass === "L3"
         ? "载荷含 L3 机密（凭据/私钥/连接串）：永不允许外发"
@@ -134,3 +136,6 @@ export class FailClosedGateway {
     );
   }
 }
+
+export { applyPlaceholders, builtinDetectors, runDetectors } from "./detectors.js";
+export * from "./index.js";

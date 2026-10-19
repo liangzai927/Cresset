@@ -20,13 +20,13 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 阶段 | **R4 进行中**（自启/崩溃自恢复/ad-hoc 打包已完成），剩余正式签名与公证；M3 安全前置已开始 |
+| 阶段 | **R4 进行中**（自启/崩溃自恢复/ad-hoc 打包已完成），剩余正式签名与公证 |
 | 版本 | daemon `0.2.0-r2` ／ 桌面 `0.3.0-r3` |
-| 校验 | `pnpm verify` 全绿（337 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
+| 校验 | `pnpm verify` 全绿（313 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
 | 启动 | `pnpm dev`（智能增量构建后启动；打包产物为 `dist/Aegis.app`） |
 | 数据目录 | `~/Library/Application Support/Aegis`（含 `desktop.log`） |
-| 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复/启动看门狗/打包（ad-hoc）/模型 Provider+真实网关（未接 daemon） |
-| **未实现** | 系统通知（macOS 拒绝未签名应用，用窗口提醒兜底）、正式签名/公证/DMG、监测器(M2)、M3 知识库/外部数据源/LLM 接入（Provider+网关已就绪）、员工层(M4) |
+| 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复/启动看门狗/打包（ad-hoc） |
+| **未实现** | 系统通知（macOS 拒绝未签名应用，用窗口提醒兜底）、正式签名/公证/DMG、监测器(M2)、LLM+知识库(M3)、员工层(M4) |
 | 已知坑 | 见 README 的 F1–F27 与 C-1–C-11 |
 
 ### 接手时先看这三处
@@ -59,39 +59,6 @@
 ---
 
 ## 记录（新的在最上面）
-
-### 2026-10-19 · M3 前置：模型 Provider 与真实脱敏网关
-**里程碑**：M3 前置（未接入 daemon）
-**改了什么**：
-- 新增 `packages/model-provider`：`ModelProvider` 接口、`ProviderError`、
-  OpenAI 兼容 / Anthropic / Ollama 三个适配器（手写 fetch）、`FakeModelProvider`
-- 新增 `PlaceholderSession`：会话级稳定占位符、响应还原、重叠命中合并
-- 新增 `ModelGateway.complete()`：逐消息检测 → 分级 → 会话脱敏 → 外发前审计 →
-  Provider → 还原；`exceedsOutboundPolicy()` 让 L3 即使策略误配也永久阻断
-- 依赖/构建/类型路径/锁文件登记新包；新增 24 个测试
-**为什么**：M3 的第一步不是"发请求"，而是先把唯一出口补完整。没有 Provider 抽象，
-每接一家模型就会把厂商字段带进业务代码；没有真实网关，脱敏仍停留在"只判定不调用"。
-选择手写 fetch 而不是 Vercel AI SDK：少一个供应链依赖、错误与超时可控、
-测试不需要 mock SDK；代价是流式/tool calling 要自己补，接口已留好。
-**验证**：
-- `pnpm verify`：337 通过 / 9 跳过（新增 24）
-- Provider 测试：请求形状/鉴权头/usage/401/429/非 JSON/非法地址，全部注入 fake fetch，无网络
-- 网关测试：Provider 只看到占位符、响应还原、未知占位符不还原、
-  L2 默认拒绝、L3 即使策略 L3 也拒绝、审计先于外发、审计失败不发送、
-  Provider 失败写 failed 审计且错误不含原文
-- 依赖方向：只有 redaction-gateway 依赖 model-provider（`pnpm boundaries` 通过）
-**踩到的坑**：
-- 旧 `ModelGateway` 接口与真实类同名；删掉旧接口，统一由 `model-gateway.ts` 导出
-- 身份证与银行卡会命中同一段 18 位数字；分别替换会留下半截数字，
-  改为合并重叠区间（宁可过度脱敏）
-- 审计原本只有 allowed/blocked；Provider 失败需要 `failed`，否则失败不可见
-- `source` 是调用方自报，网关无法验证；错标 L1 会绕过分级，已在类型注释里标明
-**留给下次**：
-- 接入 daemon/UI 的第一个真实用例（自然语言建提醒）前，需要定 Provider、
-  L2 是否允许外发、日/月预算；当前生产路径仍是 `FailClosedGateway`
-- token 预算/成本熔断（M4 的 budget/cost_record）
-- 流式输出、tool calling、结构化输出尚未实现
-- M3 的外部数据源与知识库（FTS5 + CJK）未开始
 
 ### 2026-10-19 · 自恢复补口：启动卡死由看门狗终止重试
 **里程碑**：R4

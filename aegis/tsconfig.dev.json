@@ -20,7 +20,6 @@
       "@aegis/storage": ["packages/storage/src/index.ts"],
       "@aegis/secrets": ["packages/secrets/src/index.ts"],
       "@aegis/platform": ["packages/platform/src/index.ts"],
-      "@aegis/model-provider": ["packages/model-provider/src/index.ts"],
       "@aegis/redaction-gateway": ["packages/redaction-gateway/src/index.ts"],
       "@aegis/product": ["packages/product/src/index.ts"],
       "@aegis/recurrence": ["packages/recurrence/src/index.ts"],

@@ -4,8 +4,6 @@
 
 **当前阶段：R4 进行中** —— 崩溃自恢复与 ad-hoc 打包已完成；剩余正式签名、公证与分发。
 
-**M3 安全前置已开始**：`@aegis/model-provider` 与真实 `ModelGateway` 已落地（假 Provider 验证，尚未接入 daemon）。
-
 | 里程碑 | 状态 |
 | --- | --- |
 | R0 工程骨架 + 6 项 spike | ✅ 完成（6/6 通过） |
@@ -14,7 +12,7 @@
 | **R3 桌面外壳 + 界面** | ✅ **完成**：Electron 三层 ｜ 原生通知 ｜ 三块界面 ｜ 托盘 |
 | R4 系统集成（打包/自启/自恢复） | 🚧 进行中：自启 ✅ ｜ 自恢复（崩溃/启动卡死）✅ ｜ 打包（ad-hoc）✅ ｜ 正式签名/公证 待做 |
 
-**当前验证状态**：`pnpm verify` 全绿 ｜ **13 个工作区包** ｜ **337 测试通过** ｜ 注释占比 19.5%
+**当前验证状态**：`pnpm verify` 全绿 ｜ **12 个工作区包** ｜ **313 测试通过** ｜ 注释占比 19.7%
 **桌面验证**：`pnpm verify:desktop` 11 项集成检查全部通过（含 SIGKILL 后自动重启）
 
 ### 一条命令启动
@@ -234,23 +232,7 @@ Aegis.app/Contents/Resources/
 | 签名 | 默认 ad-hoc（`codesign -s -`），保证本机可启动；改 Info.plist/Resources 会使 Electron 原签名失效，必须重签 |
 | 正式分发 | `pnpm package --sign "Developer ID Application: ..."`，之后仍需公证（notarization）与 DMG |
 | 通知 | ad-hoc/未签名仍会被 macOS 拒绝系统通知，只能走窗口兜底；正式签名后才会恢复 |
-| 产物位置 | `dist/Aegis.app`（约 424MB，`dist/` 已被 git 忽略） |
-
----
-
-## 模型网关（M3 前置）
-
-已落地但**尚未接入 daemon/UI**：生产路径仍走 `FailClosedGateway`，没有任何真实外发。
-
-| 模块 | 内容 |
-| --- | --- |
-| `packages/model-provider` | `ModelProvider` 接口 + OpenAI 兼容 / Anthropic / Ollama 适配器 + `FakeModelProvider`；手写 fetch，无厂商 SDK |
-| `packages/redaction-gateway/src/placeholders.ts` | 会话级占位符：同一值跨消息/跨调用稳定，响应可还原，重叠命中合并 |
-| `packages/redaction-gateway/src/model-gateway.ts` | 分级 → 脱敏 → **外发前审计** → Provider → 还原；L3 即使策略误配也永久阻断 |
-
-边界仍然由 `pnpm boundaries` 强制：**只有 `redaction-gateway` 允许依赖 `model-provider`**。
-当前没有 API Key、预算与真实 Provider 配置；M3 接入时要先定 Provider、L2 策略与日/月预算。
-适配器测试全部用注入的 fake fetch，不联网、不需要密钥。
+| 产物位置 | `dist/Aegis.app`（约 423MB，`dist/` 已被 git 忽略） |
 
 ---
 
@@ -292,10 +274,8 @@ aegis/
 │   ├── contracts/            Zod 领域契约：Task / RecurrenceRule / Occurrence /
 │   │                         Notification / DataClass（单一真相源）
 │   ├── ipc-contract/         daemon ↔ UI 契约：17 个 RPC 方法 + 6 类事件
-│   ├── model-provider/       ★ M3 前置：Provider 抽象 + OpenAI 兼容/Anthropic/Ollama
-│   │                         适配器（手写 fetch，无厂商 SDK）
-│   ├── redaction-gateway/    唯一外发出口：检测器 + 占位符会话 + 真实 ModelGateway
-│   │                         ★ L3 永久阻断；审计在外发前写入
+│   ├── redaction-gateway/    唯一外发出口：8 个内置检测器 + fail-closed 网关
+│   │                         ★ M1 只有骨架，但接口与 fail-closed 语义已钉死
 │   ├── product/              产品标识单一来源（改名只需改这里）+ 路径解析
 │   ├── recurrence/           ★ R2：RRULE 求解器（墙钟语义 + DST 正确性）
 │   ├── storage/              ★ R1：SQLite 打开/迁移（只增不改+哈希锁）/blobs/DAO

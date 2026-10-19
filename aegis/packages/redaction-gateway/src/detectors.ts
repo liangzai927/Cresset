@@ -1,8 +1,8 @@
 /**
  * 检测器注册表 + 内置检测器（M0 骨架）
  *
- * M0/M1 目标：接口 + 少量检测器 + 样本集与召回率测试（TC-M0-01）。
- * M3 的会话级占位映射/还原在 `placeholders.ts`；本文件只负责"检测"与单次替换。
+ * M1 目标：接口 + 少量检测器 + 样本集与召回率测试（TC-M0-01）。
+ * M3 再补齐：占位符映射与还原、脱敏强度、更多检测器、出站预览。
  *
  * 设计要点：
  *   - 只做**本地**检测，绝不调用任何外部服务（那本身就是外发）。
@@ -52,13 +52,7 @@ function regexDetector(
         re.lastIndex = 0;
         for (const m of text.matchAll(re)) {
           if (m.index === undefined) continue;
-          hits.push({
-            category,
-            escalatesTo,
-            start: m.index,
-            end: m.index + m[0].length,
-            matched: m[0],
-          });
+          hits.push({ category, start: m.index, end: m.index + m[0].length, matched: m[0] });
         }
       }
       return hits.sort((a, b) => a.start - b.start);
