@@ -1,13 +1,18 @@
 /**
- * 脱敏外发网关 —— 唯一外发出口（M0 骨架，D2 决策）
+ * 脱敏外发网关 —— 唯一外发出口（C3 零绕过）
  *
- * M1 阶段没有任何真实外发路径（无 LLM 调用），但**接口与 fail-closed 语义必须先钉死**：
- * 若等到 M3 才定义签名，所有调用点都要改一遍。
+ * 本文件定义契约与策略（分级、检测器、占位规则、审计字段），实现分在三处：
+ *   - `gateway.ts`：判定/预览 + M1 的 `FailClosedGateway`（任何真实外发硬失败）；
+ *   - `model-gateway.ts`：M3 的 `ModelGateway`（脱敏 → 审计 → Provider → 还原）；
+ *   - `placeholders.ts`：会话级占位符映射与还原。
  *
  * 铁律（PRD §8.2 / 技术架构 §5.2）：
- *   1. 所有外发必须经过本模块，其他地方不得 import 模型 SDK（由 dependency-cruiser 强制）。
+ *   1. 所有外发必须经过本模块，其他地方不得 import 模型 SDK（依赖方向门禁强制）。
  *   2. 检测到 L3 或脱敏失败 → **硬失败**（抛错），绝不"降级放行"。
  *   3. 审计只记录脱敏项摘要与哈希，**不记录原文**（NFR-SP5）。
+ *
+ * ⚠️ `ModelGateway` 已具备真实调用能力，但在 M3 接入 daemon 之前，
+ * 生产路径仍停留在 `FailClosedGateway`；不要因为类存在就以为已经接通。
  */
 
 import type { DataClass } from "@aegis/contracts";
@@ -27,6 +32,8 @@ export interface Detector {
 /** 一次检测命中的位置与取值；`matched` 仅用于本地占位替换，**绝不写入审计或日志** */
 export interface DetectorHit {
   category: string;
+  /** 命中应提升到的最低分级（由检测器声明，避免自定义类别不在默认映射表时漏升级） */
+  escalatesTo: DataClass;
   start: number;
   end: number;
   /** 仅用于本地占位替换；绝不写入审计或日志 */
@@ -97,6 +104,17 @@ export function maxClass(a: DataClass, b: DataClass): DataClass {
   return CLASS_ORDER[a] >= CLASS_ORDER[b] ? a : b;
 }
 
+/**
+ * 判断载荷分级是否超过策略允许上限。
+ *
+ * ⚠️ L3 是**无条件拒绝**：即使策略误配成 L3，也绝不允许凭据/私钥外发。
+ * 这是对"策略配置写错"的最后一道兜底。
+ */
+export function exceedsOutboundPolicy(dataClass: DataClass, maxOutboundClass: DataClass): boolean {
+  if (dataClass === "L3") return true;
+  return CLASS_ORDER[dataClass] > CLASS_ORDER[maxOutboundClass];
+}
+
 /** 默认分级策略：未知来源 → L2（保守），检测命中只能提升级别 */
 export class DefaultClassificationPolicy implements ClassificationPolicy {
   baseClass(source: string): DataClass {
@@ -112,8 +130,9 @@ export class DefaultClassificationPolicy implements ClassificationPolicy {
   escalate(base: DataClass, hits: DetectorHit[]): DataClass {
     let level = base;
     for (const hit of hits) {
-      const detectorLevel = DETECTOR_LEVELS[hit.category];
-      if (detectorLevel) level = maxClass(level, detectorLevel);
+      // 以检测器自带的 escalatesTo 为准；DETECTOR_LEVELS 只用于内置类别的默认值。
+      // 这样自定义检测器即使用了新 category，也不会因为不在映射表里而漏升级。
+      level = maxClass(level, hit.escalatesTo ?? DETECTOR_LEVELS[hit.category] ?? "L2");
     }
     return level;
   }
@@ -132,13 +151,8 @@ export const DETECTOR_LEVELS: Record<string, DataClass> = {
   connection_string: "L3",
 };
 
-/**
- * 模型网关接口。
- *
- * ⚠️ M1 只提供 fail-closed 实现（NoopModelGateway）：任何调用都抛错。
- *    这不是"没实现"，而是**刻意的安全默认值**：在 M3 补齐真实 Provider 之前，
- *    任何试图外发的代码路径都会立刻失败，而不是静默地把数据发出去。
- */
-export interface ModelGateway {
-  complete(req: OutboundRequest): Promise<never>;
-}
+// 实现类在独立模块中；统一从这里导出，保证 `@aegis/redaction-gateway` 的公共入口完整。
+export * from "./detectors.js";
+export * from "./gateway.js";
+export * from "./model-gateway.js";
+export * from "./placeholders.js";
