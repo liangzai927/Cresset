@@ -125,6 +125,15 @@ async function refreshStatus() {
   const dot = $("status-dot");
   dot.className = "dot";
 
+  // 未就绪时禁用所有需要后端的按钮 —— 让用户"点不动"比"点了报错"清楚得多。
+  // 这也是对"daemon 尚未就绪"那次事故的直接改进：
+  // 当时向导第 2 步邀请用户点"发送测试通知"，但后端可能还在启动。
+  const ready = status.daemonReady === true;
+  for (const id of ["btn-test-notify", "btn-new", "btn-pause-all", "btn-resume-all", "btn-refresh-history", "wizard-test-notify"]) {
+    const el2 = $(id);
+    if (el2) el2.disabled = !ready;
+  }
+
   if (status.daemonState === "running") {
     const uptime = formatUptime(status.health ? status.health.uptimeS : 0);
     const nativeOk = status.channels.some((c) => c.channel === "os_notification" && c.ok);

@@ -205,6 +205,34 @@ function createWindow(): BrowserWindow {
     });
   }
 
+  // ── 端到端冒烟：模拟用户点"测试通知"
+  //
+  // 存在的理由：曾出现过"界面已显示、但 daemon 还在启动时点测试通知直接报错"
+  // 的问题。单元测试覆盖不到这条链路（它跨 renderer → preload → 主进程 → daemon），
+  // 因此这里提供一个可自动化的动作，结果写进日志供 tools/verify-desktop.mjs 断言。
+  if (process.env.AEGIS_E2E_SMOKE === "1") {
+    win.webContents.once("did-finish-load", () => {
+      // 立刻点（不等就绪）——这正是当初出错的条件
+      setTimeout(() => {
+        void win.webContents
+          .executeJavaScript(
+            `window.aegis.testNotify().then(() => "SMOKE_NOTIFY_OK").catch((e) => "SMOKE_NOTIFY_FAIL:" + e.message)`,
+          )
+          .then((result: string) => {
+            log("info", "main.e2e_smoke_result", { result });
+          })
+          .catch((err: unknown) => log("error", "main.e2e_smoke_error", { error: String(err) }))
+          .finally(() => {
+            // 留一点时间让日志刷出去
+            setTimeout(() => {
+              ctx.quitting = true;
+              app.quit();
+            }, 500);
+          });
+      }, 150);
+    });
+  }
+
   // 关闭窗口 → 隐藏到托盘（不退出，服务继续跑）
   win.on("close", (event) => {
     if (ctx.quitting) return;
@@ -367,27 +395,81 @@ async function ipcCompleteOnboarding(choices: { autostart: boolean }): Promise<{
  * 重连策略：每次调用都检查 `client` 是否可用；不可用则按当前握手文件重建。
  * 这样 daemon 重启后（换了 token）无需重启 UI。
  */
-async function ensureClient(): Promise<IpcClient> {
+/**
+ * 等待 daemon 就绪的默认上限（毫秒）。
+ *
+ * 为什么要等而不是立刻报错：daemon 是独立进程，冷启动需要拉起 Node、
+ * 跑迁移、建 socket，实测约 0.5–2 秒。用户看到界面后立刻点"测试通知"时，
+ * 后端很可能还没起来 —— 直接抛错只会让人以为坏了（实测踩到）。
+ */
+const CLIENT_WAIT_MS = 10_000;
+
+/**
+ * 确保拿到一个已连接的 IPC 客户端。
+ *
+ * 三种情况：
+ *   1. 已有连接 → 直接返回
+ *   2. 没有连接但能等到 daemon 就绪 → 连上返回
+ *   3. 等超时 → 抛出**带原因**的错误（而不是笼统的"尚未就绪"）
+ */
+async function ensureClient(waitMs = CLIENT_WAIT_MS): Promise<IpcClient> {
   if (ctx.client) return ctx.client;
 
-  const hs = ctx.supervisor?.readHandshake() ?? null;
-  if (!hs) throw new Error("daemon 尚未就绪");
+  // 让监督者再尝试一次（它是幂等的：已有进程就直接复用，否则拉起）。
+  // 这同时修掉了"首次启动失败后永不重试"的问题。
+  const deadline = Date.now() + waitMs;
+  let lastReason = "daemon 未启动";
 
-  const client = new IpcClient({
-    endpoint: hs.endpoint,
-    token: hs.token,
-    // daemon 断开时自动清空，下次调用会重连。
-    // 注意：onStateChange 必须在构造时传入（IpcClient 不在事后暴露注册方法）。
-    onStateChange: (state) => {
-      if (state === "disconnected") {
-        ctx.client = null;
-        notifyRefresh();
+  while (Date.now() < deadline) {
+    if (!ctx.supervisor) {
+      lastReason = "监督者未初始化（可能找不到系统 Node 或 daemon 入口）";
+      break;
+    }
+
+    let hs = ctx.supervisor.readHandshake();
+    if (!hs) {
+      // 还没握手：催一次启动，然后小睡
+      const state = await ctx.supervisor.ensureRunning(Math.min(2_000, deadline - Date.now()));
+      if (state.kind === "unavailable" || state.kind === "crashed") {
+        lastReason =
+          state.kind === "crashed" ? `daemon 崩溃：${state.reason}` : `daemon 不可用：${state.reason}`;
+        // 崩溃/不可用不必死等到超时，直接让用户看到原因
+        break;
       }
-    },
-  });
-  await client.connect();
-  ctx.client = client;
-  return client;
+      hs = ctx.supervisor.readHandshake();
+      if (!hs) {
+        await new Promise((r) => setTimeout(r, 200));
+        continue;
+      }
+    }
+
+    try {
+      const client = new IpcClient({
+        endpoint: hs.endpoint,
+        token: hs.token,
+        // daemon 断开时自动清空，下次调用会重连。
+        // 注意：onStateChange 必须在构造时传入（IpcClient 不在事后暴露注册方法）。
+        onStateChange: (state) => {
+          if (state === "disconnected") {
+            ctx.client = null;
+            notifyRefresh();
+          }
+        },
+      });
+      await client.connect();
+      ctx.client = client;
+      return client;
+    } catch (err) {
+      // 握手文件可能已被 daemon 重启替换（换 token）→ 清空后重试
+      lastReason = `连接 daemon 失败：${(err as Error).message}`;
+      ctx.client = null;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+  }
+
+  throw new Error(
+    `${lastReason}。可执行 \`pnpm daemon\` 手动启动后台服务查看具体报错；` + `数据目录：${ctx.paths.dataDir}`,
+  );
 }
 
 /** 通知 renderer 刷新（daemon 状态变化、需要重新拉数据时） */
@@ -439,6 +521,8 @@ async function ipcGetStatus(): Promise<DiagnosticInfo> {
   return {
     daemonState: state.kind,
     daemonReason: state.kind === "crashed" || state.kind === "unavailable" ? state.reason : null,
+    // 只有真正拿到握手且进程存活才算就绪
+    daemonReady: state.kind === "running",
     spawnedByUs: state.kind === "running" ? state.spawnedByUs : false,
     health,
     channels: taskChannels,
@@ -578,7 +662,11 @@ async function bootstrap(): Promise<void> {
   ctx.desktopSender = createDesktopChannelSender({ channelFilePath: ctx.paths.channelFile });
   ctx.notifierProbes = [ctx.desktopSender, desktopChannelProbe.cliFallback()];
 
-  // ── ③ daemon 监督
+  // ── ③ daemon 监督（先创建监督者，再建窗口）
+  //
+  // 顺序很关键：监督者一旦被创建就可以报告状态（"启动中"->"运行中"），
+  // 窗口据此显示准确信息。若先建窗口再建监督者，界面首次查询会得到
+  // "未运行"并弹出红色横幅 —— 明明正在启动，却吓用户一跳（实测）。
   const nodeExec = resolveNodeExecPath();
   if (!nodeExec) {
     log("error", "main.node_not_found", {
@@ -600,12 +688,18 @@ async function bootstrap(): Promise<void> {
         },
         onLog: (level, event, detail) => log(level, event, detail),
       });
-      const state = await ctx.supervisor.ensureRunning();
-      log("info", "main.daemon_state", { kind: state.kind });
+      // 不 await：ensureRunning 会先把状态置为 "starting"（同步执行到第一个 await 前），
+      // 因此窗口立刻就能显示"后台服务启动中"，而不是黑屏或"未运行"。
+      void ctx.supervisor.ensureRunning().then((state) => {
+        log("info", "main.daemon_state", { kind: state.kind });
+      });
     }
   }
 
   // ── ④ 窗口与托盘
+  //
+  // 在 daemon 启动之前就建好窗口：界面立刻可见并显示"后台服务启动中…"，
+  // 用户不会面对几秒的黑屏。等 daemon 就绪后由 pushDaemonState 通知界面刷新。
   ctx.window = createWindow();
   createTray();
 }

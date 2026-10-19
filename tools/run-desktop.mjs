@@ -95,20 +95,56 @@ const child = spawn(binary, [APP_DIR, ...(verbose ? [] : [])], {
   },
 });
 
+/**
+ * 日志策略（这版是踩坑后改的）：
+ *
+ * 旧做法只转发含 `"level":"error"` 的行，且**只有 error**。
+ * 结果是"daemon 尚未就绪"这类问题在界面上只报一句话，
+ * 用户（和我）都看不到 daemon 到底为什么没起来 —— 排查全靠猜。
+ *
+ * 现在：
+ *   - warn / error 都转发到终端（info 仍静默，避免刷屏）
+ *   - **完整日志写入 <dataDir>/desktop.log**，随时可查
+ *
+ * 日志文件放在数据目录而不是系统日志：用户找得到，且不会泄露到别处。
+ */
+const { appendFileSync, mkdirSync } = await import("node:fs");
+const dataDir =
+  process.env.AEGIS_DATA_DIR ?? join(process.env.HOME ?? "", "Library", "Application Support", "Aegis");
+const logFile = join(dataDir, "desktop.log");
+try {
+  mkdirSync(dataDir, { recursive: true });
+} catch {
+  /* 目录已存在或无权限：日志照常打到终端 */
+}
+
+/** 把一行写入日志文件（失败不影响启动） */
+function persist(line) {
+  try {
+    appendFileSync(logFile, `${new Date().toISOString()} ${line}\n`);
+  } catch {
+    /* 日志写不进去不应阻塞应用 */
+  }
+}
+
 if (!verbose) {
-  // 非 verbose 模式下只转发错误与关键日志，避免刷屏
+  console.log(`  日志: ${logFile}（完整日志，排查用）`);
   child.stdout.on("data", (buf) => {
-    const text = String(buf);
-    for (const line of text.split("\n")) {
+    for (const line of String(buf).split("\n")) {
       if (!line.trim()) continue;
-      if (line.includes('"level":"error"') || line.includes("AEGIS")) {
+      persist(line);
+      // error 与 warn 都显示；info 只在日志文件里
+      if (line.includes('"level":"error"') || line.includes('"level":"warn"')) {
         process.stdout.write(`  ${line}\n`);
       }
     }
   });
   child.stderr.on("data", (buf) => {
-    const text = String(buf).trim();
-    if (text) process.stderr.write(`  ${text}\n`);
+    for (const line of String(buf).split("\n")) {
+      if (!line.trim()) continue;
+      persist(`[stderr] ${line}`);
+      process.stderr.write(`  ${line}\n`);
+    }
   });
 }
 

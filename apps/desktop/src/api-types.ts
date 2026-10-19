@@ -90,6 +90,13 @@ export interface DiagnosticInfo {
   daemonState: "stopped" | "starting" | "running" | "crashed" | "unavailable";
   /** 不可用/崩溃时的原因（界面必须显示，不许静默） */
   daemonReason: string | null;
+  /**
+   * daemon 是否已可接受调用。
+   *
+   * 界面据此**禁用**需要后端的动作并给出"启动中"提示，
+   * 而不是让用户点了才看到一句报错（实测这是最令人困惑的体验）。
+   */
+  daemonReady: boolean;
   /** daemon 是否由本次 UI 拉起 */
   spawnedByUs: boolean;
   /** daemon 健康检查结果（daemon 未运行时为 null） */

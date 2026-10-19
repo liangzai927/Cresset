@@ -34,7 +34,24 @@ pnpm dev
 | `pnpm desktop` | 只启动界面（假定已构建） |
 | `pnpm daemon` | 只跑后台服务（不开界面） |
 | `pnpm verify` | 全量校验（门禁 + 类型 + 构建 + lint + 测试） |
-| `pnpm verify:desktop` | 桌面端到端验证（真启动 GUI，9 项检查） |
+| `pnpm verify:desktop` | 桌面端到端验证（真启动 GUI，10 项检查） |
+
+### 出问题时怎么查
+
+启动脚本会把**完整日志**写到 `<数据目录>/desktop.log`（macOS 上是
+`~/Library/Application Support/Aegis/desktop.log`），终端里同时显示 warn/error。
+
+常见情况：
+
+| 现象 | 处理 |
+| --- | --- |
+| 界面显示"后台服务启动中…"超过几秒 | 看 `desktop.log` 里的 `supervisor.spawn` 与 `daemon_state` |
+| 提示"daemon 不可用" | 执行 `pnpm daemon` 看前台报错（锁被占 / 权限 / 迁移失败） |
+| 想彻底重来 | `pkill -f "aegis/apps/daemon"`，然后删掉数据目录里的 `daemon.lock`、`handshake.json`、`daemon.sock` |
+| 通知不弹 | 系统设置 → 通知 → 允许 Aegis；或在界面"设置"页看渠道可用性 |
+
+**注意**：关掉窗口后 daemon **仍然在跑**（这是设计）。要停它用 `pnpm daemon` 之外的
+`node apps/daemon/dist/main.js stop`，或菜单里的"完全退出（含后台服务）"。
 
 界面有三块：
 - **提醒**：列表（含人话重复描述、下次触发、已触发次数）、新建（六种重复模式）、暂停/恢复/删除

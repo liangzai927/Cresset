@@ -182,6 +182,58 @@ async function main() {
     else console.log(`  保留数据目录: ${dataDir}`);
   }
 
+  // ── ⑩ 冷启动竞态：界面刚出现就点"测试通知"必须成功
+  //
+  // 这是一次真实事故的回归检查：曾经在 daemon 还没就绪时点按钮会直接报
+  // "daemon 尚未就绪"，用户看到的就是一句无从下手的错误。
+  // 该链路跨 renderer → preload → 主进程 → daemon，单元测试覆盖不到。
+  {
+    const raceDir = mkdtempSync(join(tmpdir(), "aegis-race-"));
+    const race = spawn(electronBin, [join(ROOT, "apps", "desktop")], {
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...env,
+        AEGIS_DATA_DIR: raceDir,
+        AEGIS_E2E_SMOKE: "1", // 主进程会在 150ms 后主动调用 testNotify
+        AEGIS_REPO_ROOT: ROOT,
+      },
+    });
+    let raceOut = "";
+    race.stdout.on("data", (b) => (raceOut += String(b)));
+    race.stderr.on("data", (b) => (raceOut += String(b)));
+
+    // 等它自己退出（冒烟完成后会 app.quit）
+    await new Promise((r) => {
+      const timer = setTimeout(() => {
+        race.kill("SIGTERM");
+        r();
+      }, 25_000);
+      race.on("exit", () => {
+        clearTimeout(timer);
+        r();
+      });
+    });
+
+    const ok = raceOut.includes("SMOKE_NOTIFY_OK") && !raceOut.includes("SMOKE_NOTIFY_FAIL");
+    check(
+      "冷启动立刻点测试通知能成功（竞态回归）",
+      ok,
+      ok ? "" : (raceOut.match(/SMOKE_NOTIFY_FAIL:[^"\\]*/) ?? ["未得到结果"])[0],
+    );
+
+    // 清理该轮 daemon（它不随 UI 退出）
+    try {
+      const { spawnSync } = await import("node:child_process");
+      spawnSync(process.execPath, [join(ROOT, "apps", "daemon", "dist", "main.js"), "stop"], {
+        env: { ...env, AEGIS_DATA_DIR: raceDir },
+        stdio: "ignore",
+      });
+    } catch {
+      /* 忽略 */
+    }
+    if (!keep) rmSync(raceDir, { recursive: true, force: true });
+  }
+
   // ── 汇总
   const failed = results.filter((r) => !r.ok);
   console.log("");
