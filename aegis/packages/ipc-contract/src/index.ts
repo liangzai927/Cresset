@@ -210,7 +210,13 @@ export const RPC_METHODS = {
   },
   "backup.export": {
     params: z.object({ targetDir: z.string(), includeHistory: z.boolean().optional() }).strict(),
-    result: z.object({ path: z.string() }).strict(),
+    result: z
+      .object({
+        path: z.string(),
+        files: z.number().int().nonnegative(),
+        totalBytes: z.number().int().nonnegative(),
+      })
+      .strict(),
   },
   "diag.recentLogs": {
     params: z.object({ limit: z.number().int().min(1).max(1_000) }).strict(),

@@ -25,6 +25,7 @@
 
 import { contextBridge, ipcRenderer } from "electron";
 import type {
+  BackupExportResult,
   CreateTaskPayload,
   DesktopApi,
   DiagnosticInfo,
@@ -63,6 +64,8 @@ function buildApi(): DesktopApi {
     listNotifications: (limit?: number) =>
       ipcRenderer.invoke("aegis:notifications:list", limit) as Promise<NotificationsPage>,
     testNotify: () => ipcRenderer.invoke("aegis:notifications:test") as Promise<{ ok: boolean }>,
+
+    exportBackup: () => ipcRenderer.invoke("aegis:backup:export") as Promise<BackupExportResult>,
 
     // ── 全局控制 ──────────────────────────────────────────────────────
     pauseAll: () => ipcRenderer.invoke("aegis:ctrl:pauseAll") as Promise<{ ok: boolean }>,

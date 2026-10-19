@@ -150,6 +150,11 @@ export interface UpdateInfo {
   message: string;
 }
 
+/** 导出备份的结果：取消与成功用可辨识联合，避免 UI 把取消当失败 */
+export type BackupExportResult =
+  | { canceled: true }
+  | { canceled: false; outDir: string; files: number; totalBytes: number };
+
 /**
  * 暴露给 renderer 的 API 契约。
  *
@@ -176,6 +181,8 @@ export interface DesktopApi {
   resumeAll(): Promise<{ ok: boolean }>;
 
   checkUpdate(): Promise<UpdateInfo>;
+  /** 选择目录并导出备份；路径由主进程对话框决定，renderer 不能传任意路径 */
+  exportBackup(): Promise<BackupExportResult>;
 
   /** 首次启动向导 */
   getOnboarding(): Promise<OnboardingState>;

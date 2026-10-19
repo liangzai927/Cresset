@@ -40,8 +40,9 @@ import {
   uninstallAutostart,
 } from "@aegis/platform";
 import { type DataPaths, resolveDataPaths } from "@aegis/product";
-import { app, BrowserWindow, ipcMain, Menu, Notification, nativeImage, shell, Tray } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, nativeImage, shell, Tray } from "electron";
 import type {
+  BackupExportResult,
   ChannelStatus,
   CreateTaskPayload,
   DiagnosticInfo,
@@ -798,6 +799,42 @@ async function ipcCheckUpdate(): Promise<UpdateInfo> {
   };
 }
 
+/** 备份目录名（本地时间，精确到秒；同一秒重复导出会由 daemon 拒绝覆盖） */
+function backupDirName(): string {
+  const d = new Date();
+  const p2 = (n: number): string => String(n).padStart(2, "0");
+  return `Aegis-backup-${d.getFullYear()}${p2(d.getMonth() + 1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}${p2(d.getSeconds())}`;
+}
+
+/**
+ * 导出备份。
+ *
+ * 安全边界：**目录由主进程的原生对话框决定**，renderer 不能传任意路径；
+ * 生成的是父目录下新的子目录（createBackup 要求目标不存在）。
+ */
+async function ipcExportBackup(): Promise<BackupExportResult> {
+  const options = {
+    title: "选择备份保存位置",
+    buttonLabel: "导出到此文件夹",
+    properties: ["openDirectory", "createDirectory"] as Array<"openDirectory" | "createDirectory">,
+  };
+  const picked =
+    ctx.window && !ctx.window.isDestroyed()
+      ? await dialog.showOpenDialog(ctx.window, options)
+      : await dialog.showOpenDialog(options);
+  if (picked.canceled || !picked.filePaths[0]) return { canceled: true };
+
+  const targetDir = join(picked.filePaths[0], backupDirName());
+  const client = await ensureClient();
+  const r = (await client.call("backup.export", { targetDir, includeHistory: true })) as {
+    path: string;
+    files: number;
+    totalBytes: number;
+  };
+  log("info", "main.backup_exported", { path: r.path, files: r.files, totalBytes: r.totalBytes });
+  return { canceled: false, outDir: r.path, files: r.files, totalBytes: r.totalBytes };
+}
+
 // ── 启动流程 ────────────────────────────────────────────────────────────
 
 async function bootstrap(): Promise<void> {
@@ -935,6 +972,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:ctrl:resumeAll",
     wrap(() => ipcControl(false)),
+  );
+  ipcMain.handle(
+    "aegis:backup:export",
+    wrap(() => ipcExportBackup()),
   );
   ipcMain.handle(
     "aegis:update:check",

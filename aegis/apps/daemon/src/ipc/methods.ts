@@ -18,6 +18,7 @@
 
 import type { Task } from "@aegis/contracts";
 import type { NotificationView, TaskView } from "@aegis/ipc-contract";
+import type { DataPaths } from "@aegis/product";
 import {
   describeRecurrence,
   type RecurrenceSpec,
@@ -28,6 +29,7 @@ import {
 import type { Scheduler } from "@aegis/scheduler";
 import type { AttemptSummary } from "@aegis/storage";
 import { z } from "zod";
+import { createBackup } from "../bootstrap/backup.js";
 
 /** RPC 处理失败：携带错误码，交由 IpcServer 序列化 */
 export class MethodError extends Error {
@@ -171,8 +173,17 @@ function wallString(w: { year: number; month: number; day: number; hour: number;
   return `${w.year}-${p2(w.month)}-${p2(w.day)}T${p2(w.hour)}:${p2(w.minute)}`;
 }
 
+/** `backup.export` 需要的运行期上下文（由 daemon 启动时注入） */
+export interface BackupMethodsContext {
+  paths: DataPaths;
+  daemonVersion: string;
+}
+
 /** 构造全部 RPC handler。返回对象直接交给 IpcServer 的 `methods` 选项 */
-export function createMethods(scheduler: Scheduler): Record<string, (params: unknown) => Promise<unknown>> {
+export function createMethods(
+  scheduler: Scheduler,
+  backupContext?: BackupMethodsContext,
+): Record<string, (params: unknown) => Promise<unknown>> {
   const { tasks, notifications } = scheduler.daos;
   const attempts = scheduler.daos.attempts;
 
@@ -251,6 +262,31 @@ export function createMethods(scheduler: Scheduler): Record<string, (params: unk
     "task.delete": async (params) => {
       const p = z.object({ id: z.string(), hard: z.boolean().optional() }).strict().parse(params);
       return { ok: p.hard === true ? tasks.hardDelete(p.id) : tasks.softDelete(p.id) };
+    },
+
+    // ── 备份 ────────────────────────────────────────────────────────────
+    "backup.export": async (params) => {
+      const p = z
+        .object({ targetDir: z.string().min(1), includeHistory: z.boolean().optional() })
+        .strict()
+        .parse(params);
+      if (!backupContext) {
+        throw new MethodError(E_INTERNAL, "备份服务未配置（daemon 缺少 dataDir/version）");
+      }
+      if (p.includeHistory === false) {
+        // 数据库快照天然包含历史；暂不支持"排除历史"的语义，避免静默做出错误承诺
+        throw new MethodError(E_INVALID_PARAMS, "backup.export 暂不支持 includeHistory=false");
+      }
+      const manifest = createBackup({
+        paths: backupContext.paths,
+        outDir: p.targetDir,
+        daemonVersion: backupContext.daemonVersion,
+      });
+      return {
+        path: p.targetDir,
+        files: manifest.files.length,
+        totalBytes: manifest.totalBytes,
+      };
     },
 
     "task.complete": async (params) => {

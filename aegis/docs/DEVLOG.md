@@ -22,7 +22,7 @@
 | --- | --- |
 | 阶段 | **R4 进行中**（自启/崩溃自恢复/ad-hoc 打包/备份导出已完成），剩余正式签名与公证 |
 | 版本 | daemon `0.2.0-r2` ／ 桌面 `0.3.0-r3` |
-| 校验 | `pnpm verify` 全绿（325 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
+| 校验 | `pnpm verify` 全绿（326 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
 | 启动 | `pnpm dev`（智能增量构建后启动；打包产物为 `dist/Aegis.app`） |
 | 数据目录 | `~/Library/Application Support/Aegis`（含 `desktop.log`） |
 | 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复/启动看门狗/打包（ad-hoc）/备份导出 |
@@ -59,6 +59,25 @@
 ---
 
 ## 记录（新的在最上面）
+
+### 2026-10-19 · R4：设置页导出备份
+**里程碑**：R4
+**改了什么**：
+- 实现契约里已有的 `backup.export` RPC：
+  - daemon 启动时注入 `paths`/`daemonVersion`；
+  - 结果扩展为 `{ path, files, totalBytes }`（原契约只有 path）。
+- 桌面主进程：原生目录选择框选父目录，自动生成
+  `Aegis-backup-YYYYMMDD-HHmmss` 子目录；renderer 不能传任意路径（安全边界）。
+- 设置页「数据」增加「导出备份…」按钮与结果提示；失败走可见 banner。
+- 新增 1 个 daemon RPC 集成测试（`backup.export` 生成 aegis.db + manifest.json）。
+**为什么**：CLI 已有备份能力，但普通用户不该被要求开终端；备份是 M1 数据可迁移承诺的一部分。
+**验证**：
+- `pnpm verify`：326 通过 / 9 跳过
+- 设置页截图确认按钮、路径与说明渲染正常
+- RPC 测试确认快照包含数据库与 manifest
+**踩到的坑**：契约原本就定义了 `backup.export`，不要另造 `backup.create`；直接实现既有契约，
+但结果需要补 files/totalBytes 才能给 UI 摘要。
+**留给下次**：正式签名/公证/DMG（需 Apple 账号）；然后 R5 14 天验收；M2 不能提前。
 
 ### 2026-10-19 · R4 修复：稍后提醒期间任务从列表消失
 **里程碑**：R4

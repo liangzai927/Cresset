@@ -482,6 +482,31 @@ describe("R2：调度器接入与 RPC 方法", () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
+  it("★ backup.export 经 RPC 生成一致快照", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-backup-"));
+    const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
+    const hs = readHandshakeFile(join(dataDir, "handshake.json"));
+    const client = new IpcClient({ endpoint: hs.endpoint, token: hs.token });
+    await client.connect();
+
+    const targetDir = join(dataDir, "backup-rpc");
+    const result = (await client.call("backup.export", { targetDir })) as {
+      path: string;
+      files: number;
+      totalBytes: number;
+    };
+
+    expect(result.path).toBe(targetDir);
+    expect(result.files).toBeGreaterThan(0);
+    expect(result.totalBytes).toBeGreaterThan(0);
+    expect(existsSync(join(targetDir, "aegis.db"))).toBe(true);
+    expect(existsSync(join(targetDir, "manifest.json"))).toBe(true);
+
+    client.close();
+    await daemon.stop("test");
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
   it("★ 契约里定义的方法都已注册（防止 E_METHOD_NOT_FOUND 回归）", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-methods-"));
     const daemon = await runDaemon({ dataDir, tickMs: 60_000 });

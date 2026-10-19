@@ -426,6 +426,19 @@ main {
   margin-bottom: 10px;
 }
 
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.settings-actions .hint {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .settings-group h2 {
   font-size: 12.5px;
   font-weight: 600;

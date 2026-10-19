@@ -262,7 +262,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
     // 原有内联方法（关停）与 R2 的业务方法合并。
     // 若只保留其中一个，运行时不是 task.* 全部 E_METHOD_NOT_FOUND，就是 sys.shutdown 失效。
     methods: {
-      ...createMethods(scheduler),
+      ...createMethods(scheduler, { paths, daemonVersion: DAEMON_VERSION }),
       /**
        * 关停 daemon。
        *

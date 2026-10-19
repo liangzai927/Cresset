@@ -129,7 +129,15 @@ async function refreshStatus() {
   // 这也是对"daemon 尚未就绪"那次事故的直接改进：
   // 当时向导第 2 步邀请用户点"发送测试通知"，但后端可能还在启动。
   const ready = status.daemonReady === true;
-  for (const id of ["btn-test-notify", "btn-new", "btn-pause-all", "btn-resume-all", "btn-refresh-history", "wizard-test-notify"]) {
+  for (const id of [
+    "btn-test-notify",
+    "btn-new",
+    "btn-pause-all",
+    "btn-resume-all",
+    "btn-refresh-history",
+    "btn-export-backup",
+    "wizard-test-notify",
+  ]) {
     const el2 = $(id);
     if (el2) el2.disabled = !ready;
   }
@@ -186,6 +194,14 @@ async function refreshStatus() {
 function setStatusIndicator(level, text) {
   $("status-dot").className = `dot ${level}`;
   $("status-text").textContent = text;
+}
+
+/** 人类可读体积（备份摘要） */
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes < 0) return "未知大小";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function formatUptime(seconds) {
@@ -606,6 +622,28 @@ $("btn-resume-all").addEventListener("click", async () => {
 });
 
 $("btn-refresh-history").addEventListener("click", () => void refreshHistory());
+
+$("btn-export-backup").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const hint = $("backup-hint");
+  const original = hint.textContent;
+  btn.disabled = true;
+  hint.textContent = "正在导出…";
+  try {
+    const r = await window.aegis.exportBackup();
+    if (r.canceled) {
+      hint.textContent = original;
+      return;
+    }
+    hint.textContent = `已导出 ${r.files} 个文件（${formatBytes(r.totalBytes)}）：${r.outDir}`;
+    showToast("备份已导出");
+  } catch (err) {
+    hint.textContent = `导出失败：${err.message}`;
+    showBanner(`备份导出失败：${err.message}`, "err");
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 $("btn-check-update").addEventListener("click", async () => {
   const box = $("update-text");
