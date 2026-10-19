@@ -14,7 +14,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { discoverDesktopChannel } from "./desktop-channel.js";
+import { DesktopChannelSender, discoverDesktopChannel } from "./desktop-channel.js";
 
 let dir: string;
 let channelPath: string;
@@ -101,5 +101,29 @@ describe("discoverDesktopChannel", () => {
     expect(r.available).toBe(false);
     // 文件仍存在（未被删除）
     expect(discoverDesktopChannel(channelPath).available).toBe(false);
+  });
+});
+
+describe("DesktopChannelSender.send", () => {
+  it("把 occurrenceId 透传给 Electron（用于完成/稍后按钮）", async () => {
+    writeChannel({ endpoint: "http://127.0.0.1:12345", token: "token", pid: process.pid, startedAt: 1 });
+    const bodies: unknown[] = [];
+    const fetchImpl: typeof fetch = async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ outcome: "success" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    };
+    const sender = new DesktopChannelSender({
+      channelFilePath: channelPath,
+      fetchImpl,
+      timeoutMs: 1_000,
+    });
+
+    const result = await sender.send({ title: "提醒", occurrenceId: "occ-1" });
+
+    expect(result.outcome).toBe("success");
+    expect(bodies[0]).toMatchObject({ title: "提醒", occurrenceId: "occ-1" });
   });
 });

@@ -212,6 +212,7 @@ export class DesktopChannelSender implements Notifier {
           title: payload.title,
           ...(payload.body ? { body: payload.body } : {}),
           sound: payload.sound !== false,
+          ...(payload.occurrenceId ? { occurrenceId: payload.occurrenceId } : {}),
         }),
         signal: AbortSignal.timeout(this.#timeoutMs),
       });

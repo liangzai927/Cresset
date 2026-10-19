@@ -185,6 +185,9 @@ describe("dispatch：到点派发（TC-M1-01）", () => {
     expect(tick.delivered).toBe(1);
     expect(native.sent).toHaveLength(1);
     expect(native.sent[0]?.title).toBe("测试提醒");
+    // occurrenceId 必须透传给桌面通道，界面才能提供"完成/稍后"操作
+    const delivered = s.daos.notifications.listRecent(1)[0];
+    expect(native.sent[0]?.occurrenceId).toBe(delivered?.occurrenceId);
   });
 
   it("★ 同一实例不会被派发两次（跨多轮 tick）", async () => {

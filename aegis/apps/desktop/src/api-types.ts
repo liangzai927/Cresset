@@ -164,6 +164,10 @@ export interface DesktopApi {
   pauseTask(id: string): Promise<{ ok: boolean }>;
   resumeTask(id: string): Promise<{ ok: boolean }>;
   deleteTask(id: string): Promise<{ ok: boolean }>;
+  /** 把某次提醒标记为完成（当前实例消失，不再补发） */
+  completeOccurrence(occurrenceId: string): Promise<{ ok: boolean }>;
+  /** 稍后提醒：minutes 分钟后创建一条新的提醒通知 */
+  snoozeOccurrence(occurrenceId: string, minutes: number): Promise<{ id: string }>;
 
   listNotifications(limit?: number): Promise<NotificationsPage>;
   testNotify(): Promise<{ ok: boolean }>;
@@ -188,5 +192,7 @@ export interface DesktopApi {
    * 系统通知不可用时，主进程会把提醒广播到界面（同时窗口置前 + 响铃），
    * 界面负责渲染一条**必须手动确认**的横幅 —— 这是"提醒一定到达"的保底。
    */
-  onAlert(cb: (payload: { title: string; body?: string }) => void): () => void;
+  onAlert(cb: (payload: { title: string; body?: string; occurrenceId?: string }) => void): () => void;
+  /** 订阅"⌘Q 已按下一次，再按一次完全退出"的提示 */
+  onQuitArmed(cb: (seconds: number) => void): () => void;
 }

@@ -52,6 +52,12 @@ function buildApi(): DesktopApi {
     pauseTask: (id: string) => ipcRenderer.invoke("aegis:tasks:pause", id) as Promise<{ ok: boolean }>,
     resumeTask: (id: string) => ipcRenderer.invoke("aegis:tasks:resume", id) as Promise<{ ok: boolean }>,
     deleteTask: (id: string) => ipcRenderer.invoke("aegis:tasks:delete", id) as Promise<{ ok: boolean }>,
+    completeOccurrence: (occurrenceId: string) =>
+      ipcRenderer.invoke("aegis:occurrences:complete", occurrenceId) as Promise<{ ok: boolean }>,
+    snoozeOccurrence: (occurrenceId: string, minutes: number) =>
+      ipcRenderer.invoke("aegis:occurrences:snooze", { occurrenceId, minutes }) as Promise<{
+        id: string;
+      }>,
 
     // ── 通知 ──────────────────────────────────────────────────────────
     listNotifications: (limit?: number) =>
@@ -89,10 +95,20 @@ function buildApi(): DesktopApi {
       return () => ipcRenderer.removeListener("aegis:refresh", listener);
     },
 
-    onAlert: (cb: (payload: { title: string; body?: string }) => void) => {
-      const listener = (_e: unknown, payload: { title: string; body?: string }): void => cb(payload);
+    onAlert: (cb: (payload: { title: string; body?: string; occurrenceId?: string }) => void) => {
+      const listener = (
+        _e: unknown,
+        payload: { title: string; body?: string; occurrenceId?: string },
+      ): void => cb(payload);
       ipcRenderer.on("aegis:alert", listener);
       return () => ipcRenderer.removeListener("aegis:alert", listener);
+    },
+
+    onQuitArmed: (cb: (seconds: number) => void) => {
+      const listener = (_e: unknown, payload: { seconds?: number }): void =>
+        cb(typeof payload?.seconds === "number" ? payload.seconds : 3);
+      ipcRenderer.on("aegis:quit-armed", listener);
+      return () => ipcRenderer.removeListener("aegis:quit-armed", listener);
     },
   };
 }

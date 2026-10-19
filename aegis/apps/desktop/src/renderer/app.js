@@ -628,6 +628,29 @@ $("btn-check-update").addEventListener("click", async () => {
  * 与普通 toast 的区别：**不会自动消失**。它是系统通知的替代品，
  * 自动消失就等于"提醒没送达"。用户可以点"知道了"关闭。
  */
+let toastTimer = null;
+
+/** 短暂提示（不打断操作）；用于"已推迟""再按一次 ⌘Q"等反馈 */
+function showToast(text, ms = 3000) {
+  const toast = $("toast");
+  if (!toast) return;
+  toast.textContent = text;
+  toast.classList.remove("hidden");
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.classList.add("hidden");
+    toastTimer = null;
+  }, ms);
+}
+
+/**
+ * 显示一条需要用户处理的提醒。
+ *
+ * 与普通 toast 的区别：**不会自动消失**。它是系统通知的替代品，
+ * 自动消失就等于"提醒没送达"。带 occurrenceId 时提供两个出口：
+ *   - 完成：结束当前这条（一次性提醒不再出现，重复提醒只结束本次）
+ *   - 稍后提醒：从**现在**起 N 分钟后再提醒（默认 5 分钟，可改）
+ */
 function showAlert(payload) {
   const stack = $("alert-stack");
   if (!stack) return;
@@ -651,10 +674,68 @@ function showAlert(payload) {
   }
 
   const actions = el("div", "alert-actions");
-  const dismiss = el("button", "btn btn-primary", "知道了");
-  dismiss.addEventListener("click", () => card.remove());
-  actions.appendChild(dismiss);
-  card.appendChild(actions);
+  const occurrenceId = typeof payload.occurrenceId === "string" ? payload.occurrenceId : "";
+
+  if (occurrenceId) {
+    const error = el("div", "alert-error hidden");
+
+    const minutes = document.createElement("input");
+    minutes.type = "number";
+    minutes.min = "1";
+    minutes.max = "1440";
+    minutes.value = "5";
+    minutes.className = "snooze-minutes";
+    minutes.setAttribute("aria-label", "稍后提醒的分钟数");
+
+    const unit = el("span", "snooze-unit", "分钟后");
+    const snoozeBtn = el("button", "btn btn-ghost", "稍后提醒");
+    const doneBtn = el("button", "btn btn-primary", "完成");
+    const controls = [minutes, snoozeBtn, doneBtn];
+    const setBusy = (busy) => {
+      for (const control of controls) control.disabled = busy;
+    };
+
+    const run = async (action, successText) => {
+      setBusy(true);
+      error.classList.add("hidden");
+      try {
+        await action();
+        card.remove();
+        showToast(successText);
+        if (state.tab === "history") void refreshHistory();
+      } catch (err) {
+        error.textContent = `操作失败：${err instanceof Error ? err.message : String(err)}`;
+        error.classList.remove("hidden");
+        setBusy(false);
+      }
+    };
+
+    doneBtn.addEventListener("click", () => {
+      void run(() => window.aegis.completeOccurrence(occurrenceId), "已完成");
+    });
+    snoozeBtn.addEventListener("click", () => {
+      const m = Number(minutes.value);
+      if (!Number.isInteger(m) || m < 1 || m > 1440) {
+        error.textContent = "请输入 1–1440 分钟";
+        error.classList.remove("hidden");
+        return;
+      }
+      void run(() => window.aegis.snoozeOccurrence(occurrenceId, m), `已推迟 ${m} 分钟`);
+    });
+
+    actions.appendChild(minutes);
+    actions.appendChild(unit);
+    actions.appendChild(snoozeBtn);
+    actions.appendChild(doneBtn);
+    card.appendChild(error);
+    card.appendChild(actions);
+  } else {
+    // 测试通知/系统失败通知没有 occurrence：只提供关闭
+    const dismiss = el("button", "btn btn-primary", "知道了");
+    dismiss.addEventListener("click", () => card.remove());
+    actions.appendChild(dismiss);
+    card.appendChild(actions);
+  }
 
   stack.appendChild(card);
 
@@ -682,6 +763,11 @@ window.aegis.onAlert((payload) => {
   showAlert(payload);
   // 提醒同时刷新历史，让用户能立刻在"历史"里看到这条
   if (state.tab === "history") void refreshHistory();
+});
+
+// 主进程收到第一次 ⌘Q：提示再按一次；第二次才真正退出
+window.aegis.onQuitArmed((seconds) => {
+  showToast(`再按一次 ⌘Q 完全退出（含后台服务），${seconds} 秒内有效`, seconds * 1000);
 });
 
 

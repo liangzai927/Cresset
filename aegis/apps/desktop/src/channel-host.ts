@@ -138,7 +138,7 @@ export async function startChannelHost(opts: ChannelHostOptions): Promise<Channe
           return;
         }
 
-        let parsed: { title?: unknown; body?: unknown; sound?: unknown };
+        let parsed: { title?: unknown; body?: unknown; sound?: unknown; occurrenceId?: unknown };
         try {
           parsed = JSON.parse(body) as typeof parsed;
         } catch {
@@ -155,6 +155,7 @@ export async function startChannelHost(opts: ChannelHostOptions): Promise<Channe
           title: parsed.title,
           ...(typeof parsed.body === "string" ? { body: parsed.body } : {}),
           sound: parsed.sound !== false,
+          ...(typeof parsed.occurrenceId === "string" ? { occurrenceId: parsed.occurrenceId } : {}),
         });
 
         // ⚠️ 必须拆成扁平字段。
@@ -283,7 +284,7 @@ export function createElectronPresenter(impl: {
   /** 是否已确认系统通知真的可用（由启动时探测得出） */
   systemNotificationOk: () => boolean;
   /** 分层呈现：系统通知 → 前台强提醒 */
-  deliver: (payload: { title: string; body?: string; sound: boolean }) => Promise<{
+  deliver: (payload: { title: string; body?: string; sound: boolean; occurrenceId?: string }) => Promise<{
     ok: boolean;
     layer: "system_notification" | "in_app" | null;
     error?: string;

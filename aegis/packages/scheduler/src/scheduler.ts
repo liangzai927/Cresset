@@ -174,6 +174,16 @@ export class Scheduler {
   }
 
   /**
+   * 当前墙钟毫秒。
+   *
+   * RPC 层构造"从现在起 N 分钟"的稍后提醒时使用；不能用实例的原定时刻，
+   * 否则一条延迟投递的提醒会立刻再次到期。
+   */
+  now(): number {
+    return this.#clock.wall();
+  }
+
+  /**
    * 当前免打扰设置（只读快照）。
    *
    * R2 只提供读取：免打扰属于"全局设置"，写入经配置文件与设置页完成，
@@ -423,6 +433,7 @@ export class Scheduler {
 
       const result = await this.#tryChannels(
         notificationId,
+        notification.occurrenceId,
         notification.title,
         notification.body,
         entry.attempts,
@@ -452,6 +463,7 @@ export class Scheduler {
   /** 依次尝试渠道，返回是否有渠道成功 / 是否值得重试 */
   async #tryChannels(
     notificationId: string,
+    occurrenceId: string | null,
     title: string,
     body: string | null,
     priorAttempts: number,
@@ -461,7 +473,12 @@ export class Scheduler {
 
     for (const [index, notifier] of this.#notifiers.entries()) {
       // 注意：exactOptionalPropertyTypes 下**不能**显式传 undefined，必须用条件展开
-      const r = await notifier.send({ title, sound: true, ...(body ? { body } : {}) });
+      const r = await notifier.send({
+        title,
+        sound: true,
+        ...(body ? { body } : {}),
+        ...(occurrenceId ? { occurrenceId } : {}),
+      });
       this.#recordAttempt({
         notificationId,
         channel: notifier.channel,

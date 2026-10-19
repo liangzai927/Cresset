@@ -14,6 +14,13 @@ export interface NotifyPayload {
   sound?: boolean;
   /** 同一 tag 的通知可被系统合并/替换 */
   tag?: string;
+  /**
+   * 触发本次通知的 occurrence id。
+   *
+   * 仅桌面通道使用：界面收到提醒后，用户点"完成/稍后"需要它来调用
+   * `task.complete` / `task.snooze`。系统通知与 CLI 渠道忽略它。
+   */
+  occurrenceId?: string;
 }
 
 /**

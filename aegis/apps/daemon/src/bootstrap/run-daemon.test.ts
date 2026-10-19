@@ -4,6 +4,7 @@
  * 覆盖：启动步骤产物、0600 权限、单实例锁与陈旧锁回收、跨重启时钟跳变检测、
  * IPC 端到端（含 C-4：断线重连必须自动重放握手）。
  */
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -364,6 +365,52 @@ describe("R2：调度器接入与 RPC 方法", () => {
     // notify.history 在有调度器后仍可正常调用（结构对齐契约）
     const history = (await client.call("notify.history", {})) as { items: unknown[] };
     expect(Array.isArray(history.items)).toBe(true);
+
+    client.close();
+    await daemon.stop("test");
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("★ task.snooze 从当前时刻起算，而不是原定时刻", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-snooze-"));
+    const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
+    const hs = readHandshakeFile(join(dataDir, "handshake.json"));
+    const client = new IpcClient({ endpoint: hs.endpoint, token: hs.token });
+    await client.connect();
+
+    const now = Date.now();
+    const target = new Date(now + 3_600_000);
+    const p2 = (n: number): string => String(n).padStart(2, "0");
+    const wall = `${target.getFullYear()}-${p2(target.getMonth() + 1)}-${p2(target.getDate())}T${p2(target.getHours())}:${p2(target.getMinutes())}`;
+
+    const created = (await client.call("task.create", {
+      title: "稍后提醒测试",
+      firstFireAtWall: wall,
+      repeat: { mode: "once" },
+      priority: "normal",
+    })) as { id: string };
+
+    // 手工造一个"一小时前已投递"的实例，模拟延迟处理后的稍后提醒
+    const occurrenceId = randomUUID();
+    daemon.db
+      .prepare(
+        `INSERT INTO occurrence (id, task_id, scheduled_at, scheduled_wall, state, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'delivered', ?, ?)`,
+      )
+      .run(occurrenceId, created.id, now - 3_600_000, wall, now - 3_600_000, now);
+
+    const snoozed = (await client.call("task.snooze", {
+      occurrenceId,
+      minutes: 5,
+    })) as { id: string };
+
+    const row = daemon.db.prepare("SELECT scheduled_for FROM notification WHERE id = ?").get(snoozed.id) as
+      | { scheduled_for: number }
+      | undefined;
+    expect(row).toBeDefined();
+    // 关键：约等于 now + 5 分钟，而不是 occurrence.scheduledAt + 5 分钟（过去）
+    expect(row?.scheduled_for).toBeGreaterThanOrEqual(now + 5 * 60_000 - 2_000);
+    expect(row?.scheduled_for).toBeLessThanOrEqual(Date.now() + 5 * 60_000 + 2_000);
 
     client.close();
     await daemon.stop("test");

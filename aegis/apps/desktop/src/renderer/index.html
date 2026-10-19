@@ -15,6 +15,9 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <!-- 顶部 28px 的窗口拖动区：覆盖交通灯所在的留白，整条都可拖动 -->
+    <div class="window-drag" aria-hidden="true"></div>
+
     <!-- 顶部：状态条 + 操作 -->
     <header class="topbar">
       <div class="brand">
@@ -231,6 +234,8 @@
         </div>
       </form>
     </dialog>
+
+    <div class="toast hidden" id="toast" role="status"></div>
 
     <script src="./app.js"></script>
   </body>

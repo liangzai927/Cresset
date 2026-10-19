@@ -261,7 +261,8 @@ export function createMethods(scheduler: Scheduler): Record<string, (params: unk
         title: task?.title ?? "稍后提醒",
         body: task?.notes ?? null,
         priority: "normal",
-        scheduledFor: occ.scheduledAt + p.minutes * 60_000,
+        // 从**现在**起算，而不是 occ.scheduledAt：延迟投递的提醒否则会立刻再次到期
+        scheduledFor: scheduler.now() + p.minutes * 60_000,
       });
       return { id: at.id };
     },

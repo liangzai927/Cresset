@@ -119,6 +119,82 @@ const ctx: AppContext = {
 };
 
 /**
+ * ⌘Q 的两段式退出状态。
+ *
+ * 第一次只把 `quitArmedUntil` 设到 3 秒后并提示；第二次在窗口内才真正退出。
+ * 这样手滑按到 ⌘Q 不会把 24/7 的后台服务一起关掉。
+ */
+let quitArmedUntil = 0;
+let quitArmTimer: NodeJS.Timeout | null = null;
+
+/** 隐藏窗口（Cmd+W / 菜单"关闭窗口"）；不退出应用，托盘仍在 */
+function hideWindow(): void {
+  if (ctx.window && !ctx.window.isDestroyed()) ctx.window.hide();
+}
+
+/** 真正退出：先请求 daemon 优雅停止，再退出 Electron */
+async function fullQuit(): Promise<void> {
+  ctx.quitting = true;
+  try {
+    if (ctx.client) {
+      await ctx.client.call("sys.shutdown", {});
+    } else {
+      // 连接已断时仍要尽力停掉 daemon；用握手里的 endpoint/token 新建一次连接，
+      // 不走 ensureClient（那会在 daemon 没跑时反而把它拉起来）。
+      const hs = ctx.supervisor?.readHandshake();
+      if (hs) {
+        const client = new IpcClient({ endpoint: hs.endpoint, token: hs.token });
+        try {
+          await client.connect();
+          await client.call("sys.shutdown", {});
+        } finally {
+          client.close();
+        }
+      }
+    }
+  } catch {
+    /* daemon 可能已不在；退出流程不因它失败而卡住 */
+  }
+  app.quit();
+}
+
+/**
+ * 两段式完全退出。
+ *
+ * 第二次必须在第一次的 3 秒内；超时后重新计数，避免"很久以前按过一次"
+ * 导致下一次 ⌘Q 直接退出。
+ */
+function requestFullQuit(): void {
+  const now = Date.now();
+  if (now <= quitArmedUntil) {
+    quitArmedUntil = 0;
+    if (quitArmTimer) {
+      clearTimeout(quitArmTimer);
+      quitArmTimer = null;
+    }
+    void fullQuit();
+    return;
+  }
+
+  quitArmedUntil = now + 3_000;
+  if (quitArmTimer) clearTimeout(quitArmTimer);
+  quitArmTimer = setTimeout(() => {
+    quitArmedUntil = 0;
+    quitArmTimer = null;
+  }, 3_000);
+
+  const win = ctx.window;
+  if (win && !win.isDestroyed()) {
+    if (!win.isVisible()) win.show();
+    win.focus();
+    if (!win.webContents.isDestroyed()) {
+      win.webContents.send("aegis:quit-armed", { seconds: 3 });
+    }
+  }
+  log("info", "main.quit_armed", { windowMs: 3_000 });
+}
+
+/**
  * 解析数据目录。
  *
  * 与 daemon 用同一套规则：环境变量优先，其次 macOS 标准位置。
@@ -283,11 +359,15 @@ function createWindow(): BrowserWindow {
 
 /** 托盘图标：用内联的 16x16 PNG，避免打包时漏资源 */
 function createTray(): void {
-  // 一个极简的圆点图标（16x16，模板图会随系统明暗自动反色）
+  // 通知铃铛（16x16，模板图会随系统明暗自动反色）
   const pngBase64 =
-    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABmJLR0QA/wD/AP+gvaeTAAAAXUlEQVR42mNgYGD4z0AswKqBiUYDmKg2gIlGA5ioNoCJagOYqDaAiWoDmKg2gIlqA5ioNoCJagOYqDaAiWoDmKg2gIlqA5ioNoCJagOYqDaAiWoDmKg2gIlqAwB6tAX9J2y1TQAAAABJRU5ErkJggg==";
+    "iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANUlEQVR42mNgoCH4j4Yp0kySIf8JYNoa8J9ITBsD/pOIqWvAfzIxRZrJSmD0S8oMdHUqRQAAoztrlZCd0ecAAAAASUVORK5CYII=";
   const icon = nativeImage.createFromBuffer(Buffer.from(pngBase64, "base64"));
   icon.setTemplateImage(true);
+  if (icon.isEmpty()) {
+    // 图标解码失败时托盘会显示为空白 —— 这条日志是排查"菜单栏没有图标"的入口
+    log("warn", "main.tray_icon_empty", {});
+  }
 
   const tray = new Tray(icon);
   tray.setToolTip("Aegis —— 提醒服务运行中");
@@ -303,6 +383,7 @@ function createTray(): void {
         },
       },
       { type: "separator" },
+      { label: "关闭窗口", click: hideWindow },
       {
         label: "发送测试通知",
         click: () => {
@@ -317,6 +398,7 @@ function createTray(): void {
           app.quit();
         },
       },
+      { label: "完全退出（含后台服务）", click: requestFullQuit },
     ]),
   );
   tray.on("click", () => {
@@ -649,6 +731,26 @@ async function ipcDeleteTask(id: string): Promise<{ ok: boolean }> {
   return r;
 }
 
+/**
+ * 用户点"完成"：把该 occurrence 标记为已完成。
+ *
+ * 对一次性提醒就是"这条结束"；对重复提醒只结束当前这一条，后续实例照常。
+ */
+async function ipcCompleteOccurrence(occurrenceId: string): Promise<{ ok: boolean }> {
+  const client = await ensureClient();
+  const r = (await client.call("task.complete", { occurrenceId })) as { ok: boolean };
+  notifyRefresh();
+  return r;
+}
+
+/** 用户点"稍后提醒"：从现在起 minutes 分钟后创建一条新通知 */
+async function ipcSnoozeOccurrence(occurrenceId: string, minutes: number): Promise<{ id: string }> {
+  const client = await ensureClient();
+  const r = (await client.call("task.snooze", { occurrenceId, minutes })) as { id: string };
+  notifyRefresh();
+  return r;
+}
+
 async function ipcListNotifications(limit = 100): Promise<{ items: NotificationItem[] }> {
   const client = await ensureClient();
   const r = (await client.call("notify.history", { limit })) as { items: NotificationView[] };
@@ -811,6 +913,14 @@ function registerIpcHandlers(): void {
     wrap((id: string) => ipcDeleteTask(id)),
   );
   ipcMain.handle(
+    "aegis:occurrences:complete",
+    wrap((occurrenceId: string) => ipcCompleteOccurrence(occurrenceId)),
+  );
+  ipcMain.handle(
+    "aegis:occurrences:snooze",
+    wrap((p: { occurrenceId: string; minutes: number }) => ipcSnoozeOccurrence(p.occurrenceId, p.minutes)),
+  );
+  ipcMain.handle(
     "aegis:notifications:list",
     wrap((limit?: number) => ipcListNotifications(limit)),
   );
@@ -904,6 +1014,11 @@ if (!app.requestSingleInstanceLock()) {
             },
             { type: "separator" },
             {
+              label: "关闭窗口",
+              accelerator: "CommandOrControl+W",
+              click: hideWindow,
+            },
+            {
               label: "退出界面（提醒继续运行）",
               click: () => {
                 ctx.quitting = true;
@@ -912,17 +1027,8 @@ if (!app.requestSingleInstanceLock()) {
             },
             {
               label: "完全退出（含后台服务）",
-              accelerator: "Cmd+Shift+Q",
-              click: async () => {
-                ctx.quitting = true;
-                try {
-                  const client = await ensureClient();
-                  await client.call("sys.shutdown", {});
-                } catch {
-                  /* daemon 可能已不在；忽略 */
-                }
-                app.quit();
-              },
+              accelerator: "CommandOrControl+Q",
+              click: requestFullQuit,
             },
           ],
         },
@@ -966,6 +1072,10 @@ if (!app.requestSingleInstanceLock()) {
 
   app.on("before-quit", () => {
     ctx.quitting = true;
+    if (quitArmTimer) {
+      clearTimeout(quitArmTimer);
+      quitArmTimer = null;
+    }
     // 关闭通道服务（删除 channel.json，让 daemon 立刻改用 CLI 兜底）
     void ctx.channelHost?.close();
     // 释放监督器（不杀 daemon）

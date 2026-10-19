@@ -60,6 +60,17 @@ body {
 
 /* ── 顶部 ────────────────────────────────────────────────────────────── */
 
+/* 顶部 28px 原生留白也要可拖动；否则用户点在交通灯旁边会拖不动 */
+.window-drag {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  z-index: 60;
+  -webkit-app-region: drag;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -701,7 +712,8 @@ dialog::backdrop {
 
 .alert-stack {
   position: fixed;
-  top: 34px;
+  /* 放在顶栏与页签下方，避免提醒卡片盖住 Aegis 标题和状态 */
+  top: 122px;
   left: 0;
   right: 0;
   z-index: 100;
@@ -765,9 +777,47 @@ dialog::backdrop {
 
 .alert-actions {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 6px;
   margin-top: 2px;
+}
+
+.alert-error {
+  font-size: 12px;
+  color: var(--err);
+}
+
+.snooze-minutes {
+  width: 58px;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
+}
+
+.snooze-unit {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 300;
+  max-width: min(560px, calc(100vw - 40px));
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgb(30 32 36 / 92%);
+  color: #fff;
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 25%);
+  pointer-events: none;
 }
 
 /* 提示：当前用的是窗口提醒而非系统通知 */

@@ -22,7 +22,7 @@
 | --- | --- |
 | 阶段 | **R4 进行中**（自启/崩溃自恢复/ad-hoc 打包/备份导出已完成），剩余正式签名与公证 |
 | 版本 | daemon `0.2.0-r2` ／ 桌面 `0.3.0-r3` |
-| 校验 | `pnpm verify` 全绿（320 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
+| 校验 | `pnpm verify` 全绿（322 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
 | 启动 | `pnpm dev`（智能增量构建后启动；打包产物为 `dist/Aegis.app`） |
 | 数据目录 | `~/Library/Application Support/Aegis`（含 `desktop.log`） |
 | 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复/启动看门狗/打包（ad-hoc）/备份导出 |
@@ -59,6 +59,42 @@
 ---
 
 ## 记录（新的在最上面）
+
+### 2026-10-19 · M1 UI 优化：提醒完成/稍后、快捷键与托盘
+**里程碑**：R4/M1（界面与交互）
+**改了什么**：
+- 通知 payload 透传 `occurrenceId`（scheduler → DesktopChannelSender → Electron → renderer）；
+  提醒卡片在带 occurrence 时提供两个出口：
+  - 「完成」：结束当前这条（一次性不再出现；重复提醒只结束本次）
+  - 「稍后提醒」：默认 5 分钟，可填 1–1440 分钟；从**现在**起算
+- 修复 `task.snooze` 的时间基准：原来用 `occurrence.scheduledAt + N`，
+  延迟投递的提醒可能立刻再次到期；改为 `scheduler.now() + N`
+- 顶部增加 28px 窗口拖动区（覆盖交通灯留白），顶栏保持可拖动、按钮 no-drag
+- `⌘W` 隐藏窗口（daemon 继续跑）；`⌘Q` 两段式完全退出：
+  第一次提示、3 秒内第二次才停 daemon 并退出；托盘菜单同步
+- 托盘图标从圆点换成铃铛，并在图标解码失败时写 `main.tray_icon_empty` 日志
+- 新增 toast 与 `aegis:quit-armed` 事件；preload/API 白名单增加
+  `completeOccurrence` / `snoozeOccurrence` / `onQuitArmed`
+- 测试：occurrenceId 透传（scheduler + platform）、task.snooze 从当前时刻起算
+**为什么**：提醒弹出来只有「知道了」等于只能关掉，用户无法表达"这件事完成了"
+还是"等会儿再说"。系统通知可用性不稳定，窗口卡片必须承担这个交互；
+快捷键与菜单栏图标是桌面常驻工具的基本手感。
+**验证**：
+- `pnpm verify`：322 通过 / 9 跳过
+- `pnpm verify:desktop`：11/11
+- 手动截图确认卡片包含「5 分钟后 / 稍后提醒 / 完成」三个控件
+- 单测：snooze 在 occurrence 原定时刻为一小时前时，新通知仍约等于 now+5min
+**踩到的坑**：
+- 原通知 payload 只有 title/body，界面拿不到 occurrenceId，无法调用完成/稍后
+- `alert-stack` 原 top=34 会盖住顶栏与状态，改为 122（位于页签下方）
+- `markCompleted` 只接受 pending/claimed/unknown；已投递的提醒点"完成"返回 false，
+  但卡片仍应消失（对一次性提醒本来就不会再响）
+- 系统原生通知目前**不带动作按钮**；动作按钮在应用内卡片层。
+  若正式签名后系统通知可用、用户只看到原生横幅，需要后续补 macOS actions
+**留给下次**：
+- 原生通知 actions / 点击通知打开窗口并显示操作卡片
+- `⌘Q`/`⌘W`/托盘图标需要真机键盘与菜单栏截图验收
+- R5 14 天验收 → M2
 
 ### 2026-10-19 · R4：数据备份导出（一致性快照 + manifest）
 **里程碑**：R4

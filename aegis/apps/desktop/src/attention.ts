@@ -57,6 +57,8 @@ export interface AttentionPayload {
   title: string;
   body?: string;
   sound: boolean;
+  /** 触发本次提醒的 occurrence；界面据此提供"完成/稍后"操作 */
+  occurrenceId?: string;
 }
 
 /** 系统通知"是否真的显示"的等待上限（毫秒） */
