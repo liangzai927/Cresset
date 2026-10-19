@@ -119,7 +119,39 @@ if (!skipTypecheck) {
   console.log("  ✓ 通过");
 }
 
-const targets = only ? TARGETS.filter((t) => t.name === only) : TARGETS;
+/**
+ * 按依赖关系拓扑排序。
+ *
+ * 为什么必须：声明生成阶段依赖"依赖包的 dist/*.d.ts 已存在"，
+ * 因此必须保证先构建被依赖者。手写顺序容易漏 ——
+ * scheduler 依赖 storage，而这两者在 TARGETS 里的先后曾经是反的。
+ */
+function topoSort(list) {
+  const byName = new Map(list.map((t) => [t.name, t]));
+  const out = [];
+  const mark = new Map();
+
+  const visit = (t, chain) => {
+    const state = mark.get(t.name);
+    if (state === "done") return;
+    if (state === "visiting") {
+      // 循环依赖必须报错，而不是悄悄产出错误顺序
+      throw new Error(`检测到循环依赖：${[...chain, t.name].join(" -> ")}`);
+    }
+    mark.set(t.name, "visiting");
+    for (const dep of t.deps ?? []) {
+      const d = byName.get(dep);
+      if (d) visit(d, [...chain, t.name]);
+    }
+    mark.set(t.name, "done");
+    out.push(t);
+  };
+
+  for (const t of list) visit(t, []);
+  return out;
+}
+
+const targets = topoSort(only ? TARGETS.filter((t) => t.name === only) : TARGETS);
 if (targets.length === 0) {
   console.error(`✗ 未找到目标 --only ${only}`);
   process.exit(1);
@@ -213,7 +245,16 @@ for (const t of targets) {
   }
 
   // 2b) 生成 .d.ts（exports.types 指向它）
-  const paths = Object.fromEntries(t.deps.map((d) => [`@aegis/${d}`, [`packages/${d}/src/index.ts`]]));
+  //
+  // ⚠️ 这里**刻意不设置 paths**。
+  //
+  // 旧写法把每个依赖映射到 `packages/<dep>/src/index.ts`，于是 tsc 会把依赖的
+  // **源码**纳入同一个 program；这些文件不在本包 `rootDir` 内，tsc 只能把它们的
+  // 声明**输出到源码旁边** —— 结果 `packages/contracts/src/index.d.ts` 之类被写进 src，
+  // 污染仓库，也让"产物是否过期"的判断彻底失真（实测反复出现）。
+  //
+  // 正确做法：让 tsc 从依赖的 `dist/index.d.ts`（`exports.types`）解析类型。
+  // 依赖只出现在类型位置。这要求**依赖先构建**，因此 TARGETS 会先做拓扑排序。
   const tsconfigPath = join(tmpdir(), `aegis-types-${t.name}-${process.pid}.json`);
   writeFileSync(
     tsconfigPath,
@@ -230,7 +271,6 @@ for (const t of targets) {
           noCheck: true, // 类型正确性已由第 1 步保证
           baseUrl: ROOT,
           typeRoots: [join(ROOT, "node_modules", "@types")],
-          ...(Object.keys(paths).length > 0 ? { paths } : {}),
         },
         include: [join(dir, "src/**/*.ts")],
         // 排除测试文件：相对 include 起点匹配，否则会产出 index.test.d.ts

@@ -23,7 +23,8 @@
       "@aegis/redaction-gateway": ["packages/redaction-gateway/src/index.ts"],
       "@aegis/product": ["packages/product/src/index.ts"],
       "@aegis/recurrence": ["packages/recurrence/src/index.ts"],
-      "@aegis/scheduler": ["packages/scheduler/src/index.ts"]
+      "@aegis/scheduler": ["packages/scheduler/src/index.ts"],
+      "@aegis/daemon/ipc-client": ["apps/daemon/src/ipc/client.ts"]
     }
   },
   "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "tools/**/*.mjs"],

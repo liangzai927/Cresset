@@ -28,6 +28,7 @@
 
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { IpcClient } from "@aegis/daemon/ipc-client";
 import {
   type AutostartOptions,
   createDesktopChannelSender,
@@ -40,7 +41,6 @@ import {
 } from "@aegis/platform";
 import { type DataPaths, resolveDataPaths } from "@aegis/product";
 import { app, BrowserWindow, ipcMain, Menu, Notification, nativeImage, shell, Tray } from "electron";
-import { IpcClient } from "../../daemon/src/ipc/client.js";
 import type {
   ChannelStatus,
   CreateTaskPayload,

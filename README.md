@@ -15,13 +15,26 @@
 **当前验证状态**：`pnpm verify` 全绿 ｜ **12 个工作区包** ｜ **287 测试通过** ｜ 注释占比 19.1%
 **桌面验证**：`pnpm verify:desktop` 9 项集成检查全部通过
 
-### 现在可以打开使用了
+### 一条命令启动
 
 ```bash
 cd /Users/liuwenliang/lwl/ai/aegis
-node tools/build.mjs          # 首次或改动后构建
-node tools/run-desktop.mjs    # 启动桌面应用
+pnpm dev
 ```
+
+就这一条。它会自己判断要不要构建（产物缺失或源码更新过才构建，否则约 4 秒进界面），
+然后拉起桌面应用与后台服务。
+
+| 命令 | 用途 |
+| --- | --- |
+| `pnpm dev` | **日常启动**（智能增量：需要时构建） |
+| `pnpm start` | 同上（`start` 是最符合直觉的名字） |
+| `pnpm dev --force` | 强制先构建 |
+| `pnpm dev --skip-build` | 完全不构建（确信产物最新时最快） |
+| `pnpm desktop` | 只启动界面（假定已构建） |
+| `pnpm daemon` | 只跑后台服务（不开界面） |
+| `pnpm verify` | 全量校验（门禁 + 类型 + 构建 + lint + 测试） |
+| `pnpm verify:desktop` | 桌面端到端验证（真启动 GUI，9 项检查） |
 
 界面有三块：
 - **提醒**：列表（含人话重复描述、下次触发、已触发次数）、新建（六种重复模式）、暂停/恢复/删除

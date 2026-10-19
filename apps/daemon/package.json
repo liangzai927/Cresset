@@ -22,5 +22,15 @@
     "zod": "^3.24.0",
     "@aegis/scheduler": "workspace:*",
     "@aegis/recurrence": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "default": "./dist/main.js"
+    },
+    "./ipc-client": {
+      "types": "./dist/ipc/client.d.ts",
+      "default": "./dist/ipc/client.js"
+    }
   }
 }
