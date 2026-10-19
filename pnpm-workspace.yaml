@@ -1,0 +1,9 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "tools/*"
+
+# 构建脚本放行（pnpm 11 默认拦截依赖的构建脚本）
+# 说明：存储层已改用 Node 内置 node:sqlite，故不需要 better-sqlite3（S2 结论）
+allowBuilds:
+  esbuild: true

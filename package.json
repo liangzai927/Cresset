@@ -1,0 +1,34 @@
+{
+  "name": "aegis",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Aegis — 个人桌面 Agent 工作台（哨兵层 + 员工层 + 组织层）",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "start": "node apps/daemon/dist/main.cjs",
+    "typecheck": "tsc -p tsconfig.dev.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "boundaries": "node tools/check-boundaries.mjs",
+    "resolve": "node tools/check-resolve.mjs",
+    "verify": "pnpm run boundaries && pnpm run comments && pnpm run typecheck && pnpm run build && pnpm run resolve && pnpm run lint && pnpm run test",
+    "spike": "node tools/run-spikes.mjs",
+    "spike:report": "node tools/run-spikes.mjs --report",
+    "comments": "node tools/check-comments.mjs",
+    "comments:report": "node tools/check-comments.mjs --report",
+    "hooks:install": "node tools/install-hooks.mjs"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.2.0",
+    "esbuild": "^0.28.0"
+  }
+}

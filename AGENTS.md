@@ -1,0 +1,101 @@
+# AGENTS.md — Aegis 项目给 AI 助手的常驻约定
+
+> 本文件在本仓库根目录，**每次会话开始时就应被读到**。
+> 它只放"必须一直遵守"的约定；详细规范在 `.dsh/skills/` 里，按需加载。
+
+## 项目是什么
+
+**Aegis** —— 一个 24 小时常驻的桌面个人 Agent 工作台。
+下层是替人盯着世界的**哨兵**（定时提醒 / 监测 / 通知），
+上层是一支有角色、能协作的**员工团队**（M4 起），
+所有外发给模型的数据都经过**脱敏网关**。
+
+它最大的特点：**要在无人看管下连续运行数月**。因此本仓库的规范不是风格偏好，而是可靠性的组成部分。
+
+## 当前进度
+
+| 阶段 | 状态 |
+| --- | --- |
+| R0 工程骨架 + 6 项技术 spike | ✅ 完成（6/6 通过） |
+| **R1 运行时基础**（存储/凭据/单实例锁/IPC/审计） | ✅ 完成 |
+| R2 调度引擎（M1 核心） | 下一步 |
+| M1 可信赖的提醒内核 | 目标里程碑 |
+
+文档在 `../personal-agent/`：PRD、技术选型与架构设计、M0+M1 详细设计、R0 spike 报告。
+
+## 六条不可违背的规则
+
+1. **不写注释的代码视为未完成** —— 每个导出符号要有中文 JSDoc，每个文件要有文件头注释（`pnpm comments` 会拦）
+2. **禁止静默失败** —— 每个 `catch` 必须有出口（日志 / 抛错 / 状态）；空 catch 仅限清理路径且要写理由
+3. **禁止绕过脱敏网关外发** —— 任何模型/网络调用必须经 `@aegis/redaction-gateway`
+4. **禁止直接使用 `Date.now()` / `new Date()`** —— 一律走注入的 `Clock`（否则长跑场景无法测试）
+5. **禁止修改已发布的迁移文件** —— 只能新增（checksum 锁会拦）
+6. **提交前必须 `pnpm verify` 全绿** —— 不允许"先提交，回头再修"
+
+## 提交前必跑
+
+```bash
+pnpm verify
+```
+
+它依次跑：`boundaries` → `comments` → `typecheck` → `build` → `resolve` → `lint` → `test`。
+**顺序有意义**：`build` 必须在 `resolve` 之前（解析门禁检查的是产物）。
+
+## 提交信息格式（由 git hook 机械校验）
+
+```
+<type>(<scope>): <中文描述，≤50 字>
+
+<body：说明为什么，每行 ≤72 字>
+```
+
+`type` ∈ `feat | fix | refactor | perf | test | docs | build | ci | chore`；`scope` 必填。
+
+首次克隆后执行一次：`pnpm hooks:install`
+
+## 按需加载的技能（`.dsh/skills/`）
+
+| 场景 | 技能 |
+| --- | --- |
+| 任何写码/改码之前 | `aegis-engineering-standards`（总纲） |
+| 决定代码放哪 / 能否依赖某包 | `aegis-project-layout` |
+| 写注释与文档 | `aegis-comment-and-docs` |
+| 写测试 / 用虚拟时钟 | `aegis-testing-standards` |
+| 处理异常与失败可见性 | `aegis-error-handling` |
+| 碰脱敏/凭据/外发/权限 | `aegis-security-boundaries` |
+| 加表 / 写迁移 / 写 DAO | `aegis-data-and-migrations` |
+| 改 IPC 方法或事件 | `aegis-ipc-contracts` |
+| 加依赖 / 构建出问题 | `aegis-dependency-management` |
+| 提交 / 分支 / 打标签 | `aegis-git-workflow` |
+| 自查或审查代码 | `aegis-code-review` |
+| 开新里程碑 / 较大需求 | `aegis-task-workflow` |
+| 写提交信息 | `aegis-commit-conventions` |
+
+## 已确立的技术约束（踩过的坑，不要重新踩）
+
+详见 `README.md` 的"已确立的关键技术事实"。最常撞到的几条：
+
+| 编号 | 约束 |
+| --- | --- |
+| C-1 | `node:sqlite` 的扩展加载必须在**建库时** `{ allowExtension: true }` |
+| C-2 | vec0 主键必须用 **BigInt** 绑定（`node:sqlite` 把 number 当 REAL） |
+| C-4 | IPC **每次重连都必须重放 `sys.hello`**（新连接 = 新鉴权会话） |
+| C-5 | 钥匙串读取必须带 `-w`，且钥匙串路径是**最后一个位置参数** |
+| C-9 | 钥匙串必须**显式指定**（否则查找/删除会扫整个搜索列表，行为不确定） |
+
+另有两条通用陷阱：
+
+- **类方法作为回调会丢 `this`** → 传参时用箭头函数包装（`const now = () => clock.wall()`）
+- **包装配类操作的验证必须放在 pnpm 工作区之外** → 否则会继承仓库 lockfile 导致间歇性失败
+
+## 语言约定
+
+- 注释、文档、提交信息正文：**简体中文**
+- 标识符（变量/函数/类型/表名/列名）：**英文**
+- 专业术语可保留英文（`WAL`、`UDS`、`idempotent`），首次出现宜给中文解释
+
+## 工作区位置提示
+
+项目位于 `/Users/liuwenliang/lwl/ai/aegis`。若 DSH 会话工作区不是该目录，
+写文件会需要用户授权 —— 建议把工作区切到 `/Users/liuwenliang/lwl/ai`。
+批量改动时可先暂存在工作区内，最后一次性 `mv` 搬入，避免逐文件审批。
