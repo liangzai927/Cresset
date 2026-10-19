@@ -48,8 +48,10 @@ const ALLOWED = {
   ],
   // 桌面外壳：需要直接连 daemon 的 IPC 客户端（token 只留在主进程）、
   // 需要 platform 的渠道探测与通道发现、需要 product 的数据目录解析。
+  // clock 用于监督者的重启退避（测试注入 VirtualClock，禁止裸 Date.now）。
   // 注意这里**不允许**依赖 scheduler/storage —— 界面不该直接碰数据库。
   "@aegis/desktop": [
+    "@aegis/clock",
     "@aegis/contracts",
     "@aegis/daemon",
     "@aegis/ipc-contract",

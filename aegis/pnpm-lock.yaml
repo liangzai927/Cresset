@@ -68,6 +68,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@aegis/clock':
+        specifier: workspace:*
+        version: link:../../packages/clock
       '@aegis/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts

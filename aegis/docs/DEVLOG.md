@@ -20,12 +20,12 @@
 
 | 项 | 内容 |
 | --- | --- |
-| 阶段 | **R3 完成**（可本地打开使用），下一步 R4 打包分发 |
+| 阶段 | **R4 进行中**（崩溃自恢复已完成），下一步 R4 打包分发 |
 | 版本 | daemon `0.2.0-r2` ／ 桌面 `0.3.0-r3` |
-| 校验 | `pnpm verify` 全绿（295 测试）＋ `pnpm verify:desktop` 10/10 |
+| 校验 | `pnpm verify` 全绿（306 测试）＋ `pnpm verify:desktop` 11/11 |
 | 启动 | `pnpm dev`（智能增量构建后启动） |
 | 数据目录 | `~/Library/Application Support/Aegis`（含 `desktop.log`） |
-| 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导 |
+| 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复 |
 | **未实现** | 系统通知（macOS 拒绝未签名应用，用窗口提醒兜底）、打包签名、监测器(M2)、LLM+知识库(M3)、员工层(M4) |
 | 已知坑 | 见 README 的 F1–F27 与 C-1–C-11 |
 
@@ -58,6 +58,41 @@
 ---
 
 ## 记录（新的在最上面）
+
+### 2026-10-19 · R4 崩溃自恢复：退避封顶且永不放弃
+**里程碑**：R4
+**改了什么**：
+- 新增 `apps/desktop/src/restart-policy.ts`：重启退避抽成纯状态机；
+  2 秒起、8 秒封顶（留在 NFR-R2 的 10 秒内），稳定运行 60 秒后重置失败计数
+- 重构 `DaemonSupervisor`：改用注入的 `Clock`；删除"三次后永久停止重启"；
+  连续失败仍按上限重试；spawn 同步抛错与异步 error 都进入重启流程；
+  `dispose()` 取消待触发的重启定时器
+- `apps/desktop` 增加 `@aegis/clock` 依赖，同步依赖方向门禁
+- 新增 20 个单测（`restart-policy.test.ts` / `supervisor.test.ts`）
+- `verify:desktop` 增加第 11 项：真 SIGKILL daemon，断言 10 秒内出现新 pid
+**为什么**：旧实现连续三次异常退出后永久停止自动重启，而且失败计数从不重置。
+对 24/7 产品来说，"放弃重启"等于静默死亡 —— 用户不会一直盯着界面，
+发现时可能已经漏掉几天提醒。退避与计数只应决定"多久试一次"，
+不能决定"是否继续试"；稳定运行后重置，则避免几个月内偶发三次崩溃被误判为死循环。
+**验证**：
+- `pnpm verify` 全绿：306 通过 / 9 跳过（新增 20 个用例）
+- `AEGIS_E2E_NO_SANDBOX=1 pnpm verify:desktop` 11/11；
+  真 SIGKILL 后 pid `50417 → 50478`，耗时 2122ms（< 10 秒）
+- 单测覆盖：2/4/8/8 秒序列、连续失败 100 次仍重试、稳定 60 秒后重置、
+  `dispose()` 后不再拉起、已有 daemon 复用、半截握手文件
+**踩到的坑**：
+- 本会话外层有 DSH 文件沙箱：Chromium 沙箱初始化失败，且写不了
+  `~/Library/Application Support`。`verify-desktop` 增加 `AEGIS_E2E_NO_SANDBOX=1`
+  开关，只有显式设置时才加 `--no-sandbox` 与临时 `--user-data-dir`（默认路径不变）
+- 重装依赖后 Electron 二进制不会自动补下载；沙箱又禁止写 `~/Library/Caches`，
+  需用 `electron_config_cache=/tmp/... node node_modules/electron/install.js`
+- 环境预置了 `ELECTRON_RUN_AS_NODE=1`，启动 Electron 前必须清掉（老坑）
+**留给下次**：
+- R4 剩余：打包分发与签名（系统通知也依赖正式签名）
+- daemon 活着但一直不写握手（卡死）目前只报 `unavailable`，没有重启；
+  需先定"启动多久算卡死"，再决定是否 kill
+- launchd `KeepAlive` 与监督者可能同时尝试拉起；打包阶段要统一，
+  避免两个拉起者互相抢锁、把"抢锁失败"误判成崩溃循环
 
 ### 2026-10-19 · 建立开发流水账与强制机制
 **里程碑**：工程机制

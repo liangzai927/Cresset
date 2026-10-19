@@ -16,6 +16,7 @@
  * | 窗口真的渲染出内容 | 白屏是最常见的"看起来启动了但没用" |
  * | `channel.json` 存在且为 0600 | 否则 daemon 连不上原生通道 / token 泄露 |
  * | daemon 被自动拉起 | 用户不该手动管理后台进程 |
+ * | daemon 被 SIGKILL 后 10 秒内换新 pid | NFR-R2 的崩溃自恢复承诺，只能真杀进程验证 |
  * | 通道鉴权生效 | 无 token 必须被拒 |
  * | 原生通知投递返回 success | 最终目的 |
  * | 截图非空且尺寸合理 | "渲染了"的客观证据 |
@@ -25,18 +26,37 @@
  * ```
  * node tools/verify-desktop.mjs            # 完整验证（会启动真实 GUI）
  * node tools/verify-desktop.mjs --keep     # 保留临时数据目录便于排查
+ * AEGIS_E2E_NO_SANDBOX=1 node tools/verify-desktop.mjs   # 外层已有沙箱（DSH / CI）时
  * ```
  *
  * 退出码：0 全部通过；1 有检查项失败。
  */
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
 const keep = process.argv.includes("--keep");
+
+/**
+ * 是否给 Electron 加 `--no-sandbox`。
+ *
+ * 默认**不加** —— 生产启动路径必须保留 Chromium 沙箱。
+ * 只有测试本身已经跑在外层文件沙箱里（DSH / 部分 CI）时才显式开启：
+ * 那种环境下 Chromium 沙箱初始化会直接失败，窗口根本起不来。
+ * 同时指定独立的 `--user-data-dir`，避免 Electron 去写 `~/Library/Application Support`。
+ */
+const noChromiumSandbox = process.env.AEGIS_E2E_NO_SANDBOX === "1";
+
+/** 组装 Electron 启动参数（沙箱环境追加测试专用开关，不改变产品启动方式） */
+function desktopArgs(userDataDir) {
+  const switches = noChromiumSandbox
+    ? ["--no-sandbox", `--user-data-dir=${join(userDataDir, "electron-user-data")}`]
+    : [];
+  return [...switches, join(ROOT, "apps", "desktop")];
+}
 
 /** 收集检查结果 */
 const results = [];
@@ -94,7 +114,7 @@ async function main() {
   const { ELECTRON_RUN_AS_NODE: _drop, ...env } = process.env;
   void _drop;
 
-  const child = spawn(electronBin, [join(ROOT, "apps", "desktop")], {
+  const child = spawn(electronBin, desktopArgs(dataDir), {
     stdio: ["ignore", "pipe", "pipe"],
     env: {
       ...env,
@@ -150,8 +170,54 @@ async function main() {
     }
 
     // ── ⑦ daemon 被自动拉起
-    const hasDaemon = await waitFor(() => existsSync(join(dataDir, "handshake.json")), 20_000);
-    check("daemon 已被自动拉起（handshake.json）", Boolean(hasDaemon));
+    //
+    // 不能只看文件存在：daemon 可能正在写，读到半截 JSON 会让后面的杀进程检查直接抛错。
+    // 因此等到"能解析出整数 pid"才算真正就绪。
+    const handshakePath = join(dataDir, "handshake.json");
+    const firstHandshake = await waitFor(() => {
+      try {
+        const hs = JSON.parse(readFileSync(handshakePath, "utf8"));
+        return Number.isInteger(hs.pid) ? hs : null;
+      } catch {
+        return null;
+      }
+    }, 20_000);
+    check("daemon 已被自动拉起（handshake.json）", Boolean(firstHandshake));
+
+    // ── ⑦b 崩溃自恢复（NFR-R2）：真杀 daemon，10 秒内必须换一个新 pid
+    //
+    // 为什么必须真杀：监督者的退避、稳定计数与"永不放弃"都在 Electron 主进程里，
+    // 单测只能证明策略函数对；只有杀掉真实子进程，才能证明退出事件、
+    // 定时器与重新拉起这条链路真的接上了。
+    if (firstHandshake) {
+      const killedAt = Date.now();
+      let killed = false;
+      try {
+        process.kill(firstHandshake.pid, "SIGKILL");
+        killed = true;
+      } catch (err) {
+        check("daemon 被 SIGKILL 后自动重启（NFR-R2）", false, `杀进程失败：${String(err)}`);
+      }
+
+      if (killed) {
+        const restarted = await waitFor(() => {
+          try {
+            const hs = JSON.parse(readFileSync(handshakePath, "utf8"));
+            if (hs.pid === firstHandshake.pid) return null;
+            process.kill(hs.pid, 0);
+            return hs;
+          } catch {
+            return null;
+          }
+        }, 12_000);
+        const elapsedMs = Date.now() - killedAt;
+        check(
+          "daemon 被 SIGKILL 后自动重启（NFR-R2）",
+          Boolean(restarted) && elapsedMs <= 10_000,
+          restarted ? `${firstHandshake.pid} → ${restarted.pid}，${elapsedMs}ms` : "12 秒内未出现新 pid",
+        );
+      }
+    }
 
     // ── ⑧ 界面渲染出内容（截图存在且非空白）
     const shot = await waitFor(() => existsSync(shotPath) && statSync(shotPath).size > 5_000, 25_000);
@@ -189,7 +255,7 @@ async function main() {
   // 该链路跨 renderer → preload → 主进程 → daemon，单元测试覆盖不到。
   {
     const raceDir = mkdtempSync(join(tmpdir(), "aegis-race-"));
-    const race = spawn(electronBin, [join(ROOT, "apps", "desktop")], {
+    const race = spawn(electronBin, desktopArgs(raceDir), {
       stdio: ["ignore", "pipe", "pipe"],
       env: {
         ...env,
