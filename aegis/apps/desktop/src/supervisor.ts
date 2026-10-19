@@ -10,6 +10,7 @@
  * | daemon 崩溃 | 按 NFR-R2 退避重启（首次 2 秒、上限 8 秒），**永不放弃** |
  * | 崩溃后稳定运行满 60 秒 | 重置连续失败计数，下次崩溃重新从 2 秒开始 |
  * | 启动后 30 秒仍无握手（卡死） | SIGKILL 后复用同一套退避重启 |
+ * | daemon 以 0 退出（stop / 已有实例） | 不抢重启：有存活实例则采纳，否则保持 stopped |
  * | 应用退出 | **不杀 daemon** —— 它必须继续 24 小时运行 |
  *
  * ## 为什么 UI 不拥有 daemon 的生命周期
@@ -274,22 +275,38 @@ export class DaemonSupervisor {
     this.#child = child;
 
     let terminated = false;
-    const onTerminated = (reason: string): void => {
+    const onTerminated = (reason: string, code: number | null): void => {
       if (terminated) return;
       terminated = true;
       this.#cancelStartupWatchdog(child);
       if (this.#child === child) this.#child = null;
-      this.#log("warn", "supervisor.daemon_exit", { reason });
+      this.#log(code === 0 ? "info" : "warn", "supervisor.daemon_exit", { reason });
       if (this.#stopped) return;
+
+      if (code === 0) {
+        // 0 退出是"有意停止"或"已有实例"：
+        //   - 若是 launchd/CLI 已启动的实例，采纳它，不要抢重启；
+        //   - 否则是用户 stop，保持 stopped，绝不自动拉起（否则 stop 永远停不掉）。
+        const existing = this.readHandshake();
+        if (existing && existing.pid !== child.pid && this.#probeProcess(existing.pid)) {
+          this.#log("info", "supervisor.adopted_existing", { pid: existing.pid });
+          this.#adoptRunning(existing, false);
+          return;
+        }
+        this.#setState({ kind: "stopped" });
+        this.#log("info", "supervisor.clean_exit", { reason });
+        return;
+      }
+
       this.#scheduleRestart(reason);
     };
 
     child.onExit((code, signal) => {
-      onTerminated(`退出码 ${code ?? signal ?? "unknown"}`);
+      onTerminated(`退出码 ${code ?? signal ?? "unknown"}`, code);
     });
     child.onError((err) => {
       this.#log("error", "supervisor.spawn_failed", { message: err.message });
-      onTerminated(`拉起失败：${err.message}`);
+      onTerminated(`拉起失败：${err.message}`, null);
     });
 
     this.#armStartupWatchdog(child);

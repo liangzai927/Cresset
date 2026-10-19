@@ -309,6 +309,49 @@ describe("启动看门狗（活着但卡死）", () => {
   });
 });
 
+describe("0 退出（stop / 已有实例）", () => {
+  it("daemon 以 0 退出且没有其他实例：保持 stopped，不重启", async () => {
+    const h = createHarness();
+    await h.supervisor.ensureRunning();
+    const child = lastChild(h);
+
+    h.livePids.delete(child.pid);
+    child.emitExit(0, null);
+
+    expect(h.supervisor.state.kind).toBe("stopped");
+    expect(h.clock.pendingTimers()).toBe(0);
+    await h.clock.advance(10_000);
+    expect(h.spawned).toHaveLength(1);
+    h.supervisor.dispose();
+  });
+
+  it("★ 以 0 退出但已有存活实例：采纳现有实例，不抢重启", async () => {
+    const h = createHarness();
+    await h.supervisor.ensureRunning();
+    const child = lastChild(h);
+
+    // 模拟 launchd/CLI 已经启动的另一个 daemon
+    writeFileSync(
+      h.paths.handshakeFile,
+      JSON.stringify({
+        endpoint: "unix:///tmp/existing-daemon.sock",
+        token: "existing-token-must-be-long-enough",
+        daemonVersion: "test",
+        pid: 12_345,
+      }),
+    );
+    h.livePids.add(12_345);
+    h.livePids.delete(child.pid);
+    child.emitExit(0, null);
+
+    expect(h.supervisor.state).toMatchObject({ kind: "running", spawnedByUs: false });
+    expect(h.clock.pendingTimers()).toBe(0);
+    await h.clock.advance(10_000);
+    expect(h.spawned).toHaveLength(1);
+    h.supervisor.dispose();
+  });
+});
+
 describe("生命周期边界", () => {
   it("已有存活 daemon 时直接复用，不重复拉起", async () => {
     const h = createHarness();
