@@ -7,6 +7,7 @@
  * | --- | --- |
  * | 应用启动时 daemon 未运行 | 拉起它（detached，不随 UI 退出） |
  * | daemon 已在运行（例如 CLI 先启动的） | 直接连上，不重复拉起 |
+ * | 数据目录被**其他工作区**的 daemon 占用 | 停掉旧进程并清理握手，再拉起当前入口 |
  * | daemon 崩溃 | 按 NFR-R2 退避重启（首次 2 秒、上限 8 秒），**永不放弃** |
  * | 崩溃后稳定运行满 60 秒 | 重置连续失败计数，下次崩溃重新从 2 秒开始 |
  * | 启动后 30 秒仍无握手（卡死） | SIGKILL 后复用同一套退避重启 |
@@ -30,8 +31,8 @@
  */
 
 import { type ChildProcess, type SpawnOptions, spawn } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, unlinkSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { type Clock, SystemClock } from "@aegis/clock";
 import type { DataPaths } from "@aegis/product";
 import { type RestartPlan, RestartPolicy, type RestartPolicyOptions } from "./restart-policy.js";
@@ -107,6 +108,8 @@ export interface SupervisorOptions {
   spawnProcess?: SpawnProcess;
   /** 进程探活函数；测试注入假 pid 表 */
   isProcessAlive?: (pid: number) => boolean;
+  /** 发送信号函数；测试注入以避免真的杀进程 */
+  killProcess?: (pid: number, signal: NodeJS.Signals) => void;
   onStateChange?: (state: DaemonState) => void;
   onLog?: (level: "debug" | "info" | "warn" | "error", event: string, detail?: unknown) => void;
 }
@@ -117,6 +120,7 @@ export class DaemonSupervisor {
   readonly #clock: Clock;
   readonly #spawnProcess: SpawnProcess;
   readonly #probeProcess: (pid: number) => boolean;
+  readonly #killProcess: (pid: number, signal: NodeJS.Signals) => void;
   readonly #policy: RestartPolicy;
   readonly #startupTimeoutMs: number;
   #state: DaemonState = { kind: "stopped" };
@@ -132,6 +136,7 @@ export class DaemonSupervisor {
     this.#spawnProcess =
       opts.spawnProcess ?? ((command, args, spawnOpts) => toSupervisedChild(spawn(command, args, spawnOpts)));
     this.#probeProcess = opts.isProcessAlive ?? isProcessAlive;
+    this.#killProcess = opts.killProcess ?? ((pid, signal) => process.kill(pid, signal));
 
     const startupTimeoutMs = opts.startupTimeoutMs ?? 30_000;
     if (startupTimeoutMs <= 0) {
@@ -208,8 +213,12 @@ export class DaemonSupervisor {
     this.#cancelPendingRestart();
     const existing = this.readHandshake();
     if (existing && this.#probeProcess(existing.pid)) {
-      this.#adoptRunning(existing, false);
-      return this.#state;
+      if (this.#isForeignHandshake(existing)) {
+        await this.#evictForeignDaemon(existing);
+      } else {
+        this.#adoptRunning(existing, false);
+        return this.#state;
+      }
     }
 
     this.#setState({ kind: "starting", since: this.#clock.wall() });
@@ -234,6 +243,59 @@ export class DaemonSupervisor {
       reason: `daemon 在 ${timeoutMs}ms 内未就绪（${formatDelay(this.#startupTimeoutMs)}内仍无握手将自动终止并重试）`,
     });
     return this.#state;
+  }
+
+  /**
+   * 判断握手是否来自**另一个工作区/安装位置**的 daemon。
+   *
+   * 背景：2026-10-19 实际踩到旧路径 `~/lwl/ai/aegis` 的 daemon 一直占着
+   * 同一个数据目录的 UDS，新路径的 daemon 反复启动失败，界面却采纳了旧进程；
+   * 旧进程发来的通知没有 occurrenceId，提醒卡片就只剩"知道了"。
+   *
+   * 旧版握手没有 `daemonEntry`，此时无法判断，仍按兼容路径采纳。
+   */
+  #isForeignHandshake(handshake: Handshake): boolean {
+    if (!handshake.daemonEntry) return false;
+    return resolve(handshake.daemonEntry) !== resolve(this.#opts.daemonEntry);
+  }
+
+  /**
+   * 停掉占用数据目录的旧 daemon，并清掉它的握手文件。
+   *
+   * 只发 SIGTERM/SIGKILL，不删除数据；旧 daemon 的 stop 会自行清理 socket。
+   * 清理握手前再次核对 pid，避免误删刚刚拉起的新进程写的握手。
+   */
+  async #evictForeignDaemon(handshake: Handshake): Promise<void> {
+    this.#log("warn", "supervisor.foreign_daemon", {
+      pid: handshake.pid,
+      daemonEntry: handshake.daemonEntry,
+      expected: this.#opts.daemonEntry,
+    });
+
+    try {
+      this.#killProcess(handshake.pid, "SIGTERM");
+    } catch {
+      /* 进程可能已退出 */
+    }
+
+    const deadline = this.#clock.wall() + 3_000;
+    while (this.#clock.wall() < deadline && this.#probeProcess(handshake.pid)) {
+      await this.#clock.sleep(100);
+    }
+    if (this.#probeProcess(handshake.pid)) {
+      try {
+        this.#killProcess(handshake.pid, "SIGKILL");
+      } catch {
+        /* 进程可能在等待期间退出 */
+      }
+    }
+
+    try {
+      const current = this.readHandshake();
+      if (current?.pid === handshake.pid) unlinkSync(this.#opts.paths.handshakeFile);
+    } catch {
+      /* 文件已被 daemon 清理，或权限异常；后续 spawn 会覆盖 */
+    }
   }
 
   /** 拉起 daemon（不阻塞），并挂上退出/启动失败处理 */

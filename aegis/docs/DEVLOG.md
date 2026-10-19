@@ -22,7 +22,7 @@
 | --- | --- |
 | 阶段 | **R4 进行中**（自启/崩溃自恢复/ad-hoc 打包/备份导出已完成），剩余正式签名与公证 |
 | 版本 | daemon `0.2.0-r2` ／ 桌面 `0.3.0-r3` |
-| 校验 | `pnpm verify` 全绿（322 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
+| 校验 | `pnpm verify` 全绿（323 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
 | 启动 | `pnpm dev`（智能增量构建后启动；打包产物为 `dist/Aegis.app`） |
 | 数据目录 | `~/Library/Application Support/Aegis`（含 `desktop.log`） |
 | 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复/启动看门狗/打包（ad-hoc）/备份导出 |
@@ -59,6 +59,30 @@
 ---
 
 ## 记录（新的在最上面）
+
+### 2026-10-19 · R4 修复：旧工作区 daemon 占着数据目录，提醒按钮失效
+**里程碑**：R4
+**症状**：提醒卡片只有「知道了」，但数据库里 `notification.occurrence_id` 明明存在；
+`channel.notified` 日志显示 `hasOccurrence:false`。
+**根因**：旧路径 `/Users/liuwenliang/lwl/ai/aegis` 启动的 daemon（pid 44481）一直持有
+`~/Library/Application Support/Aegis/daemon.sock`。新路径的 daemon 启动失败/被忽略，
+界面实际连的是旧进程；旧进程发来的通知 payload 没有 `occurrenceId`。
+**改了什么**：
+- `DaemonSupervisor` 读取已有握手时比较 `daemonEntry`：
+  - 与当前入口不一致 → 记录 `supervisor.foreign_daemon`，先 SIGTERM、必要时 SIGKILL 旧进程，
+    清理它的握手，再拉起当前入口；
+  - 旧版握手没有 `daemonEntry` → 无法判断，仍兼容采纳。
+- 新增 1 个 supervisor 测试（20 个）。
+**为什么**：旧进程占着 socket 时，新 daemon 启动失败会被 supervisor 当成"已有实例"采纳；
+界面和日志都看似正常，实际跑的是旧代码。只靠版本号/pid 无法发现工作区路径迁移。
+**验证**：
+- `pnpm verify`：323 通过 / 9 跳过
+- 手工确认旧进程 44481 停掉后，新 daemon 从 `.../Cresset/aegis/apps/daemon/dist/main.js`
+  启动并接管 socket；手头完整链路测试中卡片出现「5 / 稍后提醒 / 完成」
+**踩到的坑**：改工作区路径后，旧 daemon 不会自己退出；它占着 socket，新 daemon
+即使启动也拿不到锁。`ps` 在 DSH 沙箱里不可用，用 `lsof -U | grep daemon.sock` 定位到旧 pid。
+**留给下次**：迁移工作区或换构建目录时，先完全退出旧 daemon；启动日志里
+`supervisor.foreign_daemon` 是这类问题的第一现场。
 
 ### 2026-10-19 · M1 UI 优化：提醒完成/稍后、快捷键与托盘
 **里程碑**：R4/M1（界面与交互）

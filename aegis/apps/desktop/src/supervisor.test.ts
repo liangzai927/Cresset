@@ -75,6 +75,8 @@ interface Harness {
   paths: DataPaths;
   spawned: FakeChild[];
   livePids: Set<number>;
+  /** 监督者发出的信号（用于验证"旧工作区 daemon"被停掉） */
+  killed: Array<{ pid: number; signal: NodeJS.Signals }>;
 }
 
 let dir: string;
@@ -98,6 +100,7 @@ function createHarness(
   const paths = resolveDataPaths({ dataDir: dir });
   const spawned: FakeChild[] = [];
   const livePids = new Set<number>();
+  const killed: Array<{ pid: number; signal: NodeJS.Signals }> = [];
   const autoHandshake = harnessOptions.autoHandshake ?? true;
 
   const options: SupervisorOptions = {
@@ -130,10 +133,14 @@ function createHarness(
       return child;
     },
     isProcessAlive: (pid) => livePids.has(pid),
+    killProcess: (pid, signal) => {
+      killed.push({ pid, signal });
+      livePids.delete(pid);
+    },
     ...overrides,
   };
 
-  return { supervisor: new DaemonSupervisor(options), clock, paths, spawned, livePids };
+  return { supervisor: new DaemonSupervisor(options), clock, paths, spawned, livePids, killed };
 }
 
 /** 取最近一次拉起的假进程；不存在时直接失败，避免非空断言 */
@@ -348,6 +355,31 @@ describe("0 退出（stop / 已有实例）", () => {
     expect(h.clock.pendingTimers()).toBe(0);
     await h.clock.advance(10_000);
     expect(h.spawned).toHaveLength(1);
+    h.supervisor.dispose();
+  });
+
+  it("★ 其他工作区的 daemon 占着数据目录时，先停止再拉起当前入口", async () => {
+    const h = createHarness();
+    const foreignPid = 12_345;
+    writeFileSync(
+      h.paths.handshakeFile,
+      JSON.stringify({
+        endpoint: "unix:///tmp/old-checkout.sock",
+        token: "old-token-must-be-long-enough",
+        pid: foreignPid,
+        daemonEntry: join(dir, "old-checkout", "apps", "daemon", "dist", "main.js"),
+      }),
+    );
+    h.livePids.add(foreignPid);
+
+    const state = await h.supervisor.ensureRunning(1_000);
+
+    expect(state.kind).toBe("running");
+    expect(state.kind === "running" && state.spawnedByUs).toBe(true);
+    // 不能采纳旧进程：必须先发 SIGTERM
+    expect(h.killed).toContainEqual({ pid: foreignPid, signal: "SIGTERM" });
+    expect(h.spawned).toHaveLength(1);
+    expect(h.spawned[0]?.pid).not.toBe(foreignPid);
     h.supervisor.dispose();
   });
 });
