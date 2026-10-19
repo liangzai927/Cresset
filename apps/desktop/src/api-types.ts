@@ -120,7 +120,11 @@ export interface DiagnosticInfo {
   daemonVersion: string | null;
   /** 本机时区 */
   timeZone: string;
-  /** 系统通知是否受支持 */
+  /** 系统通知是否真的能显示（false 时靠前台强提醒兜底） */
+  systemNotificationOk: boolean;
+  /** 系统通知不可用的具体原因（展示给用户，便于判断要不要打包签名） */
+  systemNotificationDetail: string | null;
+  /** 系统通知是否受支持（API 层面；不代表真的能显示） */
   notificationsSupported: boolean;
 }
 
@@ -130,8 +134,10 @@ export interface OnboardingState {
   needed: boolean;
   /** 开机自启当前是否已开启 */
   autostartEnabled: boolean;
-  /** 系统通知是否受支持 */
+  /** 系统通知是否受支持（API 层面） */
   notificationsSupported: boolean;
+  /** 系统通知是否真的能显示（false 时导向窗口提醒兜底） */
+  systemNotificationOk: boolean;
   /** 本机时区（向导里展示，避免用户误解触发时间按哪个时区算） */
   timeZone: string;
 }
@@ -176,4 +182,11 @@ export interface DesktopApi {
   onDaemonState(cb: (state: string) => void): () => void;
   /** 订阅"界面该刷新了"的通知（daemon 状态变化、通知投递完成等） */
   onRefresh(cb: () => void): () => void;
+  /**
+   * 订阅应用内提醒。
+   *
+   * 系统通知不可用时，主进程会把提醒广播到界面（同时窗口置前 + 响铃），
+   * 界面负责渲染一条**必须手动确认**的横幅 —— 这是"提醒一定到达"的保底。
+   */
+  onAlert(cb: (payload: { title: string; body?: string }) => void): () => void;
 }

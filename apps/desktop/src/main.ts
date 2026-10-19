@@ -49,6 +49,7 @@ import type {
   TaskItem,
   UpdateInfo,
 } from "./api-types.js";
+import { deliverWithAttention, probeSystemNotification, trySystemNotification } from "./attention.js";
 import { type ChannelHostHandle, createElectronPresenter, startChannelHost } from "./channel-host.js";
 import { DaemonSupervisor, resolveDaemonEntry, resolveNodeExecPath } from "./supervisor.js";
 
@@ -93,6 +94,14 @@ interface AppContext {
   notifierProbes: Notifier[];
   /** 是否正在退出（避免 close 事件反复触发） */
   quitting: boolean;
+  /**
+   * 系统通知是否真的可用（启动时探测得出）。
+   *
+   * 未签名的开发版应用在 macOS 上拿不到通知权限，此时只能用前台强提醒兜底。
+   */
+  systemNotificationOk: boolean;
+  /** 系统通知不可用的具体原因（来自启动探测） */
+  systemNotificationDetail: string | null;
 }
 
 const ctx: AppContext = {
@@ -105,6 +114,8 @@ const ctx: AppContext = {
   desktopSender: null,
   notifierProbes: [],
   quitting: false,
+  systemNotificationOk: false,
+  systemNotificationDetail: null,
 };
 
 /**
@@ -176,32 +187,36 @@ function createWindow(): BrowserWindow {
 
     win.webContents.once("did-finish-load", () => {
       // 等首屏数据（status/tasks）渲染完成再截
-      setTimeout(() => {
-        // AEGIS_CAPTURE_ACTION=dialog：先打开"新建提醒"对话框，覆盖核心交互路径
-        // AEGIS_CAPTURE_ACTION=wizard：打开首次启动向导（截图模式默认跳过它）
-        if (process.env.AEGIS_CAPTURE_ACTION === "wizard") {
-          // AEGIS_CAPTURE_WIZARD_STEP=N：打开向导后前进到第 N 步再截图
-          const step = Number(process.env.AEGIS_CAPTURE_WIZARD_STEP ?? "1");
-          void win.webContents.executeJavaScript(
-            `(async () => {
+      setTimeout(
+        () => {
+          // AEGIS_CAPTURE_ACTION=dialog：先打开"新建提醒"对话框，覆盖核心交互路径
+          // AEGIS_CAPTURE_ACTION=wizard：打开首次启动向导（截图模式默认跳过它）
+          if (process.env.AEGIS_CAPTURE_ACTION === "wizard") {
+            // AEGIS_CAPTURE_WIZARD_STEP=N：打开向导后前进到第 N 步再截图
+            const step = Number(process.env.AEGIS_CAPTURE_WIZARD_STEP ?? "1");
+            void win.webContents.executeJavaScript(
+              `(async () => {
                await openWizard?.();
                for (let i = 1; i < ${step}; i++) {
                  document.getElementById("wizard-next")?.click();
                  await new Promise((r) => setTimeout(r, 260));
                }
              })()`,
-          );
-          setTimeout(() => captureNow(capturePath, win), 1_400);
-          return;
-        }
+            );
+            setTimeout(() => captureNow(capturePath, win), 1_400);
+            return;
+          }
 
-        if (process.env.AEGIS_CAPTURE_ACTION === "dialog") {
-          void win.webContents.executeJavaScript('document.getElementById("btn-new")?.click()');
-          setTimeout(() => captureNow(capturePath, win), 900);
-          return;
-        }
-        captureNow(capturePath, win);
-      }, 3_000);
+          if (process.env.AEGIS_CAPTURE_ACTION === "dialog") {
+            void win.webContents.executeJavaScript('document.getElementById("btn-new")?.click()');
+            setTimeout(() => captureNow(capturePath, win), 900);
+            return;
+          }
+          captureNow(capturePath, win);
+          // AEGIS_CAPTURE_DELAY 可延后截图，用于验证"提醒触发后"的界面
+        },
+        Number(process.env.AEGIS_CAPTURE_DELAY ?? "3000"),
+      );
     });
   }
 
@@ -234,6 +249,12 @@ function createWindow(): BrowserWindow {
   }
 
   // 关闭窗口 → 隐藏到托盘（不退出，服务继续跑）
+  // 窗口真正被销毁（应用退出、或用户强制关闭）时清空引用，
+  // 避免后续回调拿到一个已销毁的对象
+  win.on("closed", () => {
+    if (ctx.window === win) ctx.window = null;
+  });
+
   win.on("close", (event) => {
     if (ctx.quitting) return;
     event.preventDefault();
@@ -252,6 +273,7 @@ function createWindow(): BrowserWindow {
   if (initialTab) query.tab = initialTab;
   // 截图模式下告诉页面"别弹首次向导"，否则每张截图都会被向导挡住
   if (process.env.AEGIS_CAPTURE) query.capture = "1";
+  log("debug", "main.load_renderer", { query });
   void win.loadFile(
     join(import.meta.dirname, "renderer", "index.html"),
     Object.keys(query).length > 0 ? { query } : undefined,
@@ -343,6 +365,7 @@ async function ipcGetOnboarding(): Promise<{
   needed: boolean;
   autostartEnabled: boolean;
   notificationsSupported: boolean;
+  systemNotificationOk: boolean;
   timeZone: string;
 }> {
   const opts = autostartOptions();
@@ -350,6 +373,7 @@ async function ipcGetOnboarding(): Promise<{
     needed: isOnboardingNeeded(),
     autostartEnabled: opts ? isAutostartEnabled(opts) : false,
     notificationsSupported: Notification.isSupported(),
+    systemNotificationOk: ctx.systemNotificationOk,
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
 }
@@ -473,12 +497,34 @@ async function ensureClient(waitMs = CLIENT_WAIT_MS): Promise<IpcClient> {
 }
 
 /** 通知 renderer 刷新（daemon 状态变化、需要重新拉数据时） */
+/**
+ * 向渲染进程发消息（带完整的销毁检查）。
+ *
+ * ⚠️ 这个助手存在的理由是一次真实崩溃：
+ * 应用退出时 IPC 连接断开 → `onStateChange("disconnected")` → 调 notifyRefresh()
+ * → 此时窗口已销毁，`webContents.send()` 抛 "Object has been destroyed"，
+ * Electron 直接弹"主进程发生 JavaScript 错误"的对话框吓用户。
+ *
+ * `ctx.window` 非空不代表 `webContents` 还活着，两者都要查。
+ */
+function sendToRenderer(channel: string, ...args: unknown[]): boolean {
+  const win = ctx.window;
+  if (!win || win.isDestroyed() || win.webContents.isDestroyed()) return false;
+  try {
+    win.webContents.send(channel, ...args);
+    return true;
+  } catch {
+    // 发送失败不致命：界面收不到刷新通知而已，下次轮询会补上
+    return false;
+  }
+}
+
 function notifyRefresh(): void {
-  ctx.window?.webContents.send("aegis:refresh");
+  sendToRenderer("aegis:refresh");
 }
 
 function pushDaemonState(state: string): void {
-  ctx.window?.webContents.send("aegis:daemon-state", state);
+  sendToRenderer("aegis:daemon-state", state);
 }
 
 // ── 各 RPC 处理器 ───────────────────────────────────────────────────────
@@ -531,7 +577,11 @@ async function ipcGetStatus(): Promise<DiagnosticInfo> {
     appVersion: APP_VERSION,
     daemonVersion: state.kind === "running" ? (state.handshake.daemonVersion ?? null) : null,
     timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    // 注意：这两个是**不同**的事。
+    // notificationsSupported 只表示 API 存在；systemNotificationOk 才是"真的能弹出来"。
     notificationsSupported: Notification.isSupported(),
+    systemNotificationOk: ctx.systemNotificationOk,
+    systemNotificationDetail: ctx.systemNotificationOk ? null : ctx.systemNotificationDetail,
   };
 }
 
@@ -648,12 +698,31 @@ async function ipcCheckUpdate(): Promise<UpdateInfo> {
 async function bootstrap(): Promise<void> {
   log("info", "main.bootstrap_begin", { dataDir: ctx.paths.dataDir, version: APP_VERSION });
 
-  // ── ① 桌面通道：让 daemon 能弹原生通知
+  // ── ① 探测系统通知是否真的可用
+  //
+  // 必须在通道启动前做：`Notification.isSupported()` 在未授权时也返回 true，
+  // 只有真的发一条并等 show/failed 事件才能知道真相（实测 macOS 会直接拒绝未签名应用）。
+  const sysProbe = await probeSystemNotification();
+  ctx.systemNotificationOk = sysProbe.ok;
+  ctx.systemNotificationDetail = sysProbe.ok ? null : sysProbe.detail;
+  log(sysProbe.ok ? "info" : "warn", "main.system_notification_probe", {
+    ok: sysProbe.ok,
+    detail: sysProbe.detail,
+  });
+
+  // ── ② 桌面通道：让 daemon 能提醒用户
   ctx.channelHost = await startChannelHost({
     channelFilePath: ctx.paths.channelFile,
-    presenter: createElectronPresenter(
-      Notification as unknown as Parameters<typeof createElectronPresenter>[0],
-    ),
+    presenter: createElectronPresenter({
+      systemNotificationOk: () => ctx.systemNotificationOk,
+      deliver: async (payload) => {
+        const r = await deliverWithAttention(ctx.window, payload);
+        if (r.systemError) {
+          log("warn", "main.system_notification_denied", { error: r.systemError });
+        }
+        return r;
+      },
+    }),
     onLog: (level, event, detail) => log(level, event, detail),
   });
   log("info", "main.channel_ready", { endpoint: ctx.channelHost.endpoint });
@@ -773,6 +842,36 @@ function registerIpcHandlers(): void {
     wrap((enabled: boolean) => ipcSetAutostart(enabled)),
   );
 }
+
+// ── 顶层异常兜底 ────────────────────────────────────────────────────────
+
+/**
+ * 未捕获异常的处理策略。
+ *
+ * Electron 的默认行为是弹一个"主进程发生 JavaScript 错误"的**模态对话框**。
+ * 对一个 24 小时常驻的提醒工具，这是有害的：
+ *   - 它挡住用户，但后台服务其实还在正常跑
+ *   - 用户不知道该点"好"还是"退出"，往往直接关掉应用 —— 提醒就真的停了
+ *
+ * 因此改为：**记录完整堆栈 + 在界面里显示一条可见的提示 + 继续运行**。
+ * 这不是"吞掉错误"：日志里有堆栈，界面上有提示，符合"失败必须可见"。
+ */
+process.on("uncaughtException", (err) => {
+  log("error", "main.uncaught_exception", {
+    error: err.message,
+    stack: (err.stack ?? "").split("\n").slice(0, 6).join(" | "),
+  });
+  sendToRenderer("aegis:alert", {
+    title: "主进程出现内部错误（已记录，服务继续运行）",
+    body: err.message,
+  });
+});
+
+process.on("unhandledRejection", (reason) => {
+  const message = reason instanceof Error ? reason.message : String(reason);
+  log("error", "main.unhandled_rejection", { error: message });
+  // Promise 拒绝通常是局部失效，不必打扰用户；只记录，避免刷屏
+});
 
 // ── 应用生命周期 ────────────────────────────────────────────────────────
 

@@ -29,6 +29,14 @@
       </div>
     </header>
 
+    <!--
+      应用内强提醒。
+      系统通知不可用（macOS 未签名应用常见）时，主进程会把提醒发到这里，
+      同时把窗口置前并响铃。这条横幅**必须手动确认**才消失 —— 它替代不了
+      系统通知，但能保证"提醒真的到达你眼前"。
+    -->
+    <div class="alert-stack" id="alert-stack" aria-live="assertive"></div>
+
     <!-- 降级/异常横幅：失败必须可见 -->
     <div class="banner hidden" id="banner" role="alert">
       <span class="banner-text" id="banner-text"></span>

@@ -371,7 +371,22 @@ function renderSettings(status) {
     }
   }
   addKv(basic, "时区", status.timeZone);
-  addKv(basic, "系统通知", status.notificationsSupported ? "支持" : "不支持（将走兜底）");
+  // 系统通知要如实说"能不能显示"，而不是"API 支不支持"。
+  // 开发版应用在 macOS 上被系统拒绝投递，说"支持"会让用户以为坏了。
+  addKv(
+    basic,
+    "系统通知",
+    status.systemNotificationOk ? "可用" : "不可用（改用窗口提醒）",
+  );
+  if (!status.systemNotificationOk && status.systemNotificationDetail) {
+    const dt = el("dt", "", "");
+    const dd = el("dd", "");
+    // 原因单独一行展示，便于判断是否需要正式打包签名
+    dd.textContent = status.systemNotificationDetail;
+    dd.classList.add("hint");
+    basic.appendChild(dt);
+    basic.appendChild(dd);
+  }
 
   // 渠道
   const channels = $("channel-list");
@@ -604,6 +619,52 @@ $("btn-check-update").addEventListener("click", async () => {
   }
 });
 
+
+// ── 应用内强提醒（系统通知不可用时的兜底） ──────────────────────────────
+
+/**
+ * 显示一条需要用户确认的提醒。
+ *
+ * 与普通 toast 的区别：**不会自动消失**。它是系统通知的替代品，
+ * 自动消失就等于"提醒没送达"。用户可以点"知道了"关闭。
+ */
+function showAlert(payload) {
+  const stack = $("alert-stack");
+  if (!stack) return;
+
+  const card = el("div", "alert-card");
+
+  const head = el("div", "alert-head");
+  head.appendChild(el("span", "alert-icon", "🔔"));
+  head.appendChild(el("span", "alert-title", payload.title || "提醒"));
+  card.appendChild(head);
+
+  if (payload.body) {
+    card.appendChild(el("div", "alert-body", payload.body));
+  }
+
+  // 说明为什么是窗口提醒而不是系统通知 —— 否则用户会疑惑"为什么不是弹窗"
+  if (state.status && state.status.systemNotificationOk === false) {
+    card.appendChild(
+      el("div", "alert-note", "系统通知当前不可用，已用窗口提醒替代（开发版应用未经签名）"),
+    );
+  }
+
+  const actions = el("div", "alert-actions");
+  const dismiss = el("button", "btn btn-primary", "知道了");
+  dismiss.addEventListener("click", () => card.remove());
+  actions.appendChild(dismiss);
+  card.appendChild(actions);
+
+  stack.appendChild(card);
+
+  // 提醒出现时把窗口标题闪一下，进一步引起注意
+  document.title = `🔔 ${payload.title || "提醒"} — Aegis`;
+  setTimeout(() => {
+    document.title = "Aegis";
+  }, 4000);
+}
+
 // ── 事件订阅与初始化 ────────────────────────────────────────────────────
 
 // 主进程要求刷新（daemon 状态变化、任务/通知变更）
@@ -615,6 +676,12 @@ window.aegis.onRefresh(() => {
 
 window.aegis.onDaemonState(() => {
   void refreshStatus();
+});
+
+window.aegis.onAlert((payload) => {
+  showAlert(payload);
+  // 提醒同时刷新历史，让用户能立刻在"历史"里看到这条
+  if (state.tab === "history") void refreshHistory();
 });
 
 
@@ -658,15 +725,16 @@ async function openWizard() {
   // 时区展示：让用户明确"触发时间按哪个时区算"
   $("wizard-tz").textContent = `提醒时间按本机时区（${wizard.info.timeZone}）计算。`;
 
-  // 通知状态
+  // 通知状态：必须按"实际能不能显示"来说，而不是 API 是否存在
   const status = $("wizard-notify-status");
-  if (wizard.info.notificationsSupported) {
+  if (wizard.info.systemNotificationOk) {
     status.className = "wizard-status ok";
     status.textContent = "系统通知可用。建议点下面的按钮确认一次。";
   } else {
-    status.className = "wizard-status bad";
+    status.className = "wizard-status warn";
     status.textContent =
-      "系统通知当前不可用。提醒会退回到命令行兜底（仍会送达，但样式较简单）。可在系统设置的「通知」里为 Aegis 开启。";
+      "系统通知暂时不可用（开发版应用未签名，macOS 不允许投递）。" +
+      "此时提醒会用「窗口提醒」送达：窗口弹到最前、响一声、并显示一条需要你确认的横幅。";
   }
 
   // 自启状态

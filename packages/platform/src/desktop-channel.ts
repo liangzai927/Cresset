@@ -176,8 +176,19 @@ export class DesktopChannelSender implements Notifier {
         headers: { authorization: `Bearer ${d.channel.token}` },
         signal: AbortSignal.timeout(this.#timeoutMs),
       });
-      if (res.ok) return { ok: true, detail: `桌面通道可用（${d.channel.endpoint}）` };
-      return { ok: false, detail: `桌面通道健康检查失败：HTTP ${res.status}` };
+      if (!res.ok) return { ok: false, detail: `桌面通道健康检查失败：HTTP ${res.status}` };
+
+      // 通道"可达"不等于"系统通知能用"。
+      // Electron 侧会告诉我们它能否真正弹系统通知；不能时它会用前台强提醒兜底，
+      // 因此这里仍然算可用，但必须把真实方式说清楚 —— 否则用户会以为系统通知在工作。
+      const body = (await res.json().catch(() => ({}))) as { supported?: boolean };
+      if (body.supported === false) {
+        return {
+          ok: true,
+          detail: "桌面通道可用，但系统通知被系统拒绝（将用窗口提醒兜底，见上方说明）",
+        };
+      }
+      return { ok: true, detail: `桌面通道可用（${d.channel.endpoint}）` };
     } catch (err) {
       return { ok: false, detail: `桌面通道无法连接：${(err as Error).message}` };
     }
@@ -207,8 +218,23 @@ export class DesktopChannelSender implements Notifier {
 
       if (res.ok) {
         // 让 Electron 告诉我们它是否真的弹出来了（权限被拒时会返回非 success）
-        const body = (await res.json().catch(() => ({}))) as { outcome?: string; error?: string };
-        if (body.outcome === "success" || body.outcome === undefined) return { outcome: "success" };
+        const body = (await res.json().catch(() => ({}))) as {
+          outcome?: unknown;
+          error?: string;
+          layer?: string;
+          systemError?: string;
+        };
+        // 防御：outcome 必须是字符串。若对端返回了对象（曾经发生过），
+        // 直接当作成功会让调用方把对象写进数据库 —— 这里显式识别并降级为成功，
+        // 因为"对端返回 200 且结构异常"通常意味着已经投递过。
+        if (body.outcome === undefined) return { outcome: "success" };
+        if (typeof body.outcome !== "string") {
+          return {
+            outcome: "success",
+            ...(body.systemError ? { error: `对端返回结构异常：${body.systemError}` } : {}),
+          };
+        }
+        if (body.outcome === "success") return { outcome: "success" };
         const outcome = body.outcome as ChannelOutcome;
         return { outcome, ...(body.error ? { error: body.error } : {}) };
       }

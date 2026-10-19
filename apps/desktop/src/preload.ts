@@ -88,6 +88,12 @@ function buildApi(): DesktopApi {
       ipcRenderer.on("aegis:refresh", listener);
       return () => ipcRenderer.removeListener("aegis:refresh", listener);
     },
+
+    onAlert: (cb: (payload: { title: string; body?: string }) => void) => {
+      const listener = (_e: unknown, payload: { title: string; body?: string }): void => cb(payload);
+      ipcRenderer.on("aegis:alert", listener);
+      return () => ipcRenderer.removeListener("aegis:alert", listener);
+    },
   };
 }
 

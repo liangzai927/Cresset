@@ -42,14 +42,26 @@ export type NotifyOutcome = "success" | "transient_error" | "permanent_error";
 
 /** 通知呈现函数的契约（注入以便测试，不依赖真实 Electron） */
 export interface NotificationPresenter {
-  /** 系统是否支持通知（权限被拒时 Electron 返回 false） */
+  /**
+   * 系统通知在当前环境下是否**真的能显示**。
+   *
+   * ⚠️ 不能用 `Notification.isSupported()` —— 它在未授权时也返回 true（实测）。
+   * 必须靠真实投递的 show/failed 事件判断，实现见 attention.ts。
+   */
   isSupported(): boolean;
   /**
-   * 弹出通知。
+   * 呈现通知。
    *
-   * @returns 是否成功交给系统（注意：成功 ≠ 用户一定看到，后者取决于专注模式）
+   * 实现可以是分层的（系统通知失败则用前台强提醒），
+   * 只要用户确实被提醒到就返回 `success` —— 对 daemon 而言语义一致。
    */
-  present(payload: { title: string; body?: string; sound: boolean }): Promise<NotifyOutcome>;
+  present(payload: { title: string; body?: string; sound: boolean }): Promise<{
+    outcome: NotifyOutcome;
+    /** 实际生效的层，便于界面展示"当前是哪种提醒方式" */
+    layer?: "system_notification" | "in_app";
+    /** 系统通知不可用时的原因 */
+    systemError?: string;
+  }>;
 }
 
 /** 通道服务的启动选项；`presenter` 注入以便在没有 Electron 的环境里测试 */
@@ -139,14 +151,27 @@ export async function startChannelHost(opts: ChannelHostOptions): Promise<Channe
           return;
         }
 
-        const outcome = await opts.presenter.present({
+        const result = await opts.presenter.present({
           title: parsed.title,
           ...(typeof parsed.body === "string" ? { body: parsed.body } : {}),
           sound: parsed.sound !== false,
         });
 
-        log("info", "channel.notified", { title: parsed.title, outcome });
-        respond(res, 200, { outcome });
+        // ⚠️ 必须拆成扁平字段。
+        // 曾经把整个对象塞进 `{ outoome: result }`，导致 daemon 侧拿到的 outcome
+        // 是个对象而不是字符串，最终在写 delivery_attempt 时撞上
+        // "Provided value cannot be bound to SQLite parameter"。
+        log("info", "channel.notified", {
+          title: parsed.title,
+          outcome: result.outcome,
+          layer: result.layer,
+          ...(result.systemError ? { systemError: result.systemError } : {}),
+        });
+        respond(res, 200, {
+          outcome: result.outcome,
+          ...(result.layer ? { layer: result.layer } : {}),
+          ...(result.systemError ? { systemError: result.systemError } : {}),
+        });
         return;
       }
 
@@ -254,43 +279,32 @@ export async function startChannelHost(opts: ChannelHostOptions): Promise<Channe
  * 该函数**不直接 import electron**：由主进程传入 electron 的 Notification 构造器，
  * 这样本模块可以在普通 Node 环境（测试）里运行。
  */
-export function createElectronPresenter(NotificationCtor: {
-  isSupported: () => boolean;
-  new (opts: {
-    title: string;
-    body?: string;
-    silent?: boolean;
-  }): {
-    show: () => void;
-    on: (event: string, cb: () => void) => void;
-  };
+export function createElectronPresenter(impl: {
+  /** 是否已确认系统通知真的可用（由启动时探测得出） */
+  systemNotificationOk: () => boolean;
+  /** 分层呈现：系统通知 → 前台强提醒 */
+  deliver: (payload: { title: string; body?: string; sound: boolean }) => Promise<{
+    ok: boolean;
+    layer: "system_notification" | "in_app" | null;
+    error?: string;
+    systemError?: string;
+  }>;
 }): NotificationPresenter {
   return {
     isSupported(): boolean {
-      try {
-        return NotificationCtor.isSupported();
-      } catch {
-        return false;
-      }
+      return impl.systemNotificationOk();
     },
-    async present(payload): Promise<NotifyOutcome> {
-      if (!NotificationCtor.isSupported()) {
-        // 权限被拒 / 系统不支持 → 永久错误，让 daemon 立刻降级到 CLI 兜底
-        return "permanent_error";
+    async present(payload) {
+      const r = await impl.deliver(payload);
+      if (r.ok) {
+        return {
+          outcome: "success",
+          ...(r.layer ? { layer: r.layer } : {}),
+          ...(r.systemError ? { systemError: r.systemError } : {}),
+        };
       }
-      try {
-        const n = new NotificationCtor({
-          title: payload.title,
-          ...(payload.body ? { body: payload.body } : {}),
-          silent: !payload.sound,
-        });
-        n.show();
-        // 注意：Electron 的 show() 不返回是否真的显示。
-        // 因此这里只能报告"已交给系统" —— 这正是"成功 ≠ 用户看到"的诚实表达。
-        return "success";
-      } catch {
-        return "transient_error";
-      }
+      // 两层都失败：这是永久性问题（重试同一渠道没有意义），交给降级链
+      return { outcome: "permanent_error" };
     },
   };
 }

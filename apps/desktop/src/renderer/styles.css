@@ -696,3 +696,83 @@ dialog::backdrop {
 .wizard-note strong {
   color: var(--text);
 }
+
+/* ── 应用内强提醒（系统通知不可用时的兜底） ─────────────────────────── */
+
+.alert-stack {
+  position: fixed;
+  top: 34px;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  pointer-events: none;
+}
+
+.alert-card {
+  pointer-events: auto;
+  width: min(460px, 100%);
+  background: var(--panel);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border));
+  border-left: 4px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 10px 32px rgb(0 0 0 / 22%);
+  padding: 11px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* 进场动画：轻微下移，引起注意但不刺眼 */
+  animation: alert-in 0.22s ease-out;
+}
+
+@keyframes alert-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.alert-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alert-icon {
+  font-size: 14px;
+}
+
+.alert-title {
+  font-weight: 600;
+  font-size: 13px;
+  flex: 1;
+}
+
+.alert-body {
+  font-size: 12.5px;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  line-height: 1.55;
+}
+
+.alert-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+/* 提示：当前用的是窗口提醒而非系统通知 */
+.alert-note {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 2px 0 0;
+}

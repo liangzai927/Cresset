@@ -48,10 +48,42 @@ pnpm dev
 | 界面显示"后台服务启动中…"超过几秒 | 看 `desktop.log` 里的 `supervisor.spawn` 与 `daemon_state` |
 | 提示"daemon 不可用" | 执行 `pnpm daemon` 看前台报错（锁被占 / 权限 / 迁移失败） |
 | 想彻底重来 | `pkill -f "aegis/apps/daemon"`，然后删掉数据目录里的 `daemon.lock`、`handshake.json`、`daemon.sock` |
-| 通知不弹 | 系统设置 → 通知 → 允许 Aegis；或在界面"设置"页看渠道可用性 |
+| 通知不弹 | **先看界面"设置 → 系统通知"那一行**。开发版应用在 macOS 上会被系统拒绝投递（见下方说明），此时提醒会改用**窗口提醒**兜底 |
+| 想确认提醒真的会到 | 界面点"测试通知"：窗口会跳到最前、响一声、并弹出一条需要确认的横幅 |
 
 **注意**：关掉窗口后 daemon **仍然在跑**（这是设计）。要停它用 `pnpm daemon` 之外的
 `node apps/daemon/dist/main.js stop`，或菜单里的"完全退出（含后台服务）"。
+
+### ⚠️ 关于系统通知（重要）
+
+**当前开发态下 macOS 不允许本应用投递系统通知。** 实测证据（系统日志）：
+
+```
+Entitlement 'com.apple.private.usernotifications.bundle-identifiers' required
+addRequest not allowed: com.github.Electron
+```
+
+| 启动方式 | `Notification.show()` 结果 |
+| --- | --- |
+| 原始 Electron 二进制 | `failed: UNErrorDomain 错误 1` |
+| 打包 + ad-hoc 签名 | `failed: Notifications are not allowed for this application` |
+| 系统设置的通知列表 | **完全查不到该应用**（用户想手动授权也做不到） |
+
+这是 macOS 对**未用 Developer ID 正式签名**应用的硬限制，代码层面绕不过去。
+正式解决需要 Apple Developer 账号签名 —— 属 R4（打包分发）。
+
+**因此实现了分层提醒**（`apps/desktop/src/attention.ts`）：
+
+```
+① 系统通知 ── 失败/超时/未确认显示 ──► ② 前台强提醒
+                                        · 窗口置前 + Dock 跳动 + 提示音
+                                        · 应用内横幅（必须手动点"知道了"）
+```
+
+关键点：**只有收到 `show` 事件才算成功**。`Notification.show()` 在失败时并不抛异常，
+早期实现只看"没报错"就报成功 —— 界面写着"已发送"，用户什么也没收到。
+
+拿不到正式签名时，第 ② 层保证提醒仍然能到达你眼前；打包签名后会自动回到第 ① 层。
 
 界面有三块：
 - **提醒**：列表（含人话重复描述、下次触发、已触发次数）、新建（六种重复模式）、暂停/恢复/删除
