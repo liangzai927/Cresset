@@ -154,22 +154,32 @@ function createWindow(): BrowserWindow {
   // 而 Electron 自己的 capturePage() 不依赖屏幕录制权限。
   const capturePath = process.env.AEGIS_CAPTURE;
   if (capturePath) {
+    // 抽成具名函数并把 capturePath 作为参数传入，
+    // 避免在闭包里依赖类型收窄（曾经因为窄化丢失导致 TS 报"可能为 undefined"）。
+    const captureNow = (to: string, w: BrowserWindow): void => {
+      void w.webContents
+        .capturePage()
+        .then((image) => {
+          writeFileSync(to, image.toPNG());
+          log("info", "main.capture_saved", { path: to, bytes: image.toPNG().length });
+        })
+        .catch((err: unknown) => log("error", "main.capture_failed", { error: String(err) }))
+        .finally(() => {
+          ctx.quitting = true;
+          app.quit();
+        });
+    };
+
     win.webContents.once("did-finish-load", () => {
-      // 等一小会儿让首屏数据（status/tasks）渲染完成
+      // 等首屏数据（status/tasks）渲染完成再截
       setTimeout(() => {
-        // AEGIS_CAPTURE_TAB 可指定标签页（tasks / history / settings），
-        // 便于自动化覆盖三个页签的渲染结果
-        void win.webContents
-          .capturePage()
-          .then((image) => {
-            writeFileSync(capturePath, image.toPNG());
-            log("info", "main.capture_saved", { path: capturePath, bytes: image.toPNG().length });
-          })
-          .catch((err: unknown) => log("error", "main.capture_failed", { error: String(err) }))
-          .finally(() => {
-            ctx.quitting = true;
-            app.quit();
-          });
+        // AEGIS_CAPTURE_ACTION=dialog：先打开"新建提醒"对话框，覆盖核心交互路径
+        if (process.env.AEGIS_CAPTURE_ACTION === "dialog") {
+          void win.webContents.executeJavaScript('document.getElementById("btn-new")?.click()');
+          setTimeout(() => captureNow(capturePath, win), 900);
+          return;
+        }
+        captureNow(capturePath, win);
       }, 3_000);
     });
   }
