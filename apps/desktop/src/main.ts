@@ -29,10 +29,14 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
+  type AutostartOptions,
   createDesktopChannelSender,
   type DesktopChannelSender,
   desktopChannelProbe,
+  installAutostart,
+  isAutostartEnabled,
   type Notifier,
+  uninstallAutostart,
 } from "@aegis/platform";
 import { type DataPaths, resolveDataPaths } from "@aegis/product";
 import { app, BrowserWindow, ipcMain, Menu, Notification, nativeImage, shell, Tray } from "electron";
@@ -174,6 +178,23 @@ function createWindow(): BrowserWindow {
       // 等首屏数据（status/tasks）渲染完成再截
       setTimeout(() => {
         // AEGIS_CAPTURE_ACTION=dialog：先打开"新建提醒"对话框，覆盖核心交互路径
+        // AEGIS_CAPTURE_ACTION=wizard：打开首次启动向导（截图模式默认跳过它）
+        if (process.env.AEGIS_CAPTURE_ACTION === "wizard") {
+          // AEGIS_CAPTURE_WIZARD_STEP=N：打开向导后前进到第 N 步再截图
+          const step = Number(process.env.AEGIS_CAPTURE_WIZARD_STEP ?? "1");
+          void win.webContents.executeJavaScript(
+            `(async () => {
+               await openWizard?.();
+               for (let i = 1; i < ${step}; i++) {
+                 document.getElementById("wizard-next")?.click();
+                 await new Promise((r) => setTimeout(r, 260));
+               }
+             })()`,
+          );
+          setTimeout(() => captureNow(capturePath, win), 1_400);
+          return;
+        }
+
         if (process.env.AEGIS_CAPTURE_ACTION === "dialog") {
           void win.webContents.executeJavaScript('document.getElementById("btn-new")?.click()');
           setTimeout(() => captureNow(capturePath, win), 900);
@@ -199,9 +220,13 @@ function createWindow(): BrowserWindow {
   // 用 query 而不是"加载后点一下"是因为点击依赖渲染时序，实测不可靠；
   // 页面初始化时直接决定页签则没有竞态。将来做深链接也复用这条通道。
   const initialTab = process.env.AEGIS_CAPTURE_TAB;
+  const query: Record<string, string> = {};
+  if (initialTab) query.tab = initialTab;
+  // 截图模式下告诉页面"别弹首次向导"，否则每张截图都会被向导挡住
+  if (process.env.AEGIS_CAPTURE) query.capture = "1";
   void win.loadFile(
     join(import.meta.dirname, "renderer", "index.html"),
-    initialTab ? { query: { tab: initialTab } } : undefined,
+    Object.keys(query).length > 0 ? { query } : undefined,
   );
   return win;
 }
@@ -254,6 +279,84 @@ function createTray(): void {
     }
   });
   ctx.tray = tray;
+}
+
+// ── 首次启动向导与开机自启 ──────────────────────────────────────────────
+
+/**
+ * 首次配置完成标记文件。
+ *
+ * 放在数据目录而不是 Electron 的 userData：daemon 与 UI 共用同一个数据目录，
+ * 这样"重装界面"或"用 CLI 起过服务"都不会让向导反复弹。
+ */
+function onboardingMarkerPath(): string {
+  return join(ctx.paths.dataDir, "ui-onboarded.json");
+}
+
+/** 自启配置。执行的是 **daemon**（不是界面）—— 见 packages/platform/src/autostart.ts 的说明 */
+function autostartOptions(): AutostartOptions | null {
+  const nodeExec = resolveNodeExecPath();
+  if (!nodeExec) return null;
+  const repoRoot = join(import.meta.dirname, "..", "..", "..");
+  const entry = resolveDaemonEntry({ repoRoot, resourcesPath: process.resourcesPath });
+  if (!entry) return null;
+  return {
+    label: "com.aegis.daemon",
+    execPath: nodeExec,
+    args: [entry, "--data-dir", ctx.paths.dataDir],
+  };
+}
+
+function isOnboardingNeeded(): boolean {
+  return !existsSync(onboardingMarkerPath());
+}
+
+async function ipcGetOnboarding(): Promise<{
+  needed: boolean;
+  autostartEnabled: boolean;
+  notificationsSupported: boolean;
+  timeZone: string;
+}> {
+  const opts = autostartOptions();
+  return {
+    needed: isOnboardingNeeded(),
+    autostartEnabled: opts ? isAutostartEnabled(opts) : false,
+    notificationsSupported: Notification.isSupported(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+}
+
+async function ipcSetAutostart(enabled: boolean): Promise<{ ok: boolean; detail: string }> {
+  const opts = autostartOptions();
+  if (!opts) {
+    return { ok: false, detail: "找不到系统 Node 或 daemon 入口，无法设置开机自启" };
+  }
+  const r = enabled ? installAutostart(opts) : uninstallAutostart(opts);
+  log(r.ok ? "info" : "warn", "main.autostart_set", { enabled, ok: r.ok, detail: r.detail });
+  return r;
+}
+
+async function ipcCompleteOnboarding(choices: { autostart: boolean }): Promise<{
+  ok: boolean;
+  detail: string;
+}> {
+  // 自启失败不应阻止向导完成 —— 用户仍然可以用这个应用，
+  // 只是需要手动启动。把失败原因如实返回让界面展示。
+  const auto = await ipcSetAutostart(choices.autostart === true);
+
+  try {
+    writeFileSync(
+      onboardingMarkerPath(),
+      JSON.stringify({ completedAt: Date.now(), autostart: choices.autostart === true }),
+      "utf8",
+    );
+  } catch (err) {
+    return { ok: false, detail: `无法写入配置标记：${(err as Error).message}` };
+  }
+
+  return auto.ok
+    ? { ok: true, detail: "配置完成" }
+    : { ok: true, detail: `配置已保存，但开机自启未生效：${auto.detail}` };
 }
 
 // ── daemon 连接 ─────────────────────────────────────────────────────────
@@ -560,6 +663,20 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:update:check",
     wrap(() => ipcCheckUpdate()),
+  );
+
+  // ── 首次启动向导与开机自启
+  ipcMain.handle(
+    "aegis:onboarding:get",
+    wrap(() => ipcGetOnboarding()),
+  );
+  ipcMain.handle(
+    "aegis:onboarding:complete",
+    wrap((c: { autostart: boolean }) => ipcCompleteOnboarding(c)),
+  );
+  ipcMain.handle(
+    "aegis:autostart:set",
+    wrap((enabled: boolean) => ipcSetAutostart(enabled)),
   );
 }
 

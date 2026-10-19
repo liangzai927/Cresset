@@ -608,6 +608,124 @@ window.aegis.onDaemonState(() => {
   void refreshStatus();
 });
 
+
+// ── 首次启动向导 ────────────────────────────────────────────────────────
+
+const wizard = {
+  step: 1,
+  total: 3,
+  /** 首次查询结果（含是否受支持通知） */
+  info: null,
+};
+
+function wizardGo(step) {
+  wizard.step = Math.max(1, Math.min(wizard.total, step));
+
+  for (const pane of document.querySelectorAll(".wizard-pane")) {
+    pane.classList.toggle("active", Number(pane.dataset.pane) === wizard.step);
+  }
+  for (const dot of document.querySelectorAll(".wizard-step")) {
+    const n = Number(dot.dataset.step);
+    dot.classList.toggle("active", n === wizard.step);
+    dot.classList.toggle("done", n < wizard.step);
+  }
+
+  $("wizard-prev").classList.toggle("hidden", wizard.step === 1);
+  $("wizard-next").textContent = wizard.step === wizard.total ? "开始使用" : "下一步";
+  $("wizard-error").classList.add("hidden");
+}
+
+/** 打开向导（仅在首次配置时调用） */
+async function openWizard() {
+  try {
+    wizard.info = await window.aegis.getOnboarding();
+  } catch (err) {
+    // 读不到就不弹向导 —— 不能因为"配置读取失败"把用户挡在门外
+    console.warn("读取首次配置状态失败", err);
+    return;
+  }
+  if (!wizard.info.needed) return;
+
+  // 时区展示：让用户明确"触发时间按哪个时区算"
+  $("wizard-tz").textContent = `提醒时间按本机时区（${wizard.info.timeZone}）计算。`;
+
+  // 通知状态
+  const status = $("wizard-notify-status");
+  if (wizard.info.notificationsSupported) {
+    status.className = "wizard-status ok";
+    status.textContent = "系统通知可用。建议点下面的按钮确认一次。";
+  } else {
+    status.className = "wizard-status bad";
+    status.textContent =
+      "系统通知当前不可用。提醒会退回到命令行兜底（仍会送达，但样式较简单）。可在系统设置的「通知」里为 Aegis 开启。";
+  }
+
+  // 自启状态
+  $("wizard-autostart").checked = true;
+  if (wizard.info.autostartEnabled) {
+    $("wizard-autostart-hint").textContent = "已开启。关闭窗口不会停止提醒。";
+  }
+
+  wizardGo(1);
+  $("wizard-dialog").showModal();
+}
+
+$("wizard-prev").addEventListener("click", () => wizardGo(wizard.step - 1));
+
+$("wizard-test-notify").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const status = $("wizard-notify-status");
+  btn.disabled = true;
+  status.className = "wizard-status";
+  status.textContent = "正在发送…";
+  try {
+    await window.aegis.testNotify();
+    status.className = "wizard-status ok";
+    status.textContent = "已发送。如果你看到了通知，说明通道正常。";
+  } catch (err) {
+    status.className = "wizard-status bad";
+    status.textContent = `发送失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("wizard-next").addEventListener("click", async (e) => {
+  if (wizard.step < wizard.total) {
+    wizardGo(wizard.step + 1);
+    return;
+  }
+
+  // 最后一步 → 保存
+  const btn = e.currentTarget;
+  const errBox = $("wizard-error");
+  btn.disabled = true;
+  btn.textContent = "保存中…";
+
+  try {
+    const r = await window.aegis.completeOnboarding({
+      autostart: $("wizard-autostart").checked,
+    });
+    if (!r.ok) {
+      errBox.textContent = r.detail;
+      errBox.classList.remove("hidden");
+      return;
+    }
+    $("wizard-dialog").close();
+    // 自启失败时 r.ok 仍为 true（不阻塞使用），但 detail 说明了原因
+    if (r.detail && !r.detail.includes("配置完成")) {
+      showBanner(r.detail, "warn");
+    }
+    await refreshStatus();
+  } catch (err) {
+    errBox.textContent = err.message;
+    errBox.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "开始使用";
+  }
+});
+
 /** 启动：先拿状态（决定是否显示横幅），再拉列表 */
 async function init() {
   // 初始页签可由 `?tab=history` 指定（深链接与截图测试共用这条通道）
@@ -618,6 +736,12 @@ async function init() {
 
   await refreshStatus();
   await refreshTasks();
+
+  // 首次配置向导：只在没配过时弹。
+  // 截图模式下跳过（否则截图全是向导）。
+  if (!new URLSearchParams(location.search).get("capture")) {
+    void openWizard();
+  }
   // 每 15 秒轮询状态：daemon 的 uptime / tick 会变，且能发现"悄悄挂了"
   setInterval(() => {
     void refreshStatus();

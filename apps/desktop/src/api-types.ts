@@ -117,6 +117,18 @@ export interface DiagnosticInfo {
   notificationsSupported: boolean;
 }
 
+/** 首次启动向导的状态（决定是否展示向导） */
+export interface OnboardingState {
+  /** 是否还没完成首次配置 */
+  needed: boolean;
+  /** 开机自启当前是否已开启 */
+  autostartEnabled: boolean;
+  /** 系统通知是否受支持 */
+  notificationsSupported: boolean;
+  /** 本机时区（向导里展示，避免用户误解触发时间按哪个时区算） */
+  timeZone: string;
+}
+
 /** 更新检查结果（R3 只做提示，不自动下载） */
 export interface UpdateInfo {
   available: boolean;
@@ -147,6 +159,11 @@ export interface DesktopApi {
   resumeAll(): Promise<{ ok: boolean }>;
 
   checkUpdate(): Promise<UpdateInfo>;
+
+  /** 首次启动向导 */
+  getOnboarding(): Promise<OnboardingState>;
+  completeOnboarding(choices: { autostart: boolean }): Promise<{ ok: boolean; detail: string }>;
+  setAutostart(enabled: boolean): Promise<{ ok: boolean; detail: string }>;
 
   /** 订阅 daemon 状态变化；返回取消订阅函数 */
   onDaemonState(cb: (state: string) => void): () => void;

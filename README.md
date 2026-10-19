@@ -12,7 +12,7 @@
 | **R3 桌面外壳 + 界面** | ✅ **完成**：Electron 三层 ｜ 原生通知 ｜ 三块界面 ｜ 托盘 |
 | R4 系统集成（打包/自启/自恢复） | 下一步 |
 
-**当前验证状态**：`pnpm verify` 全绿 ｜ **12 个工作区包** ｜ **279 测试通过** ｜ 注释占比 19.0%
+**当前验证状态**：`pnpm verify` 全绿 ｜ **12 个工作区包** ｜ **287 测试通过** ｜ 注释占比 19.1%
 **桌面验证**：`pnpm verify:desktop` 9 项集成检查全部通过
 
 ### 现在可以打开使用了
@@ -28,7 +28,14 @@ node tools/run-desktop.mjs    # 启动桌面应用
 - **历史**：每条通知的**投递渠道链路**（如"系统通知 · 可用 → 命令行兜底 · 成功"）
 - **设置**：运行状态、渠道可用性、数据目录、版本
 
+**首次启动有 3 步向导**：欢迎（含时区说明）→ 通知权限自检（可发测试通知）→
+开机自启 + **「不需要配置模型」的说明**。全部可跳过，跳过不影响任何定时功能。
+
 关闭窗口后**留在托盘继续运行**；菜单里可显式"完全退出（含后台服务）"。
+
+**开机自启是真实可用的**（不是占位）：向 `~/Library/LaunchAgents` 写 plist，
+`RunAtLoad` + `KeepAlive` 双开，自启的是 **daemon** 而不是界面 ——
+因此用户登录后在后台静默开始工作，不需要看到窗口。
 
 ### R3 交付物
 
@@ -39,6 +46,8 @@ node tools/run-desktop.mjs    # 启动桌面应用
 | `apps/desktop/src/channel-host.ts` | 本地 HTTP 通道服务（回环 + Bearer token + Host 校验） |
 | `apps/desktop/src/supervisor.ts` | daemon 监督者（拉起、探活、有限次重启、**不杀 daemon**） |
 | `tools/verify-desktop.mjs` | 9 项端到端集成验证（真实启动 GUI） |
+| `packages/platform/src/autostart.ts` | macOS LaunchAgent 自启（plist 生成 + 安装/卸载/探测） |
+| `apps/desktop/src/renderer` | 三块界面 + 首次启动向导（3 步，可跳过） |
 
 ### 关键成果：原生通知真的通了
 

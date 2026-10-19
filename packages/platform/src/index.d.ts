@@ -44,6 +44,7 @@ export interface AutostartManager {
 export interface PermissionStatus {
     notifications: "granted" | "denied" | "unknown";
 }
+export * from "./autostart.js";
 export * from "./desktop-channel.js";
 export * from "./macos-notifier.js";
 //# sourceMappingURL=index.d.ts.map

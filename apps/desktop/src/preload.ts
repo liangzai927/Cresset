@@ -29,6 +29,7 @@ import type {
   DesktopApi,
   DiagnosticInfo,
   NotificationsPage,
+  OnboardingState,
   TasksPage,
   UpdateInfo,
 } from "./api-types.js";
@@ -63,6 +64,16 @@ function buildApi(): DesktopApi {
 
     // ── 更新（R3 只做"检查"，不做自动下载）─────────────────────────────
     checkUpdate: () => ipcRenderer.invoke("aegis:update:check") as Promise<UpdateInfo>,
+
+    // ── 首次启动向导 ──────────────────────────────────────────────────
+    getOnboarding: () => ipcRenderer.invoke("aegis:onboarding:get") as Promise<OnboardingState>,
+    completeOnboarding: (choices: { autostart: boolean }) =>
+      ipcRenderer.invoke("aegis:onboarding:complete", choices) as Promise<{
+        ok: boolean;
+        detail: string;
+      }>,
+    setAutostart: (enabled: boolean) =>
+      ipcRenderer.invoke("aegis:autostart:set", enabled) as Promise<{ ok: boolean; detail: string }>,
 
     // ── 事件订阅 ──────────────────────────────────────────────────────
     onDaemonState: (cb: (state: string) => void) => {

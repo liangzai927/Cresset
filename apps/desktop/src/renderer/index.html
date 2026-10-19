@@ -97,6 +97,65 @@
       </section>
     </main>
 
+    <!-- ── 首次启动向导 ─────────────────────────────────────────── -->
+    <dialog id="wizard-dialog">
+      <div class="dialog-body">
+        <!-- 步骤指示 -->
+        <div class="wizard-steps">
+          <span class="wizard-step active" data-step="1">1</span>
+          <span class="wizard-step" data-step="2">2</span>
+          <span class="wizard-step" data-step="3">3</span>
+        </div>
+
+        <!-- 第 1 步：欢迎 -->
+        <section class="wizard-pane active" data-pane="1">
+          <h2>欢迎使用 Aegis</h2>
+          <p class="wizard-text">
+            它会替你盯着时间：到点提醒、休眠后补偿、断网也不影响。
+            它在你关掉这个窗口后仍会在后台继续工作。
+          </p>
+          <p class="hint" id="wizard-tz"></p>
+        </section>
+
+        <!-- 第 2 步：通知权限 -->
+        <section class="wizard-pane" data-pane="2">
+          <h2>先确认通知能送达</h2>
+          <p class="wizard-text">
+            提醒最终要通过系统通知呈现。点下面的按钮发一条测试通知：
+          </p>
+          <p class="wizard-status" id="wizard-notify-status">正在检查…</p>
+          <button type="button" class="btn btn-ghost" id="wizard-test-notify">
+            发送测试通知
+          </button>
+        </section>
+
+        <!-- 第 3 步：开机自启 + 模型说明 -->
+        <section class="wizard-pane" data-pane="3">
+          <h2>让它自己起来</h2>
+          <label class="checkbox">
+            <input type="checkbox" id="wizard-autostart" checked />
+            <span>开机后自动在后台运行提醒服务</span>
+          </label>
+          <p class="hint" id="wizard-autostart-hint">
+            关闭窗口不会停止提醒；只有这里勾选，重启电脑后才会自动恢复。
+          </p>
+
+          <div class="wizard-note">
+            <strong>不需要配置模型</strong><br />
+            所有定时提醒功能都是纯本地的，零模型依赖、零 API 费用、数据不出机器。
+            以后再需要自然语言建提醒等功能时，可在设置里配置模型。
+          </div>
+        </section>
+
+        <p class="form-error hidden" id="wizard-error"></p>
+
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-ghost hidden" id="wizard-prev">上一步</button>
+          <button type="button" class="btn btn-primary" id="wizard-next">下一步</button>
+        </div>
+      </div>
+    </dialog>
+
     <!-- ── 新建提醒对话框 ───────────────────────────────────────── -->
     <dialog id="new-dialog">
       <form method="dialog" class="dialog-body" id="new-form">
