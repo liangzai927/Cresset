@@ -9,6 +9,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# pnpm 内容寻址存储（本机缓存）
+.pnpm-store/
+
 # 运行时数据（绝不应入库）
 .aegis-data/
 *.db
