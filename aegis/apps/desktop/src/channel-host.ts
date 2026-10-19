@@ -166,6 +166,9 @@ export async function startChannelHost(opts: ChannelHostOptions): Promise<Channe
           title: parsed.title,
           outcome: result.outcome,
           layer: result.layer,
+          // 诊断用：若这里为 false，说明上游（daemon）没有透传 occurrenceId，
+          // 界面只能退化为"知道了"。旧 daemon 进程是最常见的原因。
+          hasOccurrence: typeof parsed.occurrenceId === "string",
           ...(result.systemError ? { systemError: result.systemError } : {}),
         });
         respond(res, 200, {

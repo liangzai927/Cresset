@@ -83,6 +83,8 @@
 - `pnpm verify`：322 通过 / 9 跳过
 - `pnpm verify:desktop`：11/11
 - 手动截图确认卡片包含「5 分钟后 / 稍后提醒 / 完成」三个控件
+- 完整链路验证：临时数据目录直接插入带 occurrence 的通知，daemon 真实投递后
+  卡片出现两个按钮；`channel.notified` 日志增加 `hasOccurrence`，用于识别旧 daemon
 - 单测：snooze 在 occurrence 原定时刻为一小时前时，新通知仍约等于 now+5min
 **踩到的坑**：
 - 原通知 payload 只有 title/body，界面拿不到 occurrenceId，无法调用完成/稍后
