@@ -1,0 +1,17 @@
+{
+  "note": "迁移锁：记录已发布迁移的 checksum。修改已发布迁移会被 tools/gen-migrations.mjs 拒绝。",
+  "migrations": [
+    {
+      "id": 1,
+      "name": "init_scheduling",
+      "file": "0001_init_scheduling.sql",
+      "checksum": "d2abdc4bae1792061824849e834ab0acceaf8fad375e1c41e8d4cefb41e5b608"
+    },
+    {
+      "id": 2,
+      "name": "init_runtime_and_security",
+      "file": "0002_init_runtime_and_security.sql",
+      "checksum": "13519c8a02ee7ca44a3ca7a6ab3ad531ee8df6bc83340902db9db58e0d70de5b"
+    }
+  ]
+}

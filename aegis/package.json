@@ -1,0 +1,42 @@
+{
+  "name": "aegis",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Aegis — 个人桌面 Agent 工作台（哨兵层 + 员工层 + 组织层）",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "dev": "node tools/dev.mjs",
+    "start": "node tools/dev.mjs",
+    "desktop": "node tools/run-desktop.mjs",
+    "daemon": "node apps/daemon/dist/main.js",
+    "build": "node tools/build.mjs",
+    "verify": "pnpm run boundaries && pnpm run comments && pnpm run devlog:check && pnpm run typecheck && pnpm run build && pnpm run resolve && pnpm run lint && pnpm run test",
+    "verify:desktop": "node tools/verify-desktop.mjs",
+    "boundaries": "node tools/check-boundaries.mjs",
+    "comments": "node tools/check-comments.mjs",
+    "typecheck": "tsc -p tsconfig.dev.json --noEmit",
+    "resolve": "node tools/check-resolve.mjs",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "spike": "node tools/run-spikes.mjs",
+    "spike:report": "node tools/run-spikes.mjs --report",
+    "test:watch": "vitest",
+    "lint:fix": "biome check --write .",
+    "comments:report": "node tools/check-comments.mjs --report",
+    "hooks:install": "node tools/install-hooks.mjs",
+    "devlog": "node tools/devlog.mjs",
+    "devlog:add": "node tools/devlog.mjs add",
+    "devlog:check": "node tools/devlog.mjs check"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.2.0",
+    "@types/node": "^24.0.0",
+    "electron": "^44.9.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.9.0",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.2.0"
+  }
+}

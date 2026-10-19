@@ -1,0 +1,828 @@
+/**
+ * Aegis 界面逻辑（renderer）
+ *
+ * ## 这一层能做什么、不能做什么
+ *
+ * 只能调用 `window.aegis` 上的白名单方法（见 preload.ts）。
+ * **不能**访问文件系统、子进程、daemon token —— 这些都在主进程里。
+ *
+ * ## 设计取舍：为什么不用框架
+ *
+ * 界面只有三个面板 + 一个对话框，数据量在百条量级。
+ * 引 React/Vue 会带来：构建链（jsx/swc）、依赖升级、状态管理样板，
+ * 而换来的收益（组件复用、响应式）在这个规模上并不明显。
+ *
+ * 用原生 DOM 的代价是手写渲染函数，但好处是：
+ *   - 零构建步骤（`loadFile` 直接跑）
+ *   - 出问题时浏览器 DevTools 里看到的就是源码，没有 sourcemap 断层
+ *   - 没有"框架版本升级导致界面坏掉"这一类风险
+ *
+ * 若将来界面复杂到需要状态管理，再引入框架 —— 那时重构也只涉及本文件。
+ */
+
+"use strict";
+
+// ── 小工具 ──────────────────────────────────────────────────────────────
+
+const $ = (id) => document.getElementById(id);
+
+/** 把 UTC 毫秒格式化为本地 `MM-DD HH:mm`（历史列表用） */
+function fmtDateTime(ms) {
+  const d = new Date(ms);
+  const p2 = (n) => String(n).padStart(2, "0");
+  return `${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;
+}
+
+/** 墙上时间 `YYYY-MM-DDTHH:mm` → `MM-DD HH:mm`（任务列表用） */
+function fmtWall(wall) {
+  if (!wall) return "已结束";
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(wall);
+  if (!m) return wall;
+  return `${m[2]}-${m[3]} ${m[4]}:${m[5]}`;
+}
+
+/** 渠道名的人话映射 */
+const CHANNEL_LABEL = {
+  os_notification: "系统通知",
+  cli_fallback: "命令行兜底",
+};
+
+/** 投递结果的人话映射 */
+const OUTCOME_LABEL = {
+  success: "成功",
+  transient_error: "瞬时错误",
+  permanent_error: "不可用",
+  timeout: "超时",
+};
+
+/** 通知状态的人话映射 */
+const STATE_LABEL = {
+  pending: "待投递",
+  delivering: "投递中",
+  delivered: "已送达",
+  failed: "失败",
+  suppressed: "已抑制",
+};
+
+function el(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined && text !== null) node.textContent = String(text);
+  return node;
+}
+
+// ── 状态 ────────────────────────────────────────────────────────────────
+
+const state = {
+  tab: "tasks",
+  /** 上次状态查询结果（避免重复请求） */
+  status: null,
+  /** 新建对话框里选中的星期 */
+  selectedWeekdays: new Set([1]),
+  /** 横幅是否被用户手动关掉 */
+  bannerDismissed: false,
+};
+
+// ── 横幅 ────────────────────────────────────────────────────────────────
+
+/**
+ * 显示横幅。
+ *
+ * 语义：这是"必须让用户知道"的信息（降级、失败、daemon 不可用）。
+ * 因此它**不是** toast —— 不会自动消失，必须用户手动关闭或状态恢复。
+ */
+function showBanner(text, level) {
+  if (state.bannerDismissed) return;
+  const banner = $("banner");
+  $("banner-text").textContent = text;
+  banner.classList.toggle("warn", level === "warn");
+  banner.classList.remove("hidden");
+}
+
+function hideBanner() {
+  $("banner").classList.add("hidden");
+}
+
+$("banner-close").addEventListener("click", () => {
+  state.bannerDismissed = true;
+  hideBanner();
+});
+
+// ── 状态刷新 ────────────────────────────────────────────────────────────
+
+async function refreshStatus() {
+  let status;
+  try {
+    status = await window.aegis.getStatus();
+  } catch (err) {
+    setStatusIndicator("err", "主进程通信失败");
+    showBanner(`无法与后台通信：${err.message}`, "err");
+    return;
+  }
+  state.status = status;
+
+  // ── 顶部状态灯与文案
+  const dot = $("status-dot");
+  dot.className = "dot";
+
+  // 未就绪时禁用所有需要后端的按钮 —— 让用户"点不动"比"点了报错"清楚得多。
+  // 这也是对"daemon 尚未就绪"那次事故的直接改进：
+  // 当时向导第 2 步邀请用户点"发送测试通知"，但后端可能还在启动。
+  const ready = status.daemonReady === true;
+  for (const id of ["btn-test-notify", "btn-new", "btn-pause-all", "btn-resume-all", "btn-refresh-history", "wizard-test-notify"]) {
+    const el2 = $(id);
+    if (el2) el2.disabled = !ready;
+  }
+
+  if (status.daemonState === "running") {
+    const uptime = formatUptime(status.health ? status.health.uptimeS : 0);
+    const nativeOk = status.channels.some((c) => c.channel === "os_notification" && c.ok);
+    if (nativeOk) {
+      dot.classList.add("ok");
+      $("status-text").textContent = `运行中 · ${uptime}`;
+    } else {
+      // 原生不可用但 CLI 兜底在 → 降级，不是失败
+      dot.classList.add("warn");
+      $("status-text").textContent = `运行中（兜底模式）· ${uptime}`;
+      showBanner("系统通知通道不可用，正在使用命令行兜底。提醒仍会送达，但样式较简单。", "warn");
+    }
+  } else if (status.daemonState === "starting") {
+    dot.classList.add("warn");
+    $("status-text").textContent = "后台服务启动中…";
+  } else if (status.daemonState === "crashed") {
+    dot.classList.add("err");
+    $("status-text").textContent = "后台服务已崩溃";
+    showBanner(`后台服务异常：${status.daemonReason ?? "未知原因"}。正在尝试自动重启。`, "err");
+  } else if (status.daemonState === "unavailable") {
+    dot.classList.add("err");
+    $("status-text").textContent = "后台服务不可用";
+    showBanner(
+      `后台服务无法启动：${status.daemonReason ?? "未知原因"}。提醒不会触发，请检查设置页的诊断信息。`,
+      "err",
+    );
+  } else {
+    $("status-text").textContent = "后台服务未运行";
+    showBanner("后台服务未运行，提醒不会触发。", "err");
+  }
+
+  // ── daemon 在线但报告降级原因 → 也要可见
+  if (status.health && status.health.degradedReasons.length > 0) {
+    showBanner(`后台服务降级中：${status.health.degradedReasons.join("；")}`, "warn");
+  }
+
+  // ── 状态恢复了 → 自动隐藏横幅（用户手动关过则不再打扰）
+  if (
+    status.daemonState === "running" &&
+    (!status.health || status.health.degradedReasons.length === 0) &&
+    status.channels.some((c) => c.channel === "os_notification" && c.ok)
+  ) {
+    hideBanner();
+    state.bannerDismissed = false;
+  }
+
+  renderSettings(status);
+}
+
+function setStatusIndicator(level, text) {
+  $("status-dot").className = `dot ${level}`;
+  $("status-text").textContent = text;
+}
+
+function formatUptime(seconds) {
+  if (seconds < 60) return `${seconds} 秒`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)} 分钟`;
+  if (seconds < 86400) return `${(seconds / 3600).toFixed(1)} 小时`;
+  return `${(seconds / 86400).toFixed(1)} 天`;
+}
+
+// ── 提醒列表 ────────────────────────────────────────────────────────────
+
+async function refreshTasks() {
+  let page;
+  try {
+    page = await window.aegis.listTasks();
+  } catch (err) {
+    showBanner(`读取提醒失败：${err.message}`, "err");
+    return;
+  }
+
+  const list = $("task-list");
+  list.textContent = "";
+
+  if (page.items.length === 0) {
+    $("tasks-empty").classList.remove("hidden");
+    return;
+  }
+  $("tasks-empty").classList.add("hidden");
+
+  for (const task of page.items) {
+    list.appendChild(renderTaskItem(task));
+  }
+}
+
+function renderTaskItem(task) {
+  const li = el("li", `task-item${task.enabled ? "" : " disabled"}`);
+
+  const main = el("div", "task-main");
+  const titleRow = el("div", "task-title");
+  titleRow.appendChild(el("span", "", task.title));
+  if (task.priority === "important") {
+    titleRow.appendChild(el("span", "badge", "重要"));
+  }
+  main.appendChild(titleRow);
+
+  const meta = el("div", "task-meta");
+  meta.appendChild(el("span", "", task.repeatLabel));
+  meta.appendChild(el("span", "", `下次 ${fmtWall(task.nextFireWall)}`));
+  if (task.firedCount > 0) {
+    meta.appendChild(el("span", "", `已触发 ${task.firedCount} 次`));
+  }
+  if (!task.enabled) {
+    meta.appendChild(el("span", "", "已暂停"));
+  }
+  main.appendChild(meta);
+
+  if (task.notes) {
+    main.appendChild(el("div", "history-body", task.notes));
+  }
+
+  const actions = el("div", "task-actions");
+
+  const toggle = el("button", "btn btn-ghost", task.enabled ? "暂停" : "恢复");
+  toggle.addEventListener("click", async () => {
+    toggle.disabled = true;
+    try {
+      if (task.enabled) await window.aegis.pauseTask(task.id);
+      else await window.aegis.resumeTask(task.id);
+      await refreshTasks();
+      await refreshStatus();
+    } catch (err) {
+      showBanner(`操作失败：${err.message}`, "err");
+    } finally {
+      toggle.disabled = false;
+    }
+  });
+  actions.appendChild(toggle);
+
+  const del = el("button", "btn btn-ghost btn-danger", "删除");
+  del.addEventListener("click", async () => {
+    // 删除是不可逆的 —— 用系统确认框而不是自己画一个
+    if (!window.confirm(`删除提醒「${task.title}」？`)) return;
+    del.disabled = true;
+    try {
+      await window.aegis.deleteTask(task.id);
+      await refreshTasks();
+    } catch (err) {
+      showBanner(`删除失败：${err.message}`, "err");
+      del.disabled = false;
+    }
+  });
+  actions.appendChild(del);
+
+  li.appendChild(main);
+  li.appendChild(actions);
+  return li;
+}
+
+// ── 历史 ────────────────────────────────────────────────────────────────
+
+async function refreshHistory() {
+  let page;
+  try {
+    page = await window.aegis.listNotifications(100);
+  } catch (err) {
+    showBanner(`读取历史失败：${err.message}`, "err");
+    return;
+  }
+
+  const list = $("history-list");
+  list.textContent = "";
+
+  if (page.items.length === 0) {
+    $("history-empty").classList.remove("hidden");
+    return;
+  }
+  $("history-empty").classList.add("hidden");
+
+  for (const n of page.items) {
+    const li = el(
+      "li",
+      `history-item${n.state === "failed" ? " failed" : n.state === "pending" ? " pending" : ""}`,
+    );
+
+    const head = el("div", "history-head");
+    head.appendChild(el("span", "history-time", fmtDateTime(n.scheduledFor)));
+    head.appendChild(el("span", "history-title", n.title));
+    if (n.isCatchup) {
+      head.appendChild(el("span", "chan-chip", "补偿"));
+    }
+    head.appendChild(el("span", "chan-chip", STATE_LABEL[n.state] ?? n.state));
+    li.appendChild(head);
+
+    if (n.body) {
+      li.appendChild(el("div", "history-body", n.body));
+    }
+
+    if (n.attempts.length > 0) {
+      const chans = el("div", "history-channels");
+      for (const a of n.attempts) {
+        const ok = a.outcome === "success";
+        const chip = el(
+          "span",
+          `chan-chip ${ok ? "ok" : "bad"}`,
+          `${CHANNEL_LABEL[a.channel] ?? a.channel} · ${OUTCOME_LABEL[a.outcome] ?? a.outcome}`,
+        );
+        if (a.error) chip.title = a.error;
+        chans.appendChild(chip);
+      }
+      li.appendChild(chans);
+    }
+
+    list.appendChild(li);
+  }
+}
+
+// ── 设置 / 诊断 ─────────────────────────────────────────────────────────
+
+function renderSettings(status) {
+  // 运行状态
+  const basic = $("diag-basic");
+  basic.textContent = "";
+  const addKv = (parent, k, v) => {
+    parent.appendChild(el("dt", "", k));
+    parent.appendChild(el("dd", "", v));
+  };
+
+  const stateLabel = {
+    running: "运行中",
+    starting: "启动中",
+    crashed: "已崩溃",
+    unavailable: "不可用",
+    stopped: "未运行",
+  };
+  addKv(basic, "后台服务", stateLabel[status.daemonState] ?? status.daemonState);
+  if (status.daemonVersion) addKv(basic, "服务版本", status.daemonVersion);
+  if (status.health) {
+    addKv(basic, "已运行", formatUptime(status.health.uptimeS));
+    addKv(basic, "调度轮次", `${status.health.tickCount} 次`);
+    addKv(basic, "内存占用", `${Math.round(status.health.rssBytes / 1024 / 1024)} MB`);
+    if (status.health.nextDueAt) {
+      addKv(basic, "下次待投递", fmtDateTime(status.health.nextDueAt));
+    }
+  }
+  addKv(basic, "时区", status.timeZone);
+  // 系统通知要如实说"能不能显示"，而不是"API 支不支持"。
+  // 开发版应用在 macOS 上被系统拒绝投递，说"支持"会让用户以为坏了。
+  addKv(
+    basic,
+    "系统通知",
+    status.systemNotificationOk ? "可用" : "不可用（改用窗口提醒）",
+  );
+  if (!status.systemNotificationOk && status.systemNotificationDetail) {
+    const dt = el("dt", "", "");
+    const dd = el("dd", "");
+    // 原因单独一行展示，便于判断是否需要正式打包签名
+    dd.textContent = status.systemNotificationDetail;
+    dd.classList.add("hint");
+    basic.appendChild(dt);
+    basic.appendChild(dd);
+  }
+
+  // 渠道
+  const channels = $("channel-list");
+  channels.textContent = "";
+  if (status.channels.length === 0) {
+    channels.appendChild(el("li", "channel-item", "（后台未运行，无法探测）"));
+  }
+  for (const c of status.channels) {
+    const li = el("li", "channel-item");
+    li.appendChild(el("span", "name", c.channel));
+    li.appendChild(el("span", "detail", c.detail));
+    li.appendChild(el("span", `state ${c.ok ? "ok" : "bad"}`, c.ok ? "可用" : "不可用"));
+    channels.appendChild(li);
+  }
+
+  // 路径
+  const paths = $("diag-paths");
+  paths.textContent = "";
+  addKv(paths, "应用版本", status.appVersion);
+  addKv(paths, "数据目录", status.dataDir);
+  addKv(paths, "数据库", status.dbFile);
+}
+
+// ── 标签页切换 ──────────────────────────────────────────────────────────
+
+function switchTab(name) {
+  state.tab = name;
+  for (const tab of document.querySelectorAll(".tab")) {
+    tab.classList.toggle("active", tab.dataset.tab === name);
+  }
+  for (const panel of document.querySelectorAll(".panel")) {
+    panel.classList.toggle("active", panel.id === `panel-${name}`);
+  }
+  // 切到某个页时按需拉数据（避免启动时全部请求）
+  if (name === "history") void refreshHistory();
+  if (name === "settings") void refreshStatus();
+}
+
+for (const tab of document.querySelectorAll(".tab")) {
+  tab.addEventListener("click", () => switchTab(tab.dataset.tab));
+}
+
+// ── 新建提醒对话框 ──────────────────────────────────────────────────────
+
+const dialog = $("new-dialog");
+
+function openNewDialog() {
+  $("form-error").classList.add("hidden");
+  dialog.showModal();
+}
+
+$("btn-new").addEventListener("click", openNewDialog);
+$("btn-cancel").addEventListener("click", () => dialog.close());
+
+// 星期选择器（只在 weekly 模式下显示）
+const WEEKDAY_NAMES = ["一", "二", "三", "四", "五", "六", "日"];
+const picker = $("weekday-picker");
+for (let d = 1; d <= 7; d++) {
+  const b = el("button", "", WEEKDAY_NAMES[d - 1]);
+  b.type = "button";
+  b.dataset.day = String(d);
+  b.classList.toggle("on", state.selectedWeekdays.has(d));
+  b.addEventListener("click", () => {
+    if (state.selectedWeekdays.has(d)) state.selectedWeekdays.delete(d);
+    else state.selectedWeekdays.add(d);
+    b.classList.toggle("on", state.selectedWeekdays.has(d));
+  });
+  picker.appendChild(b);
+}
+
+// 按重复模式显示/隐藏附加参数
+$("f-repeat").addEventListener("change", (e) => {
+  const mode = e.target.value;
+  $("sub-weekly").classList.toggle("hidden", mode !== "weekly");
+  $("sub-monthly").classList.toggle("hidden", mode !== "monthly");
+  $("sub-interval").classList.toggle("hidden", mode !== "every_minutes");
+});
+
+/**
+ * 根据表单构造墙上时间。
+ *
+ * 注意：这里以**本地时区**生成 `YYYY-MM-DDTHH:mm`，
+ * 与 daemon 侧的 `tzid: system` 语义一致。
+ */
+function buildFireAtWall() {
+  const time = $("f-time").value; // HH:mm
+  if (!/^\d{2}:\d{2}$/.test(time)) throw new Error("请选择触发时间");
+
+  const dayChoice = $("f-day").value;
+  const now = new Date();
+  const target = new Date(now);
+  if (dayChoice === "tomorrow") target.setDate(target.getDate() + 1);
+
+  const [hh, mm] = time.split(":").map(Number);
+  target.setHours(hh, mm, 0, 0);
+
+  // 选"今天"但时刻已过 → 顺延到明天（符合直觉，避免创建一条立即过期的提醒）
+  if (dayChoice === "today" && target.getTime() <= now.getTime()) {
+    target.setDate(target.getDate() + 1);
+  }
+
+  const p2 = (n) => String(n).padStart(2, "0");
+  return `${target.getFullYear()}-${p2(target.getMonth() + 1)}-${p2(target.getDate())}T${p2(target.getHours())}:${p2(target.getMinutes())}`;
+}
+
+$("new-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const errBox = $("form-error");
+  errBox.classList.add("hidden");
+
+  const title = $("f-title").value.trim();
+  if (!title) {
+    errBox.textContent = "标题不能为空";
+    errBox.classList.remove("hidden");
+    return;
+  }
+
+  const mode = $("f-repeat").value;
+  const repeat = { mode };
+
+  if (mode === "weekly") {
+    const days = [...state.selectedWeekdays].sort((a, b) => a - b);
+    if (days.length === 0) {
+      errBox.textContent = "请至少选择一天";
+      errBox.classList.remove("hidden");
+      return;
+    }
+    repeat.byWeekday = days;
+  }
+  if (mode === "monthly") {
+    const day = Number($("f-monthday").value);
+    if (!Number.isInteger(day) || day < 1 || day > 31) {
+      errBox.textContent = "每月日期需为 1-31";
+      errBox.classList.remove("hidden");
+      return;
+    }
+    repeat.byMonthDay = day;
+  }
+  if (mode === "every_minutes") {
+    const n = Number($("f-interval").value);
+    if (!Number.isInteger(n) || n < 1) {
+      errBox.textContent = "间隔需为正整数分钟";
+      errBox.classList.remove("hidden");
+      return;
+    }
+    repeat.intervalMinutes = n;
+  }
+
+  let firstFireAtWall;
+  try {
+    firstFireAtWall = buildFireAtWall();
+  } catch (err) {
+    errBox.textContent = err.message;
+    errBox.classList.remove("hidden");
+    return;
+  }
+
+  const submit = $("btn-submit");
+  submit.disabled = true;
+  submit.textContent = "创建中…";
+
+  try {
+    await window.aegis.createTask({
+      title,
+      ...($("f-notes").value.trim() ? { notes: $("f-notes").value.trim() } : {}),
+      priority: $("f-important").checked ? "important" : "normal",
+      firstFireAtWall,
+      repeat,
+    });
+    dialog.close();
+    // 重置表单（保留时间/重复模式的默认值，减少重复输入）
+    $("f-title").value = "";
+    $("f-notes").value = "";
+    $("f-important").checked = false;
+    await refreshTasks();
+    await refreshStatus();
+  } catch (err) {
+    errBox.textContent = err.message;
+    errBox.classList.remove("hidden");
+  } finally {
+    submit.disabled = false;
+    submit.textContent = "创建";
+  }
+});
+
+// ── 顶部与工具栏动作 ────────────────────────────────────────────────────
+
+$("btn-test-notify").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await window.aegis.testNotify();
+    if (state.tab === "history") await refreshHistory();
+  } catch (err) {
+    showBanner(`测试通知失败：${err.message}`, "err");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-pause-all").addEventListener("click", async () => {
+  try {
+    await window.aegis.pauseAll();
+    await refreshTasks();
+  } catch (err) {
+    showBanner(`暂停失败：${err.message}`, "err");
+  }
+});
+
+$("btn-resume-all").addEventListener("click", async () => {
+  try {
+    await window.aegis.resumeAll();
+    await refreshTasks();
+  } catch (err) {
+    showBanner(`恢复失败：${err.message}`, "err");
+  }
+});
+
+$("btn-refresh-history").addEventListener("click", () => void refreshHistory());
+
+$("btn-check-update").addEventListener("click", async () => {
+  const box = $("update-text");
+  try {
+    const info = await window.aegis.checkUpdate();
+    box.textContent = info.message;
+    box.classList.remove("hidden");
+  } catch (err) {
+    box.textContent = `检查失败：${err.message}`;
+    box.classList.remove("hidden");
+  }
+});
+
+
+// ── 应用内强提醒（系统通知不可用时的兜底） ──────────────────────────────
+
+/**
+ * 显示一条需要用户确认的提醒。
+ *
+ * 与普通 toast 的区别：**不会自动消失**。它是系统通知的替代品，
+ * 自动消失就等于"提醒没送达"。用户可以点"知道了"关闭。
+ */
+function showAlert(payload) {
+  const stack = $("alert-stack");
+  if (!stack) return;
+
+  const card = el("div", "alert-card");
+
+  const head = el("div", "alert-head");
+  head.appendChild(el("span", "alert-icon", "🔔"));
+  head.appendChild(el("span", "alert-title", payload.title || "提醒"));
+  card.appendChild(head);
+
+  if (payload.body) {
+    card.appendChild(el("div", "alert-body", payload.body));
+  }
+
+  // 说明为什么是窗口提醒而不是系统通知 —— 否则用户会疑惑"为什么不是弹窗"
+  if (state.status && state.status.systemNotificationOk === false) {
+    card.appendChild(
+      el("div", "alert-note", "系统通知当前不可用，已用窗口提醒替代（开发版应用未经签名）"),
+    );
+  }
+
+  const actions = el("div", "alert-actions");
+  const dismiss = el("button", "btn btn-primary", "知道了");
+  dismiss.addEventListener("click", () => card.remove());
+  actions.appendChild(dismiss);
+  card.appendChild(actions);
+
+  stack.appendChild(card);
+
+  // 提醒出现时把窗口标题闪一下，进一步引起注意
+  document.title = `🔔 ${payload.title || "提醒"} — Aegis`;
+  setTimeout(() => {
+    document.title = "Aegis";
+  }, 4000);
+}
+
+// ── 事件订阅与初始化 ────────────────────────────────────────────────────
+
+// 主进程要求刷新（daemon 状态变化、任务/通知变更）
+window.aegis.onRefresh(() => {
+  void refreshStatus();
+  if (state.tab === "tasks") void refreshTasks();
+  if (state.tab === "history") void refreshHistory();
+});
+
+window.aegis.onDaemonState(() => {
+  void refreshStatus();
+});
+
+window.aegis.onAlert((payload) => {
+  showAlert(payload);
+  // 提醒同时刷新历史，让用户能立刻在"历史"里看到这条
+  if (state.tab === "history") void refreshHistory();
+});
+
+
+// ── 首次启动向导 ────────────────────────────────────────────────────────
+
+const wizard = {
+  step: 1,
+  total: 3,
+  /** 首次查询结果（含是否受支持通知） */
+  info: null,
+};
+
+function wizardGo(step) {
+  wizard.step = Math.max(1, Math.min(wizard.total, step));
+
+  for (const pane of document.querySelectorAll(".wizard-pane")) {
+    pane.classList.toggle("active", Number(pane.dataset.pane) === wizard.step);
+  }
+  for (const dot of document.querySelectorAll(".wizard-step")) {
+    const n = Number(dot.dataset.step);
+    dot.classList.toggle("active", n === wizard.step);
+    dot.classList.toggle("done", n < wizard.step);
+  }
+
+  $("wizard-prev").classList.toggle("hidden", wizard.step === 1);
+  $("wizard-next").textContent = wizard.step === wizard.total ? "开始使用" : "下一步";
+  $("wizard-error").classList.add("hidden");
+}
+
+/** 打开向导（仅在首次配置时调用） */
+async function openWizard() {
+  try {
+    wizard.info = await window.aegis.getOnboarding();
+  } catch (err) {
+    // 读不到就不弹向导 —— 不能因为"配置读取失败"把用户挡在门外
+    console.warn("读取首次配置状态失败", err);
+    return;
+  }
+  if (!wizard.info.needed) return;
+
+  // 时区展示：让用户明确"触发时间按哪个时区算"
+  $("wizard-tz").textContent = `提醒时间按本机时区（${wizard.info.timeZone}）计算。`;
+
+  // 通知状态：必须按"实际能不能显示"来说，而不是 API 是否存在
+  const status = $("wizard-notify-status");
+  if (wizard.info.systemNotificationOk) {
+    status.className = "wizard-status ok";
+    status.textContent = "系统通知可用。建议点下面的按钮确认一次。";
+  } else {
+    status.className = "wizard-status warn";
+    status.textContent =
+      "系统通知暂时不可用（开发版应用未签名，macOS 不允许投递）。" +
+      "此时提醒会用「窗口提醒」送达：窗口弹到最前、响一声、并显示一条需要你确认的横幅。";
+  }
+
+  // 自启状态
+  $("wizard-autostart").checked = true;
+  if (wizard.info.autostartEnabled) {
+    $("wizard-autostart-hint").textContent = "已开启。关闭窗口不会停止提醒。";
+  }
+
+  wizardGo(1);
+  $("wizard-dialog").showModal();
+}
+
+$("wizard-prev").addEventListener("click", () => wizardGo(wizard.step - 1));
+
+$("wizard-test-notify").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const status = $("wizard-notify-status");
+  btn.disabled = true;
+  status.className = "wizard-status";
+  status.textContent = "正在发送…";
+  try {
+    await window.aegis.testNotify();
+    status.className = "wizard-status ok";
+    status.textContent = "已发送。如果你看到了通知，说明通道正常。";
+  } catch (err) {
+    status.className = "wizard-status bad";
+    status.textContent = `发送失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("wizard-next").addEventListener("click", async (e) => {
+  if (wizard.step < wizard.total) {
+    wizardGo(wizard.step + 1);
+    return;
+  }
+
+  // 最后一步 → 保存
+  const btn = e.currentTarget;
+  const errBox = $("wizard-error");
+  btn.disabled = true;
+  btn.textContent = "保存中…";
+
+  try {
+    const r = await window.aegis.completeOnboarding({
+      autostart: $("wizard-autostart").checked,
+    });
+    if (!r.ok) {
+      errBox.textContent = r.detail;
+      errBox.classList.remove("hidden");
+      return;
+    }
+    $("wizard-dialog").close();
+    // 自启失败时 r.ok 仍为 true（不阻塞使用），但 detail 说明了原因
+    if (r.detail && !r.detail.includes("配置完成")) {
+      showBanner(r.detail, "warn");
+    }
+    await refreshStatus();
+  } catch (err) {
+    errBox.textContent = err.message;
+    errBox.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "开始使用";
+  }
+});
+
+/** 启动：先拿状态（决定是否显示横幅），再拉列表 */
+async function init() {
+  // 初始页签可由 `?tab=history` 指定（深链接与截图测试共用这条通道）
+  const initial = new URLSearchParams(location.search).get("tab");
+  if (initial && ["tasks", "history", "settings"].includes(initial)) {
+    switchTab(initial);
+  }
+
+  await refreshStatus();
+  await refreshTasks();
+
+  // 首次配置向导：只在没配过时弹。
+  // 截图模式下跳过（否则截图全是向导）。
+  if (!new URLSearchParams(location.search).get("capture")) {
+    void openWizard();
+  }
+  // 每 15 秒轮询状态：daemon 的 uptime / tick 会变，且能发现"悄悄挂了"
+  setInterval(() => {
+    void refreshStatus();
+  }, 15_000);
+}
+
+void init();

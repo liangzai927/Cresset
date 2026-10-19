@@ -1,0 +1,32 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "lib": ["ES2023"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "baseUrl": ".",
+    "paths": {
+      "@aegis/clock": ["packages/clock/src/index.ts"],
+      "@aegis/contracts": ["packages/contracts/src/index.ts"],
+      "@aegis/ipc-contract": ["packages/ipc-contract/src/index.ts"],
+      "@aegis/storage": ["packages/storage/src/index.ts"],
+      "@aegis/secrets": ["packages/secrets/src/index.ts"],
+      "@aegis/platform": ["packages/platform/src/index.ts"],
+      "@aegis/redaction-gateway": ["packages/redaction-gateway/src/index.ts"],
+      "@aegis/product": ["packages/product/src/index.ts"],
+      "@aegis/recurrence": ["packages/recurrence/src/index.ts"],
+      "@aegis/scheduler": ["packages/scheduler/src/index.ts"],
+      "@aegis/daemon/ipc-client": ["apps/daemon/src/ipc/client.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "apps/*/src/**/*.ts", "tools/**/*.mjs"],
+  "exclude": ["**/dist/**", "**/node_modules/**", "**/*.d.ts", "**/*.js"]
+}

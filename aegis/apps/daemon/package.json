@@ -1,0 +1,36 @@
+{
+  "name": "@aegis/daemon",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/main.js",
+  "bin": {
+    "aegis-daemon": "./dist/main.js"
+  },
+  "scripts": {
+    "start": "node ./dist/main.js"
+  },
+  "dependencies": {
+    "@aegis/clock": "workspace:*",
+    "@aegis/contracts": "workspace:*",
+    "@aegis/ipc-contract": "workspace:*",
+    "@aegis/platform": "workspace:*",
+    "@aegis/redaction-gateway": "workspace:*",
+    "@aegis/secrets": "workspace:*",
+    "@aegis/storage": "workspace:*",
+    "@aegis/product": "workspace:*",
+    "zod": "^3.24.0",
+    "@aegis/scheduler": "workspace:*",
+    "@aegis/recurrence": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "default": "./dist/main.js"
+    },
+    "./ipc-client": {
+      "types": "./dist/ipc/client.d.ts",
+      "default": "./dist/ipc/client.js"
+    }
+  }
+}

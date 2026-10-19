@@ -1,0 +1,23 @@
+# 依赖与构建产物
+node_modules/
+dist/
+*.tsbuildinfo
+# 构建意外落在 src/ 下的产物（早前 tsc -b 实验遗留过，这里显式忽略）
+*.d.ts.map
+# 生成声明只应出现在 dist/；任何 src/ 下的 .d.ts 都是构建意外
+src/**/*.d.ts
+
+# spike 产物（含打包的 Node 运行时副本，体积大且可复现生成）
+spike-artifacts/
+
+# 运行时数据（绝不应入库）
+.aegis-data/
+*.db
+*.db-wal
+*.db-shm
+
+# 本机与编辑器
+.DS_Store
+.vscode/
+.idea/
+*.log

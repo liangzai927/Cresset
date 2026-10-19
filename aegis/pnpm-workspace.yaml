@@ -1,0 +1,12 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "tools/*"
+
+# 构建脚本放行（pnpm 11 默认拦截依赖的构建脚本）
+# 说明：存储层已改用 Node 内置 node:sqlite，故不需要 better-sqlite3（S2 结论）
+allowBuilds:
+  esbuild: true
+  # Electron 的 postinstall 会下载平台二进制（约 100–200 MB）。
+  # 必须放行，否则 node_modules/electron 只有 JS 包装器、没有可执行文件。
+  electron: true
