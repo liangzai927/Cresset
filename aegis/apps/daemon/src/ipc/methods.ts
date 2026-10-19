@@ -180,7 +180,11 @@ export function createMethods(scheduler: Scheduler): Record<string, (params: unk
         .parse(params ?? {});
 
       const onlyEnabled = p.filter !== "paused";
-      const list = tasks.list({ onlyEnabled });
+      // 默认/今天视图只显示"还会再响"的任务。已结束的一次性任务留在通知历史里，
+      // 不占提醒列表；显式传 all 才把它们列出来（CLI/诊断用）。
+      const list = tasks
+        .list({ onlyEnabled })
+        .filter((t) => p.filter === "all" || p.filter === "paused" || scheduler.nextFireAt(t) !== null);
       const limit = p.limit ?? 100;
       // 分页用偏移量编码在 cursor 里（游标语义简单化：本阶段数据量小，偏移足够）
       const offset = p.cursor ? Number(p.cursor) || 0 : 0;
@@ -241,8 +245,16 @@ export function createMethods(scheduler: Scheduler): Record<string, (params: unk
 
     "task.complete": async (params) => {
       const p = z.object({ occurrenceId: z.string() }).strict().parse(params);
+      const occ = scheduler.daos.occurrences.getById(p.occurrenceId);
+      const task = occ ? tasks.getById(occ.taskId) : null;
       // "完成"= 把该实例标记为已投递并从待办中移除（不再补发）
       const ok = scheduler.daos.occurrences.markCompleted(p.occurrenceId);
+      // 一次性提醒完成后没有"下一次"了：软删除任务，让它退出提醒列表；
+      // 通知历史仍在。重复提醒只结束本次实例，任务保留。
+      if (task?.recurrence.rrule === null) {
+        const removed = tasks.softDelete(task.id);
+        return { ok: ok || removed };
+      }
       return { ok };
     },
 

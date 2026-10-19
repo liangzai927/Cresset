@@ -417,6 +417,63 @@ describe("R2：调度器接入与 RPC 方法", () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
+  it("★ 完成一次性提醒后从列表移除，重复提醒保留", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-complete-"));
+    const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
+    const hs = readHandshakeFile(join(dataDir, "handshake.json"));
+    const client = new IpcClient({ endpoint: hs.endpoint, token: hs.token });
+    await client.connect();
+
+    const now = Date.now();
+    const target = new Date(now + 3_600_000);
+    const p2 = (n: number): string => String(n).padStart(2, "0");
+    const wall = `${target.getFullYear()}-${p2(target.getMonth() + 1)}-${p2(target.getDate())}T${p2(target.getHours())}:${p2(target.getMinutes())}`;
+
+    const oneTime = (await client.call("task.create", {
+      title: "一次性完成",
+      firstFireAtWall: wall,
+      repeat: { mode: "once" },
+      priority: "normal",
+    })) as { id: string };
+    const recurring = (await client.call("task.create", {
+      title: "重复提醒",
+      firstFireAtWall: wall,
+      repeat: { mode: "daily" },
+      priority: "normal",
+    })) as { id: string };
+
+    const insertDelivered = (taskId: string): string => {
+      const id = randomUUID();
+      daemon.db
+        .prepare(
+          `INSERT INTO occurrence (id, task_id, scheduled_at, scheduled_wall, state, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 'delivered', ?, ?)`,
+        )
+        .run(id, taskId, now - 1_000, wall, now - 1_000, now);
+      return id;
+    };
+
+    const done = (await client.call("task.complete", {
+      occurrenceId: insertDelivered(oneTime.id),
+    })) as { ok: boolean };
+    expect(done.ok).toBe(true);
+
+    const afterOne = (await client.call("task.list", {})) as { items: Array<{ id: string }> };
+    expect(afterOne.items.map((i) => i.id)).not.toContain(oneTime.id);
+
+    const recurringDone = (await client.call("task.complete", {
+      occurrenceId: insertDelivered(recurring.id),
+    })) as { ok: boolean };
+    expect(recurringDone.ok).toBe(false); // 已投递实例不再 markCompleted，但任务不能被删
+
+    const afterRecurring = (await client.call("task.list", {})) as { items: Array<{ id: string }> };
+    expect(afterRecurring.items.map((i) => i.id)).toContain(recurring.id);
+
+    client.close();
+    await daemon.stop("test");
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
   it("★ 契约里定义的方法都已注册（防止 E_METHOD_NOT_FOUND 回归）", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-methods-"));
     const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
