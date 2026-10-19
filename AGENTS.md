@@ -24,6 +24,27 @@
 
 文档在 `../personal-agent/`：PRD、技术选型与架构设计、M0+M1 详细设计、R0 spike 报告。
 
+## 第 0 条：先读流水账，改完写流水账
+
+> **这是本项目最重要的一条工作纪律，由 git pre-commit hook 机械强制。**
+
+| 时机 | 动作 |
+| --- | --- |
+| **动手之前** | 读 `docs/DEVLOG.md` 的「当前状态快照」+ 最近 3 条记录 |
+| **改完代码** | 在 `docs/DEVLOG.md` 顶部追加一条（`pnpm devlog:add` 生成模板） |
+| **提交** | 改了代码却没更新流水账 → **提交被拒绝** |
+
+```bash
+pnpm devlog          # 看快照 + 最近 3 条
+pnpm devlog --last 8 # 看更多
+pnpm devlog:add      # 插入模板
+pnpm devlog:check    # 校验结构（verify 也会跑）
+```
+
+**为什么这么严**：这个项目跨越很多会话。上一次的"临时决定"如果不写下来，
+下一次就变成无从解释的既成事实。写清楚"改了什么、为什么、怎么验证的"，
+任何人（包括未来的你）接手都能在 5 分钟内恢复工作状态。
+
 ## 六条不可违背的规则
 
 1. **不写注释的代码视为未完成** —— 每个导出符号要有中文 JSDoc，每个文件要有文件头注释（`pnpm comments` 会拦）
@@ -39,7 +60,7 @@
 pnpm verify
 ```
 
-它依次跑：`boundaries` → `comments` → `typecheck` → `build` → `resolve` → `lint` → `test`。
+它依次跑：`boundaries` → `comments` → `devlog:check` → `typecheck` → `build` → `resolve` → `lint` → `test`。
 **顺序有意义**：`build` 必须在 `resolve` 之前（解析门禁检查的是产物）。
 
 ## 提交信息格式（由 git hook 机械校验）
@@ -52,7 +73,7 @@ pnpm verify
 
 `type` ∈ `feat | fix | refactor | perf | test | docs | build | ci | chore`；`scope` 必填。
 
-首次克隆后执行一次：`pnpm hooks:install`
+首次克隆后执行一次：`pnpm hooks:install`（安装 `commit-msg` 与 `pre-commit` 两个 hook）
 
 ## 按需加载的技能（`.dsh/skills/`）
 

@@ -12,7 +12,7 @@
     "desktop": "node tools/run-desktop.mjs",
     "daemon": "node apps/daemon/dist/main.js",
     "build": "node tools/build.mjs",
-    "verify": "pnpm run boundaries && pnpm run comments && pnpm run typecheck && pnpm run build && pnpm run resolve && pnpm run lint && pnpm run test",
+    "verify": "pnpm run boundaries && pnpm run comments && pnpm run devlog:check && pnpm run typecheck && pnpm run build && pnpm run resolve && pnpm run lint && pnpm run test",
     "verify:desktop": "node tools/verify-desktop.mjs",
     "boundaries": "node tools/check-boundaries.mjs",
     "comments": "node tools/check-comments.mjs",
@@ -25,7 +25,10 @@
     "test:watch": "vitest",
     "lint:fix": "biome check --write .",
     "comments:report": "node tools/check-comments.mjs --report",
-    "hooks:install": "node tools/install-hooks.mjs"
+    "hooks:install": "node tools/install-hooks.mjs",
+    "devlog": "node tools/devlog.mjs",
+    "devlog:add": "node tools/devlog.mjs add",
+    "devlog:check": "node tools/devlog.mjs check"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",

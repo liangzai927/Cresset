@@ -21,7 +21,7 @@
  */
 
 import type { WallClock } from "./wall-clock.js";
-import { formatWallClock, isValidTimeZone, parseUntil, parseWallClock, wallBefore } from "./wall-clock.js";
+import { isValidTimeZone, parseUntil, parseWallClock, wallBefore } from "./wall-clock.js";
 
 /** 支持的频率 */
 export type Freq = "MINUTELY" | "HOURLY" | "DAILY" | "WEEKLY" | "MONTHLY" | "YEARLY";

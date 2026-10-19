@@ -1,0 +1,229 @@
+# 开发流水账（DEVLOG）
+
+> **这个文件是本项目的"开发记忆"。**
+>
+> **规矩（由 git pre-commit hook 强制）：**
+> 1. **动手改代码之前**：读一遍下面「当前状态快照」+ 最近 3 条记录。
+> 2. **改完代码之后**：在顶部追加一条记录（`pnpm devlog:add` 可以帮你填模板）。
+> 3. 提交时若改了代码却没更新本文件，**提交会被拒绝**。
+>
+> 为什么这么做：这个项目跨了很多个会话、很多"接下来做什么"的决定。
+> 靠记忆保存上下文必然出错 —— 上一次会话的"临时决定"到了下一次就变成了
+> 无从解释的既成事实。把决策与验证写在这里，任何人（包括未来的我、或另一个
+> AI/开发者）接手时都能在 5 分钟内恢复到可继续工作的状态。
+
+---
+
+## 当前状态快照
+
+> 这一节是"现在在哪"。每次里程碑变化时更新，不必每次提交都改。
+
+| 项 | 内容 |
+| --- | --- |
+| 阶段 | **R3 完成**（可本地打开使用），下一步 R4 打包分发 |
+| 版本 | daemon `0.2.0-r2` ／ 桌面 `0.3.0-r3` |
+| 校验 | `pnpm verify` 全绿（295 测试）＋ `pnpm verify:desktop` 10/10 |
+| 启动 | `pnpm dev`（智能增量构建后启动） |
+| 数据目录 | `~/Library/Application Support/Aegis`（含 `desktop.log`） |
+| 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导 |
+| **未实现** | 系统通知（macOS 拒绝未签名应用，用窗口提醒兜底）、打包签名、监测器(M2)、LLM+知识库(M3)、员工层(M4) |
+| 已知坑 | 见 README 的 F1–F27 与 C-1–C-11 |
+
+### 接手时先看这三处
+
+1. `README.md` —— 技术事实（F 编号）、约束（C 编号）、当前进度
+2. `docs/ADR-R3-01-原生通知接通方案.md` —— 通知为什么这么设计
+3. 本文件最近的 3 条记录 —— 上一次到底在干什么、为什么
+
+### 当前的"悬而未决"
+
+- **系统通知需要正式签名**：需 Apple Developer 账号；否则只能用窗口提醒兜底（已实现）
+- **R4 打包**未开始：electron-builder 或手写 `.app` 包装（已有一个可用的手工包装实验）
+- **产品名**仍是占位的 Aegis（集中在 `packages/product/src/index.ts`）
+
+---
+
+## 记录格式（新增条目照抄这个结构）
+
+```
+### YYYY-MM-DD · <一句话主题>
+**里程碑**：R2 / R3 / 修复 / 重构
+**改了什么**：...
+**为什么**：...（决策理由，比"改了什么"更重要）
+**验证**：...（跑了什么、结果如何；不要写"应该没问题"）
+**踩到的坑**：...（没有就写"无"）
+**留给下次**：...（未完成的部分或需要注意的地方）
+```
+
+---
+
+## 记录（新的在最上面）
+
+### 2026-10-19 · 建立开发流水账与强制机制
+**里程碑**：工程机制
+**改了什么**：
+- 新增 `docs/DEVLOG.md`：开发流水账（当前状态快照 + 按时间倒序的记录）
+- 新增 `tools/devlog.mjs`：`devlog` 查看 / `devlog:add` 插入模板 / `devlog:check` 校验
+- 新增 `tools/pre-commit-hook.mjs`：改了代码却没更新流水账 → 拒绝提交
+- `tools/install-hooks.mjs` 改为安装两个 hook（commit-msg + pre-commit）
+- `pnpm verify` 增加 `devlog:check`
+- `AGENTS.md` 增加"第 0 条：先读流水账、改完写流水账"
+- `aegis-task-workflow` 技能的标准流程加入第 ⓪ 步与第 ⑤ 步
+- 回填了 R0–R3 共 11 条历史记录（依据真实提交历史与 README 的 F/C 编号）
+**为什么**：这个项目跨多个会话推进，最大的风险不是写不出代码，而是**失忆** ——
+上一次的临时决定，下一次就变成无从解释的既成事实。靠"记得写文档"必然失败，
+所以把它做成机械强制：flow 是「读快照 → 干活 → 写记录 → 提交」，
+少一步就提交不了。记录格式刻意要求写"为什么"和"验证"，因为这两项最容易丢。
+**验证**：
+- 临时仓库验证四种场景：改代码不改流水账 → 拒绝；改代码+更新 → 通过；
+  只改文档 → 通过；`AEGIS_SKIP_DEVLOG=1` → 跳过并提示
+- 真实仓库验证：`git commit` 确实被拦截并给出可照抄的解决步骤
+- `tools/devlog.mjs check` 通过（11 条记录，字段齐全）
+**踩到的坑**：`devlog --last 8` 把选项当成了子命令（已改为"首参是选项则按 show 处理"）
+**留给下次**：模板里"里程碑/改了什么/为什么/验证"四个字段是硬性要求，
+新增字段时记得同步更新 `tools/devlog.mjs` 的 `REQUIRED_FIELDS`
+
+### 2026-10-19 · 系统通知被 macOS 拒绝，改用前台强提醒兜底
+**里程碑**：R3 修复
+**改了什么**：
+- 新增 `apps/desktop/src/attention.ts`：分层提醒（系统通知 → 前台强提醒）
+- 系统通知必须收到 `show` 事件才算成功，加 `failed` 与超时兜底
+- 启动时用静音探测通知判断真实可用性，结果写入状态接口
+- 界面如实展示"系统通知不可用（改用窗口提醒）"及原因
+- 修复：通道把分层结果整个对象塞进 `outcome`，导致写库时报
+  `cannot be bound to SQLite parameter`
+- 修复：退出时窗口已销毁仍调 `webContents.send`，抛 `Object has been destroyed`
+  并弹主进程崩溃对话框
+- Electron 未捕获异常改为"记录 + 界面提示 + 继续运行"，不再弹模态框
+**为什么**：用户报告"发送成功但收不到"。系统日志证明 macOS 拒绝未签名应用投递：
+`Entitlement 'com.apple.private.usernotifications.bundle-identifiers' required`。
+更严重的是我们一直在**谎报成功** —— `Notification.show()` 失败时不抛异常，
+只看"没报错"就返回 success。这是最坏的失败：看起来在工作。
+**验证**：`pnpm verify` 295 测试全绿；`pnpm verify:desktop` 10/10；
+真实触发提醒后截图确认窗口提醒可见（含"系统通知不可用"说明）。
+**踩到的坑**：见 README F25–F27（通知不抛异常、窗口销毁后发送崩溃、默认崩框行为）
+**留给下次**：正式解决需要 Apple Developer 签名（R4）。代码已就绪 —— 探测到可用会自动切回系统通知。
+
+### 2026-10-19 · 修复"daemon 尚未就绪"，并让问题可排查
+**里程碑**：修复
+**改了什么**：
+- `ensureClient` 从"读不到握手就抛错"改为最多等 10s 并重试，超时给出带原因的错误
+- 界面新增 `daemonReady`：未就绪时禁用需要后端的按钮，显示"后台服务启动中…"
+- 初始化顺序调整：先建监督者（立刻能报 starting）再建窗口
+- 完整日志写入 `<dataDir>/desktop.log`，终端同时显示 warn/error
+- 新增 `AEGIS_E2E_SMOKE` 冒烟动作：冷启动 150ms 后立刻调 testNotify
+**为什么**：用户点"测试通知"报"daemon 尚未就绪"。daemon 冷启动要几百毫秒，
+而向导第 2 步恰好邀请用户立刻点按钮。另有两个帮凶：失败后永不重试、
+`run-desktop` 只转发 error 日志导致无从排查。
+**验证**：冷启动 150ms 点击 → `SMOKE_NOTIFY_OK`；`verify:desktop` 增至 10 项
+**踩到的坑**：我的 E2E 等待 25 秒才检查，完美避开了冷启动窗口 —— 测试通过但漏掉真实路径
+**留给下次**：无
+
+### 2026-10-19 · 一条命令启动，并根除产物污染 src
+**里程碑**：工程改进
+**改了什么**：
+- `tools/dev.mjs`：智能增量构建后启动，`pnpm dev` / `pnpm start` 均可
+- 修正 `pnpm start` 指向不存在的 `main.cjs`
+- 根因修复：声明生成不再把依赖 `paths` 映射到源码（导致 `.d.ts` 写进 src）
+- `TARGETS` 加拓扑排序（原先 scheduler 排在 storage 之前，顺序是错的）
+- 桌面壳改用包级子路径导出 `@aegis/daemon/ipc-client`
+**为什么**：原本要两步（build + run），忘构建的症状是"界面开着但代码是旧的"，最难察觉。
+顺带查清了困扰多轮的问题：**每次构建都会往 src 写 20+ 个 `.d.ts`** —— 之前三次都是手工删掉，
+直到它开始破坏"产物是否过期"的判断才被迫正视。
+**验证**：src 下 0 个产物；快路径 4.5s 进界面；`pnpm verify` 全绿
+**踩到的坑**：见 README F22 / F23。**教训：反复出现的"小脏东西"通常是设计缺陷的症状，不是卫生问题。**
+**留给下次**：无
+
+### 2026-10-19 · 首次启动向导与开机自启
+**里程碑**：R3
+**改了什么**：
+- `packages/platform/src/autostart.ts`：macOS LaunchAgent（RunAtLoad + KeepAlive）
+- 3 步向导：欢迎（时区说明）→ 通知自检 → 自启 + 「不需要配置模型」
+- 完成标记写在数据目录而非 Electron userData
+**为什么**：自启的是 **daemon** 而不是界面 —— 用户登录后静默在后台工作，
+不弹窗口。完成标记放在数据目录，是为了"重装界面或用 CLI 起过服务都不重复弹向导"。
+**验证**：真实安装 → plist 生成 → 探测已启用 → 卸载清理，全链路通过
+**踩到的坑**：`AEGIS_CAPTURE_TAB` 用"加载后点击"切换页签不可靠，改为 URL query 决定初始页签
+**留给下次**：Windows/Linux 自启（M8）
+
+### 2026-10-19 · R3 桌面外壳：可本地打开使用
+**里程碑**：R3
+**改了什么**：
+- `apps/desktop`：Electron 主进程 + preload（白名单桥）+ renderer（无框架）
+- `packages/platform/src/desktop-channel.ts`：daemon 反向调用 Electron 弹通知
+- 三块界面（提醒/历史/设置）、托盘常驻、截图回归模式
+- `tools/verify-desktop.mjs`：9 项真实启动验证
+**为什么**：daemon 是长期居民，UI 是随时可关的观察窗 —— 关闭窗口不退出 daemon。
+通知方向必须是 daemon → Electron（决策与呈现分离），详见 ADR-R3-01。
+**验证**：`os_notification:success`（此前一直是 permanent_error → cli_fallback）
+**踩到的坑**：见 README F18–F21（`ELECTRON_RUN_AS_NODE` 强制 Node 模式、
+`electron` 包不能被打包、sandbox 下 preload 必须 CJS、绝对耗时断言会间歇失败）
+**留给下次**：系统通知权限问题（下一条记录解决）
+
+### 2026-10-19 · R2 调度引擎：daemon 真的会到点提醒
+**里程碑**：R2
+**改了什么**：
+- `@aegis/recurrence`：RRULE 子集求解器（墙钟语义 + DST）
+- `@aegis/scheduler`：materialize / dispatch / deliver / reconcile
+- `@aegis/platform`：macOS 双渠道（原生 + osascript 兜底）
+- 三个新 DAO（notification / outbox / delivery-attempt）
+- CLI：status / add / list / history / test-notify / pause / resume / rm / start / stop
+**为什么**：派发权必须由数据库影响行数裁决，绝不依赖内存状态；
+时间一律走注入的 Clock，否则"30 天不漏报"无法自动化验证。
+**验证**：30 天长跑 4320 条 0 重复；`pnpm verify` 267 测试；
+CLI 端到端 `aegis add --in 8s` 真实投递
+**踩到的坑**：见 README F10–F17。最严重的是 **DST 空洞破坏严格升序**（出现 -51 分钟间隔），
+最终靠"求解器出口统一单调化 + 去重"解决 —— 这不是策略问题，是 DST 的固有限制
+**留给下次**：R3
+
+### 2026-09（R1 期间）· 运行时基础
+**里程碑**：R1
+**改了什么**：存储（SQLite + 迁移 checksum 锁）、凭据（钥匙串）、单实例锁、IPC、审计
+**为什么**：先把"可靠运行"的地基打好，再谈业务。迁移只增不改是为了
+"老用户库结构与新装一致"。
+**验证**：87 → 96 测试（沙箱外跑真实钥匙串用例）；`pnpm verify` 全绿
+**踩到的坑**：见 README C-1–C-9（`allowExtension` 建库时给、vec0 主键要 BigInt、
+IPC 重连必须重放握手、钥匙串必须 `-w` 且显式指定）
+**留给下次**：R2
+
+### 2026-02（R0 期间）· 工程骨架与 6 项技术验证
+**里程碑**：R0
+**改了什么**：pnpm workspace、9 个包骨架、构建链（tsc + esbuild + d.ts）、
+6 个 spike（SQLite/向量、IPC、钥匙串、LaunchAgent、通知、macOS 权限）
+**为什么**：先把"技术前提是否成立"验证掉，避免在错误的地基上写业务代码。
+**验证**：6/6 通过，结论写入 `R0-spike结论报告.md` 与 README 的 F1–F9
+**踩到的坑**：`tsc -b` 项目引用不可用（exports→dist 鸡生蛋）、
+esbuild CLI bin 是 shell 脚本不能 `node` 调用、ESM 下不能加 shebang banner
+**留给下次**：R1
+
+---
+
+## 怎么用（给 AI/协作者）
+
+### 开始工作前
+
+```bash
+# 1. 看当前状态（本文件顶部）+ 最近 3 条
+sed -n '1,60p' docs/DEVLOG.md
+
+# 2. 看技术事实与约束
+grep -n "^| F\|^| C-" README.md | head -40
+
+# 3. 确认基线是绿的
+pnpm verify
+```
+
+### 改完代码后
+
+```bash
+pnpm devlog:add          # 交互式追加一条（会自动填模板与日期）
+pnpm devlog              # 回看最近几条，确认写明白了
+```
+
+### 提交时
+
+`git commit` 会由 pre-commit hook 检查：改了代码却没更新本文件 → **拒绝提交**。
+这是刻意的 —— 如果流水账可以"下次再补"，那它永远不会被补。
+
+确需跳过（例如只改了注释错别字）：`AEGIS_SKIP_DEVLOG=1 git commit ...`，
+但请在提交信息里说明为什么。

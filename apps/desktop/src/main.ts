@@ -49,7 +49,7 @@ import type {
   TaskItem,
   UpdateInfo,
 } from "./api-types.js";
-import { deliverWithAttention, probeSystemNotification, trySystemNotification } from "./attention.js";
+import { deliverWithAttention, probeSystemNotification } from "./attention.js";
 import { type ChannelHostHandle, createElectronPresenter, startChannelHost } from "./channel-host.js";
 import { DaemonSupervisor, resolveDaemonEntry, resolveNodeExecPath } from "./supervisor.js";
 
@@ -558,7 +558,10 @@ async function ipcGetStatus(): Promise<DiagnosticInfo> {
         degradedReasons: h.degradedReasons,
       };
       // 原生与兜底的相对顺序用于界面提示"当前实际走哪条链"
-      taskChannels = taskChannels.sort((a, b) => (a.channel === "os_notification" ? -1 : 1));
+      // 桌面通道优先展示（它就是降级链的第一环）
+      taskChannels = taskChannels.sort((a, b) =>
+        a.channel === b.channel ? 0 : a.channel === "os_notification" ? -1 : 1,
+      );
     } catch (err) {
       log("warn", "main.status_health_failed", { error: (err as Error).message });
     }
