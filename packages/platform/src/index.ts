@@ -40,4 +40,5 @@ export interface PermissionStatus {
   notifications: "granted" | "denied" | "unknown";
 }
 
+export * from "./desktop-channel.js";
 export * from "./macos-notifier.js";

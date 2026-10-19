@@ -22,7 +22,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { type Clock, detectSkew, SystemClock } from "@aegis/clock";
 import type { HealthView } from "@aegis/ipc-contract";
-import { defaultNotifiers } from "@aegis/platform";
+import { createDesktopChannelSender, defaultNotifiers, type Notifier } from "@aegis/platform";
 import { type DataPaths, resolveDataPaths } from "@aegis/product";
 import { Scheduler, type TickResult } from "@aegis/scheduler";
 import { AuditRepo, type Db, migrate, OccurrenceDao, openDb } from "@aegis/storage";
@@ -175,10 +175,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
     db,
     clock,
     // 渠道按配置顺序构造：原生通知优先、CLI 兜底殿后（D5 决策）
-    notifiers: defaultNotifiers({
-      native: null, // R3 接入 Electron 主进程后由 IPC 提供发送器
-      includeCliFallback: cfg.config.notify.channels.includes("cli_fallback"),
-    }),
+    notifiers: buildNotifiers(cfg.config, paths),
     dnd: {
       enabled: cfg.config.dnd.enabled,
       windows: cfg.config.dnd.windows.map((w) => ({ days: w.days, from: w.from, to: w.to })),
@@ -402,4 +399,30 @@ function writeHeartbeat(db: Db, clock: Clock, tickCount: number, version: string
     mem.rss,
   );
   void version;
+}
+
+/**
+ * 按配置构造通知渠道列表（顺序即降级链）。
+ *
+ * R3 起 `os_notification` 是**真实可用**的：daemon 通过 `<dataDir>/channel.json`
+ * 发现 Electron 提供的本地端点并反向调用（ADR-R3-01）。
+ *
+ * 关键设计：桌面通道的发现是**每次投递时动态进行**的，而不是启动时固定。因此：
+ *   - Electron 没启动 → 该渠道返回 permanent_error，立刻降级到 CLI 兜底
+ *   - Electron 中途启动/重启 → 下一次投递自动用上新端点，无需重启 daemon
+ */
+function buildNotifiers(cfg: DaemonConfig, paths: DataPaths): Notifier[] {
+  const enabled = new Set(cfg.notify.channels);
+  const native = enabled.has("os_notification")
+    ? createDesktopChannelSender({ channelFilePath: paths.channelFile, timeoutMs: 5_000 })
+    : null;
+
+  const list = defaultNotifiers({
+    native,
+    includeCliFallback: enabled.has("cli_fallback"),
+  });
+
+  // 若配置把两者都关了，仍保留 CLI 兜底 —— 否则"配置错误"会变成"静默不提醒"，
+  // 与"零静默失败"的硬约束冲突。宁可多发一条，也不能什么都不发。
+  return list.length > 0 ? list : defaultNotifiers({ native: null, includeCliFallback: true });
 }

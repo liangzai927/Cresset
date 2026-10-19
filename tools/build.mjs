@@ -19,7 +19,7 @@
  *   node tools/build.mjs --skip-typecheck   跳过第 1 步（仅用于调试构建链本身）
  */
 import { spawnSync } from "node:child_process";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -60,6 +60,21 @@ const TARGETS = [
     dir: "packages/redaction-gateway",
     entry: "src/index.ts",
     deps: ["contracts"],
+  },
+  {
+    name: "desktop",
+    dir: "apps/desktop",
+    // 主进程用 ESM（Electron 支持），但 preload 必须单独打成 CJS（见 preload 字段说明）
+    entries: ["src/main.ts"],
+    executable: "src/main.ts",
+    // ★ preload 的特殊要求：
+    //   `sandbox: true` 时 Electron 的 preload 运行在受限上下文里，**不支持 ESM import**。
+    //   而 apps/desktop/package.json 是 "type": "module"，所以 .js 会被当 ESM 解析，
+    //   必须显式产出 .cjs 才能被正确加载。
+    preload: "src/preload.ts",
+    // renderer 是纯静态资源（html/css/js），不参与打包，直接复制
+    copyAssets: ["src/renderer"],
+    deps: ["clock", "contracts", "ipc-contract", "platform", "product", "daemon"],
   },
   {
     name: "daemon",
@@ -129,14 +144,23 @@ for (const t of targets) {
     await esbuildBuild({
       entryPoints: entries.map((e) => join(dir, e)),
       bundle: true,
-      external: ["@aegis/*"], // 保留包边界：运行时由 node_modules 软链解析
+      // `@aegis/*` 保留为外部依赖（运行时由 node_modules 软链解析）；
+      // `electron` 由宿主进程提供，**绝不能打进产物** ——
+      // 它的入口用动态 require 探测二进制路径，被 esbuild 内联后在 ESM 下会直接抛
+      // "Dynamic require of child_process is not supported"（实测踩到）。
+      external: ["@aegis/*", "electron"],
       format: "esm",
       target: "node24",
       platform: "node",
       sourcemap: true,
       ...(isMulti
         ? { outdir: outDir, outbase: join(dir, "src") }
-        : { outfile: join(outDir, t.entry === execEntry ? "main.js" : "index.js") }),
+        : {
+            // 单入口时：可执行目标输出 main.js，库输出 index.js。
+            // 注意 desktop 这类"用 entries 声明单入口"的目标没有 t.entry，
+            // 因此这里用 entries[0] 与 executable 比较（曾经因此产出 index.js 导致 Electron 找不到 main）。
+            outfile: join(outDir, entries[0] === execEntry ? "main.js" : "index.js"),
+          }),
       logLevel: "silent",
     });
   } catch (e) {
@@ -149,6 +173,43 @@ for (const t of targets) {
     console.error(`  ✗ ${t.name} 打包失败: ${detail}`);
     failed += 1;
     continue;
+  }
+
+  // ── 2a-2) preload 特例：必须打成 CJS
+  //
+  // `sandbox: true` 时 Electron 的 preload 运行在受限上下文，**不支持 ESM import**。
+  // 而 apps/desktop/package.json 是 "type": "module"，所以 .js 会被当 ESM 解析，
+  // 必须显式产出 .cjs 才能被正确加载。
+  if (t.preload) {
+    try {
+      await esbuildBuild({
+        entryPoints: [join(dir, t.preload)],
+        bundle: true,
+        external: ["@aegis/*", "electron"],
+        format: "cjs",
+        target: "node24",
+        platform: "node",
+        outfile: join(outDir, "preload.cjs"),
+        logLevel: "silent",
+      });
+    } catch (e) {
+      const detail = Array.isArray(e?.errors)
+        ? e.errors.map((x) => x.text).join("; ")
+        : String(e.message ?? e).split("\n")[0];
+      console.error(`  ✗ ${t.name} preload 打包失败: ${detail}`);
+      failed += 1;
+      continue;
+    }
+  }
+
+  // ── 2a-3) 静态资源拷贝（renderer 的 html/css/js 不参与打包）
+  if (Array.isArray(t.copyAssets)) {
+    for (const rel of t.copyAssets) {
+      const from = join(dir, rel);
+      // 保持相对结构：src/renderer → dist/renderer
+      const to = join(outDir, rel.replace(/^src\//, ""));
+      cpSync(from, to, { recursive: true });
+    }
   }
 
   // 2b) 生成 .d.ts（exports.types 指向它）

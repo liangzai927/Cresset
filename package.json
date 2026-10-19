@@ -21,14 +21,17 @@
     "spike:report": "node tools/run-spikes.mjs --report",
     "comments": "node tools/check-comments.mjs",
     "comments:report": "node tools/check-comments.mjs --report",
-    "hooks:install": "node tools/install-hooks.mjs"
+    "hooks:install": "node tools/install-hooks.mjs",
+    "desktop": "node tools/run-desktop.mjs",
+    "verify:desktop": "node tools/verify-desktop.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",
     "@types/node": "^24.0.0",
+    "electron": "^44.9.0",
+    "esbuild": "^0.28.0",
     "typescript": "^5.9.0",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.2.0",
-    "esbuild": "^0.28.0"
+    "vitest": "^3.2.0"
   }
 }

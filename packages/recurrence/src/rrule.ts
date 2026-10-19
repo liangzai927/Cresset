@@ -242,7 +242,10 @@ export function describeRecurrence(spec: RecurrenceSpec): string {
   if (!start) return "时间格式非法";
 
   if (!spec.rrule) {
-    return `${formatWallClock(start)} 一次性`;
+    // 一次性任务的描述要**面向人**，而不是把 ISO 串直接抛给界面。
+    // （曾经输出 "2026-10-19T10:51 一次性"，在列表里显得像调试信息。）
+    const p2n = (n: number): string => String(n).padStart(2, "0");
+    return `一次性 · ${p2n(start.month)}-${p2n(start.day)} ${p2n(start.hour)}:${p2n(start.minute)}`;
   }
 
   let parsed: ParsedRecurrence;

@@ -2,16 +2,59 @@
 
 > 24 小时常驻的桌面 Agent：下层是替我盯着世界的**哨兵**，上层是一支有明确角色、可并行工作、能把活互相交接直到交付的**员工团队**；所有外发给模型的数据都经过**脱敏网关**。
 
-**当前阶段：R2 已完成** —— 调度闭环打通，**daemon 现在真的会到点提醒**，并可用 CLI 操作。
+**当前阶段：R3 已完成** —— **可以本地打开使用**：Electron 界面 + 原生通知通道接通。
 
 | 里程碑 | 状态 |
 | --- | --- |
 | R0 工程骨架 + 6 项 spike | ✅ 完成（6/6 通过） |
 | R1 运行时基础 | ✅ 完成 |
-| **R2 调度引擎** | ✅ **完成**：recurrence ｜ scheduler ｜ notify ｜ daemon 接入 ｜ CLI |
-| R3 Electron 壳 + 界面 | 下一步 |
+| R2 调度引擎 | ✅ 完成：recurrence ｜ scheduler ｜ notify ｜ daemon 接入 ｜ CLI |
+| **R3 桌面外壳 + 界面** | ✅ **完成**：Electron 三层 ｜ 原生通知 ｜ 三块界面 ｜ 托盘 |
+| R4 系统集成（打包/自启/自恢复） | 下一步 |
 
-**当前验证状态**：`pnpm verify` 全绿 ｜ **11 个工作区包** ｜ **267 测试通过** ｜ 注释占比 18.0%
+**当前验证状态**：`pnpm verify` 全绿 ｜ **12 个工作区包** ｜ **279 测试通过** ｜ 注释占比 19.0%
+**桌面验证**：`pnpm verify:desktop` 9 项集成检查全部通过
+
+### 现在可以打开使用了
+
+```bash
+cd /Users/liuwenliang/lwl/ai/aegis
+node tools/build.mjs          # 首次或改动后构建
+node tools/run-desktop.mjs    # 启动桌面应用
+```
+
+界面有三块：
+- **提醒**：列表（含人话重复描述、下次触发、已触发次数）、新建（六种重复模式）、暂停/恢复/删除
+- **历史**：每条通知的**投递渠道链路**（如"系统通知 · 可用 → 命令行兜底 · 成功"）
+- **设置**：运行状态、渠道可用性、数据目录、版本
+
+关闭窗口后**留在托盘继续运行**；菜单里可显式"完全退出（含后台服务）"。
+
+### R3 交付物
+
+| 组件 | 内容 |
+| --- | --- |
+| `apps/desktop` | Electron 主进程 + preload + renderer（无框架，零构建步骤） |
+| `packages/platform` | **`DesktopChannelSender`**：daemon 反向调用 Electron 弹原生通知（ADR-R3-01） |
+| `apps/desktop/src/channel-host.ts` | 本地 HTTP 通道服务（回环 + Bearer token + Host 校验） |
+| `apps/desktop/src/supervisor.ts` | daemon 监督者（拉起、探活、有限次重启、**不杀 daemon**） |
+| `tools/verify-desktop.mjs` | 9 项端到端集成验证（真实启动 GUI） |
+
+### 关键成果：原生通知真的通了
+
+R2 时每次投递都是 `os_notification:permanent_error → cli_fallback:success`（高级渠道坏了）。
+R3 之后实测：
+
+```
+$ aegis history
+✓ 2026-10-19 10:49  原生通道端到端验证
+      渠道：os_notification:success      ← 一次成功，不再降级
+```
+
+机制见 [`docs/ADR-R3-01-原生通知接通方案.md`](docs/ADR-R3-01-原生通知接通方案.md)：
+Electron 起一个本地 HTTP 服务并把端点写入 `channel.json`（0600），
+daemon **每次投递前重新发现**该端点并反向调用 —— 因此 UI 重启换端口无需重启 daemon，
+UI 未启动时该渠道自动消失、降级链照常工作。daemon 保持**零 Electron 依赖**。
 
 ### R2 交付物
 

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <!--
+      CSP：只允许本地资源与本包内的脚本。
+      刻意不加 'unsafe-inline'（样式用的内联 style 属性不受 style-src 限制，
+      但 <script> 内联代码必须走外部文件）。这是 renderer 侧的第一道防线。
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self';"
+    />
+    <title>Aegis</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <!-- 顶部：状态条 + 操作 -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="dot" id="status-dot" aria-hidden="true"></span>
+        <h1>Aegis</h1>
+      </div>
+      <div class="topbar-actions">
+        <span class="status-text" id="status-text">正在连接…</span>
+        <button class="btn btn-ghost" id="btn-test-notify" title="立刻发一条测试通知">
+          测试通知
+        </button>
+      </div>
+    </header>
+
+    <!-- 降级/异常横幅：失败必须可见 -->
+    <div class="banner hidden" id="banner" role="alert">
+      <span class="banner-text" id="banner-text"></span>
+      <button class="banner-close" id="banner-close" aria-label="关闭">×</button>
+    </div>
+
+    <!-- 标签页 -->
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="tasks" role="tab">提醒</button>
+      <button class="tab" data-tab="history" role="tab">历史</button>
+      <button class="tab" data-tab="settings" role="tab">设置</button>
+    </nav>
+
+    <main>
+      <!-- ── 提醒页 ─────────────────────────────────────────────── -->
+      <section class="panel active" id="panel-tasks" role="tabpanel">
+        <div class="toolbar">
+          <button class="btn btn-primary" id="btn-new">新建提醒</button>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost" id="btn-pause-all">全部暂停</button>
+          <button class="btn btn-ghost" id="btn-resume-all">全部恢复</button>
+        </div>
+        <ul class="task-list" id="task-list"></ul>
+        <p class="empty hidden" id="tasks-empty">
+          还没有提醒。点「新建提醒」创建第一条。
+        </p>
+      </section>
+
+      <!-- ── 历史页 ─────────────────────────────────────────────── -->
+      <section class="panel" id="panel-history" role="tabpanel">
+        <div class="toolbar">
+          <span class="hint">最近 100 条通知，含投递渠道与结果</span>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost" id="btn-refresh-history">刷新</button>
+        </div>
+        <ul class="history-list" id="history-list"></ul>
+        <p class="empty hidden" id="history-empty">还没有通知记录。</p>
+      </section>
+
+      <!-- ── 设置页 ─────────────────────────────────────────────── -->
+      <section class="panel" id="panel-settings" role="tabpanel">
+        <div class="settings-group">
+          <h2>运行状态</h2>
+          <dl class="kv" id="diag-basic"></dl>
+        </div>
+
+        <div class="settings-group">
+          <h2>通知渠道</h2>
+          <p class="hint">
+            按顺序尝试；上面的失败时自动用下面的兜底。
+          </p>
+          <ul class="channel-list" id="channel-list"></ul>
+        </div>
+
+        <div class="settings-group">
+          <h2>数据</h2>
+          <dl class="kv" id="diag-paths"></dl>
+        </div>
+
+        <div class="settings-group">
+          <h2>关于</h2>
+          <p class="hint" id="about-text"></p>
+          <button class="btn btn-ghost" id="btn-check-update">检查更新</button>
+          <p class="hint hidden" id="update-text"></p>
+        </div>
+      </section>
+    </main>
+
+    <!-- ── 新建提醒对话框 ───────────────────────────────────────── -->
+    <dialog id="new-dialog">
+      <form method="dialog" class="dialog-body" id="new-form">
+        <h2>新建提醒</h2>
+
+        <label>
+          <span>标题</span>
+          <input id="f-title" type="text" maxlength="200" required placeholder="例如：交周报" />
+        </label>
+
+        <label>
+          <span>备注（可选）</span>
+          <textarea id="f-notes" rows="2" maxlength="4000" placeholder="提醒时一起显示"></textarea>
+        </label>
+
+        <label>
+          <span>触发时间</span>
+          <div class="row">
+            <input id="f-time" type="time" value="09:00" required />
+            <select id="f-day">
+              <option value="today">今天</option>
+              <option value="tomorrow">明天</option>
+            </select>
+          </div>
+        </label>
+
+        <label>
+          <span>重复</span>
+          <select id="f-repeat">
+            <option value="once">一次</option>
+            <option value="daily">每天</option>
+            <option value="weekdays">工作日（周一至周五）</option>
+            <option value="weekly">每周指定</option>
+            <option value="monthly">每月指定日</option>
+            <option value="every_minutes">每隔若干分钟</option>
+          </select>
+        </label>
+
+        <!-- 各重复模式的附加参数，按需显示 -->
+        <div class="sub-field hidden" id="sub-weekly">
+          <span>星期</span>
+          <div class="weekday-picker" id="weekday-picker"></div>
+        </div>
+
+        <label class="sub-field hidden" id="sub-monthly">
+          <span>每月第几天</span>
+          <input id="f-monthday" type="number" min="1" max="31" value="1" />
+        </label>
+
+        <label class="sub-field hidden" id="sub-interval">
+          <span>间隔（分钟）</span>
+          <input id="f-interval" type="number" min="1" max="10080" value="30" />
+        </label>
+
+        <label class="checkbox">
+          <input id="f-important" type="checkbox" />
+          <span>重要提醒（可穿透免打扰）</span>
+        </label>
+
+        <p class="form-error hidden" id="form-error"></p>
+
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-ghost" id="btn-cancel">取消</button>
+          <button type="submit" class="btn btn-primary" id="btn-submit">创建</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

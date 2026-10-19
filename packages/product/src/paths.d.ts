@@ -25,6 +25,13 @@ export interface DataPaths {
     readonly handshakeFile: string;
     readonly readyFile: string;
     readonly configFile: string;
+    /**
+     * 桌面通道端点文件（由 Electron 主进程写入，0600）。
+     *
+     * daemon 每次投递前重新读它来发现当前可用的原生通知通道，
+     * 因此 Electron 重启换端口后无需重启 daemon（ADR-R3-01）。
+     */
+    readonly channelFile: string;
     /** IPC 端点：UDS 路径（posix）或 NamedPipe 名（win32） */
     readonly ipcEndpoint: string;
     /** 当 UDS 路径超长被改写时，记录原始期望路径（供诊断） */
