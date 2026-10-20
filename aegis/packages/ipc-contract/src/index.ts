@@ -147,6 +147,21 @@ export type SystemHealthView = z.infer<typeof SystemHealthViewSchema>;
 /** 监测器采集错误 */
 export const MonitorErrorSchema = z.object({ path: z.string(), message: z.string() }).strict();
 
+/** Skill 列表项；坏文件也返回，用 valid=false + error 让 UI 可见 */
+export const SkillListEntrySchema = z
+  .object({
+    file: z.string(),
+    valid: z.boolean(),
+    name: z.string().nullable(),
+    version: z.string().nullable(),
+    description: z.string().nullable(),
+    permissions: z.array(z.string()),
+    triggerMonitor: z.string().nullable(),
+    error: z.string().nullable(),
+  })
+  .strict();
+export type SkillListEntryView = z.infer<typeof SkillListEntrySchema>;
+
 /** 监测器运行状态（设置页展示；不含 Skill 内容） */
 export const MonitorStatusViewSchema = z
   .object({

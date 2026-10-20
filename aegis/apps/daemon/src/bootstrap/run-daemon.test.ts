@@ -636,6 +636,45 @@ describe("R2：调度器接入与 RPC 方法", () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
+  it("★ skill.import/list/delete 经 RPC 写入数据目录", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-skill-"));
+    const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
+    const hs = readHandshakeFile(join(dataDir, "handshake.json"));
+    const client = new IpcClient({ endpoint: hs.endpoint, token: hs.token });
+    await client.connect();
+
+    const content = `name: rpc-skill
+version: 1.0.0
+description: RPC 导入测试
+permissions: [files.read]
+cooldown: 5m
+params: {}
+trigger:
+  type: change
+  monitor: files.test
+action:
+  notify:
+    priority: normal
+    title: 测试
+    body: "{{monitor.path}}"
+`;
+    const imported = (await client.call("skill.import", { filename: "rpc-skill.yaml", content })) as {
+      skill: { name: string; valid: boolean };
+    };
+    expect(imported.skill).toMatchObject({ name: "rpc-skill", valid: true });
+
+    const listed = (await client.call("skill.list", {})) as { skills: Array<{ file: string }> };
+    expect(listed.skills.map((s) => s.file)).toEqual(["rpc-skill.yaml"]);
+
+    await client.call("skill.delete", { filename: "rpc-skill.yaml" });
+    const after = (await client.call("skill.list", {})) as { skills: unknown[] };
+    expect(after.skills).toEqual([]);
+
+    client.close();
+    await daemon.stop("test");
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
   it("★ backup.export 经 RPC 生成一致快照", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-backup-"));
     const daemon = await runDaemon({ dataDir, tickMs: 60_000 });

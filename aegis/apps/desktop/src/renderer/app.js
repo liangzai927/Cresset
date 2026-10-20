@@ -137,6 +137,8 @@ async function refreshStatus() {
     "btn-refresh-history",
     "btn-refresh-health",
     "btn-refresh-monitors",
+    "btn-import-skill",
+    "btn-refresh-skills",
     "btn-export-backup",
     "btn-dnd-add",
     "btn-dnd-save",
@@ -656,6 +658,99 @@ $("btn-refresh-monitors").addEventListener("click", async (e) => {
   $("monitor-hint").textContent = "刷新中…";
   try {
     await loadMonitorStatus();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── Skill 管理 ──────────────────────────────────────────────────────────
+
+/** 渲染 Skill 文件列表；坏文件也要显示，让用户能删掉或修正 */
+function renderSkillList(skills) {
+  const box = $("skill-list");
+  box.textContent = "";
+
+  if (skills.length === 0) {
+    box.appendChild(
+      el("p", "hint", "还没有 Skill。点击「导入 Skill」选择 YAML；导入后可在 config.json 的 monitors 中引用。"),
+    );
+    return;
+  }
+
+  for (const skill of skills) {
+    const row = el("div", "monitor-row");
+
+    const head = el("div", "skill-head");
+    head.appendChild(el("strong", "", skill.name || skill.file));
+    head.appendChild(el("span", "monitor-badge", skill.valid ? "有效" : "错误"));
+    const del = el("button", "btn btn-ghost btn-small", "删除");
+    del.title = `删除 ${skill.file}`;
+    del.addEventListener("click", async () => {
+      if (!window.confirm(`删除 Skill ${skill.file}？`)) return;
+      try {
+        await window.aegis.deleteSkill(skill.file);
+        $("skill-hint").textContent = `已删除 ${skill.file}`;
+        await loadSkillList();
+      } catch (err) {
+        $("skill-hint").textContent = `删除失败：${err.message}`;
+      }
+    });
+    head.appendChild(del);
+    row.appendChild(head);
+
+    if (skill.description) row.appendChild(el("div", "skill-desc", skill.description));
+    row.appendChild(
+      el(
+        "div",
+        "skill-meta",
+        `${skill.file}${skill.version ? ` · v${skill.version}` : ""} · 权限：${
+          skill.permissions.join("、") || "无"
+        } · 触发：${skill.triggerMonitor || "—"}`,
+      ),
+    );
+    if (skill.error) row.appendChild(el("div", "monitor-error", skill.error));
+    box.appendChild(row);
+  }
+}
+
+/** 读取 skills/ 列表；失败只更新 hint */
+async function loadSkillList() {
+  try {
+    const result = await window.aegis.getSkills();
+    renderSkillList(result.skills);
+    if (result.skills.length > 0) {
+      $("skill-hint").textContent = "导入/更新后，别忘了在 config.json 的 monitors 中引用文件名";
+    }
+  } catch (err) {
+    $("skill-hint").textContent = `读取失败：${err.message}`;
+  }
+}
+
+$("btn-refresh-skills").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await loadSkillList();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-import-skill").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $("skill-hint").textContent = "选择文件…";
+  try {
+    const picked = await window.aegis.pickSkillFile();
+    if (!picked) {
+      $("skill-hint").textContent = "已取消";
+      return;
+    }
+    const result = await window.aegis.importSkill(picked.filename, picked.content);
+    $("skill-hint").textContent = `已导入 ${result.skill.name}（${result.skill.file}）`;
+    await loadSkillList();
+  } catch (err) {
+    $("skill-hint").textContent = `导入失败：${err.message}`;
   } finally {
     btn.disabled = false;
   }

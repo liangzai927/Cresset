@@ -341,6 +341,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
           },
         },
         monitors: { status: () => monitorRuntime.status() },
+        skills: { dataDir: paths.dataDir },
       }),
       /**
        * 关停 daemon。

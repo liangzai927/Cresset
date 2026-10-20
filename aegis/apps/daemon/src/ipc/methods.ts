@@ -35,10 +35,12 @@ import {
   validateRecurrenceSpec,
 } from "@aegis/recurrence";
 import type { Scheduler } from "@aegis/scheduler";
+import { SkillLoadError } from "@aegis/skills";
 import type { AttemptSummary } from "@aegis/storage";
 import { z } from "zod";
 import { createBackup } from "../bootstrap/backup.js";
 import type { MonitorStatus } from "../bootstrap/monitor-runtime.js";
+import { deleteSkill, importSkill, listSkills, SkillStoreError } from "../bootstrap/skill-store.js";
 
 /** RPC 处理失败：携带错误码，交由 IpcServer 序列化 */
 export class MethodError extends Error {
@@ -248,11 +250,17 @@ export interface MonitorMethodsContext {
   status: () => MonitorStatus[];
 }
 
+/** Skill 文件管理需要的运行期上下文 */
+export interface SkillsMethodsContext {
+  dataDir: string;
+}
+
 /** 构造 RPC handler 时注入的可选运行期能力 */
 export interface MethodsContext {
   backup?: BackupMethodsContext;
   dnd?: DndMethodsContext;
   monitors?: MonitorMethodsContext;
+  skills?: SkillsMethodsContext;
 }
 
 /** 构造全部 RPC handler。返回对象直接交给 IpcServer 的 `methods` 选项 */
@@ -494,6 +502,47 @@ export function createMethods(
 
     "monitor.status": async () => {
       return { monitors: context.monitors?.status() ?? [] };
+    },
+
+    "skill.list": async () => {
+      return { skills: context.skills ? listSkills(context.skills.dataDir) : [] };
+    },
+
+    "skill.import": async (params) => {
+      const p = z
+        .object({ filename: z.string().min(1).max(128), content: z.string().min(1).max(300_000) })
+        .strict()
+        .parse(params);
+      if (!context.skills) throw new MethodError(E_INTERNAL, "Skill 存储未初始化");
+      try {
+        return { skill: importSkill(context.skills.dataDir, p.filename, p.content) };
+      } catch (err) {
+        if (err instanceof SkillLoadError) {
+          const issues = err.issues.length > 0 ? `：${err.issues.join("；")}` : "";
+          throw new MethodError(E_INVALID_PARAMS, `Skill 校验失败：${err.message}${issues}`);
+        }
+        if (err instanceof SkillStoreError) {
+          throw new MethodError(E_INVALID_PARAMS, err.message);
+        }
+        throw new MethodError(E_INTERNAL, `导入 Skill 失败：${(err as Error).message}`);
+      }
+    },
+
+    "skill.delete": async (params) => {
+      const p = z
+        .object({ filename: z.string().min(1).max(128) })
+        .strict()
+        .parse(params);
+      if (!context.skills) throw new MethodError(E_INTERNAL, "Skill 存储未初始化");
+      try {
+        deleteSkill(context.skills.dataDir, p.filename);
+        return { ok: true };
+      } catch (err) {
+        if (err instanceof SkillStoreError) {
+          throw new MethodError(E_INVALID_PARAMS, err.message);
+        }
+        throw new MethodError(E_INTERNAL, `删除 Skill 失败：${(err as Error).message}`);
+      }
     },
 
     "monitor.system": async () => {

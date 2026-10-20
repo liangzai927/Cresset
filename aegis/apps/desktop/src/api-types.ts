@@ -200,6 +200,18 @@ export interface SystemHealthView {
   uptimeS: number;
 }
 
+/** Skill 列表项（设置页展示） */
+export interface SkillListEntry {
+  file: string;
+  valid: boolean;
+  name: string | null;
+  version: string | null;
+  description: string | null;
+  permissions: string[];
+  triggerMonitor: string | null;
+  error: string | null;
+}
+
 /** 监测器状态（设置页展示） */
 export interface MonitorStatusItem {
   id: string;
@@ -251,6 +263,14 @@ export interface DesktopApi {
   getSystemHealth(): Promise<{ health: SystemHealthView; errors: Array<{ path: string; message: string }> }>;
   /** 读取监测器运行状态 */
   getMonitorStatus(): Promise<{ monitors: MonitorStatusItem[] }>;
+  /** 列出数据目录中的 Skill 文件 */
+  getSkills(): Promise<{ skills: SkillListEntry[] }>;
+  /** 打开原生文件选择器并读取 YAML（返回 null 表示取消） */
+  pickSkillFile(): Promise<{ filename: string; content: string } | null>;
+  /** 导入/更新 Skill；失败由 daemon 返回明确错误 */
+  importSkill(filename: string, content: string): Promise<{ skill: SkillListEntry }>;
+  /** 删除 Skill 文件 */
+  deleteSkill(filename: string): Promise<{ ok: boolean }>;
   /** 读取免打扰设置 */
   getDnd(): Promise<DndSettingsView>;
   /** 保存免打扰设置；daemon 会持久化到 config.json 并立即影响后续派发 */

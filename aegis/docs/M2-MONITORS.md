@@ -5,7 +5,10 @@
 
 ## 1. 目录约定
 
-把 Skill 放在数据目录下（相对路径会按数据目录解析）：
+Skill 有两种导入方式：
+
+1. **应用内导入（推荐）**：设置 → Skills → 导入 Skill，选择 YAML；文件会写入数据目录的 `skills/`。
+2. 手动复制到数据目录：
 
 ```bash
 DATA="$HOME/Library/Application Support/Aegis"
@@ -13,6 +16,8 @@ mkdir -p "$DATA/skills"
 cp packages/skills/examples/disk-space-guard.yaml "$DATA/skills/"
 cp packages/skills/examples/downloads-change.yaml "$DATA/skills/"
 ```
+
+导入后，`monitors[].skills` 用相对数据目录的路径引用，例如 `"skills/disk-space-guard.yaml"`。
 
 ## 2. 配置监测器
 

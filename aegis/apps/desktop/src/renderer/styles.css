@@ -439,6 +439,44 @@ main {
   margin-bottom: 10px;
 }
 
+.skill-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.btn-small {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.skill-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 3px;
+}
+
+.skill-head strong {
+  font-size: 12.5px;
+}
+
+.skill-head .btn {
+  margin-left: auto;
+}
+
+.skill-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 3px;
+}
+
+.skill-meta {
+  color: var(--text-dim);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .monitor-list {
   display: flex;
   flex-direction: column;

@@ -26,8 +26,8 @@
  * 只有显式"退出"才真正结束应用（但**仍然不杀 daemon**，见 supervisor.ts）。
  */
 
-import { existsSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { basename, join } from "node:path";
 import { IpcClient } from "@aegis/daemon/ipc-client";
 import {
   type AutostartOptions,
@@ -49,6 +49,7 @@ import type {
   DndSettingsView,
   MonitorStatusItem,
   NotificationItem,
+  SkillListEntry,
   SystemHealthView,
   TaskEditItem,
   TaskItem,
@@ -842,6 +843,47 @@ async function ipcGetMonitorStatus(): Promise<{ monitors: MonitorStatusItem[] }>
   return (await client.call("monitor.status", {})) as { monitors: MonitorStatusItem[] };
 }
 
+/** 列出 Skill；daemon 负责读取 skills/ 并校验，坏文件也返回 */
+async function ipcListSkills(): Promise<{ skills: SkillListEntry[] }> {
+  const client = await ensureClient();
+  return (await client.call("skill.list", {})) as { skills: SkillListEntry[] };
+}
+
+/**
+ * 选择并读取一个 Skill YAML。
+ *
+ * 安全边界：路径来自主进程原生对话框，renderer 不能指定任意文件；
+ * 读取后只传文件名 + 内容给 daemon，由 daemon 再做路径/契约校验。
+ */
+async function ipcPickSkillFile(): Promise<{ filename: string; content: string } | null> {
+  const options = {
+    title: "选择 Skill YAML",
+    buttonLabel: "导入",
+    filters: [{ name: "Skill", extensions: ["yaml", "yml"] }],
+    properties: ["openFile"] as Array<"openFile">,
+  };
+  const picked =
+    ctx.window && !ctx.window.isDestroyed()
+      ? await dialog.showOpenDialog(ctx.window, options)
+      : await dialog.showOpenDialog(options);
+  if (picked.canceled || !picked.filePaths[0]) return null;
+
+  const path = picked.filePaths[0];
+  const content = readFileSync(path, "utf8");
+  if (Buffer.byteLength(content, "utf8") > 300_000) throw new Error("Skill 文件超过 300KB");
+  return { filename: basename(path), content };
+}
+
+async function ipcImportSkill(filename: string, content: string): Promise<{ skill: SkillListEntry }> {
+  const client = await ensureClient();
+  return (await client.call("skill.import", { filename, content })) as { skill: SkillListEntry };
+}
+
+async function ipcDeleteSkill(filename: string): Promise<{ ok: boolean }> {
+  const client = await ensureClient();
+  return (await client.call("skill.delete", { filename })) as { ok: boolean };
+}
+
 async function ipcGetDnd(): Promise<DndSettingsView> {
   const client = await ensureClient();
   return (await client.call("dnd.get", {})) as DndSettingsView;
@@ -1060,6 +1102,22 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:monitor:status",
     wrap(() => ipcGetMonitorStatus()),
+  );
+  ipcMain.handle(
+    "aegis:skill:list",
+    wrap(() => ipcListSkills()),
+  );
+  ipcMain.handle(
+    "aegis:skill:pick",
+    wrap(() => ipcPickSkillFile()),
+  );
+  ipcMain.handle(
+    "aegis:skill:import",
+    wrap((p: { filename: string; content: string }) => ipcImportSkill(p.filename, p.content)),
+  );
+  ipcMain.handle(
+    "aegis:skill:delete",
+    wrap((p: { filename: string }) => ipcDeleteSkill(p.filename)),
   );
   ipcMain.handle(
     "aegis:dnd:get",
