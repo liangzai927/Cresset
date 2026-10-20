@@ -176,10 +176,16 @@
             <input type="checkbox" id="weather-enabled" />
             在早报中显示天气
           </label>
-          <label class="form-field">地区（可多选）
-            <select id="weather-locations" multiple size="8"></select>
-          </label>
-          <p class="hint">按住 ⌘（Command）点选多个地区；自动使用预设经纬度。</p>
+          <div class="form-field">地区（可多选）
+            <div class="city-select" id="weather-city-picker">
+              <button type="button" class="city-select-button" id="weather-city-toggle" aria-haspopup="listbox" aria-expanded="false">
+                <span id="weather-city-label">选择地区</span>
+                <span class="city-select-chevron">▾</span>
+              </button>
+              <div class="city-select-menu hidden" id="weather-city-menu"></div>
+            </div>
+          </div>
+          <p class="hint">点击展开勾选，可同时选择多个地区；自动使用预设经纬度。</p>
           <div class="settings-actions">
             <button class="btn btn-ghost btn-small" id="btn-save-weather">保存天气</button>
             <span class="hint" id="weather-hint"></span>

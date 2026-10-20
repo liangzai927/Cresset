@@ -746,17 +746,53 @@ const WEATHER_CITIES = [
   { name: "拉萨", latitude: 29.652, longitude: 91.1721 },
 ];
 
-/** 初始化地区多选；只建一次选项 */
+/** 初始化地区下拉；只建一次复选项 */
 function initWeatherCities() {
-  const select = $("weather-locations");
-  if (select.options.length > 0) return;
-  for (const city of WEATHER_CITIES) {
-    const option = document.createElement("option");
-    option.value = city.name;
-    option.textContent = city.name;
-    select.appendChild(option);
+  const menu = $("weather-city-menu");
+  if (menu.childElementCount > 0) return;
+  for (const [index, city] of WEATHER_CITIES.entries()) {
+    const label = el("label", "city-option");
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.id = `weather-city-${index}`;
+    input.dataset.name = city.name;
+    input.addEventListener("change", updateWeatherLabel);
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(city.name));
+    menu.appendChild(label);
   }
 }
+
+/** 已勾选地区 */
+function selectedWeatherCities() {
+  return WEATHER_CITIES.filter((_, index) => $(`weather-city-${index}`)?.checked);
+}
+
+/** 更新下拉按钮上的摘要 */
+function updateWeatherLabel() {
+  const picked = selectedWeatherCities().map((c) => c.name);
+  $("weather-city-label").textContent = picked.length === 0 ? "选择地区" : picked.join("、");
+}
+
+/** 打开/关闭下拉 */
+function setWeatherMenuOpen(open) {
+  $("weather-city-menu").classList.toggle("hidden", !open);
+  $("weather-city-toggle").setAttribute("aria-expanded", String(open));
+}
+
+$("weather-city-toggle").addEventListener("click", (e) => {
+  e.stopPropagation();
+  setWeatherMenuOpen($("weather-city-menu").classList.contains("hidden"));
+});
+
+document.addEventListener("click", (e) => {
+  if (!(e.target instanceof Node)) return;
+  if (!$("weather-city-picker").contains(e.target)) setWeatherMenuOpen(false);
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") setWeatherMenuOpen(false);
+});
 
 /** 读取天气设置；用户只看到地区名 */
 async function loadWeather() {
@@ -765,9 +801,10 @@ async function loadWeather() {
     initWeatherCities();
     $("weather-enabled").checked = v.enabled;
     const names = new Set(v.locations.map((l) => l.name));
-    for (const option of $("weather-locations").options) {
-      option.selected = names.has(option.value);
+    for (const [index, city] of WEATHER_CITIES.entries()) {
+      $(`weather-city-${index}`).checked = names.has(city.name);
     }
+    updateWeatherLabel();
     $("weather-hint").textContent = v.enabled ? "已启用；早报会显示天气" : "未启用";
   } catch (err) {
     $("weather-hint").textContent = `读取失败：${err.message}`;
@@ -777,16 +814,16 @@ async function loadWeather() {
 $("btn-save-weather").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   const enabled = $("weather-enabled").checked;
-  const selected = [...$("weather-locations").selectedOptions].map((o) => o.value);
-  if (enabled && selected.length === 0) {
+  const locations = selectedWeatherCities();
+  if (enabled && locations.length === 0) {
     $("weather-hint").textContent = "启用天气时至少选择一个地区";
     return;
   }
-  const locations = WEATHER_CITIES.filter((c) => selected.includes(c.name));
   btn.disabled = true;
   try {
     await window.aegis.setWeather({ enabled, locations });
     $("weather-hint").textContent = "已保存；下一次刷新后显示";
+    setWeatherMenuOpen(false);
   } catch (err) {
     $("weather-hint").textContent = `保存失败：${err.message}`;
   } finally {

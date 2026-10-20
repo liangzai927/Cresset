@@ -494,6 +494,66 @@ main {
   margin-bottom: 8px;
 }
 
+.city-select {
+  position: relative;
+  width: 100%;
+}
+
+.city-select-button {
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.city-select-button:hover {
+  border-color: var(--accent);
+}
+
+.city-select-chevron {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+.city-select-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16);
+}
+
+.city-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.city-option:hover {
+  background: rgba(127, 127, 127, 0.12);
+}
+
 .calendar-path {
   flex: 1;
   min-width: 240px;
@@ -540,7 +600,7 @@ main {
 
 .routing-level {
   width: 28px;
-  color: var(--muted);
+  color: var(--text-dim);
 }
 
 .routing-choice {
