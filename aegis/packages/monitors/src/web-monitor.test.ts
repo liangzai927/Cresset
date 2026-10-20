@@ -62,6 +62,56 @@ describe("WebMonitor", () => {
     expect(result.facts[0]?.fields).toMatchObject({ item_id: "b", title: "第二条" });
   });
 
+  it("CSS selector 只监控选中内容，忽略页面其他变化", async () => {
+    body = `<html><title>价格</title><body><div class="price">100</div><div class="noise">a</div></body></html>`;
+    const monitor = new WebMonitor({
+      id: "web.selector",
+      url,
+      selector: ".price",
+      clock: new VirtualClock(1_000),
+    });
+    expect((await monitor.scan()).facts).toEqual([]);
+
+    body = `<html><title>价格</title><body><div class="price">100</div><div class="noise">b</div></body></html>`;
+    expect((await monitor.scan()).facts).toEqual([]);
+
+    body = `<html><title>价格</title><body><div class="price">200</div><div class="noise">b</div></body></html>`;
+    const result = await monitor.scan();
+    expect(result.facts).toHaveLength(1);
+    expect(result.facts[0]?.fields.excerpt).toBe("200");
+    expect(result.facts[0]?.fields.selector).toBe(".price");
+  });
+
+  it("JSONPath 只监控指定字段，字段缺失时报错", async () => {
+    body = JSON.stringify({ status: "ok", noise: 1 });
+    const monitor = new WebMonitor({
+      id: "web.json",
+      url,
+      mode: "json",
+      jsonPath: "status",
+      clock: new VirtualClock(1_000),
+    });
+    expect((await monitor.scan()).facts).toEqual([]);
+    body = JSON.stringify({ status: "ok", noise: 2 });
+    expect((await monitor.scan()).facts).toEqual([]);
+    body = JSON.stringify({ status: "down", noise: 2 });
+    const result = await monitor.scan();
+    expect(result.facts).toHaveLength(1);
+    expect(result.facts[0]?.fields.json_path).toBe("status");
+    expect(result.facts[0]?.fields.excerpt).toBe('"down"');
+
+    const missing = new WebMonitor({
+      id: "web.json.missing",
+      url,
+      mode: "json",
+      jsonPath: "missing.field",
+    });
+    body = JSON.stringify({ status: "ok" });
+    const bad = await missing.scan();
+    expect(bad.facts).toEqual([]);
+    expect(bad.errors[0]?.message).toContain("JSONPath 字段不存在");
+  });
+
   it("HTTP 失败进入 errors，不抛异常", async () => {
     server.removeAllListeners("request");
     server.on("request", (_req, res) => {

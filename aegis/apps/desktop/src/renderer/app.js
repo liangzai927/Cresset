@@ -872,6 +872,11 @@ function updateMonitorFormKind() {
   const kind = $("mon-kind").value;
   $("mon-file-fields").classList.toggle("hidden", kind !== "files");
   $("mon-web-fields").classList.toggle("hidden", kind !== "web");
+  if (kind === "web") {
+    const mode = $("mon-mode").value;
+    $("mon-selector-field").classList.toggle("hidden", mode !== "page");
+    $("mon-jsonpath-field").classList.toggle("hidden", mode !== "json");
+  }
 }
 
 /** 用已导入的有效 Skill 填充多选；导入路径统一为 skills/<file> */
@@ -916,6 +921,7 @@ $("btn-cancel-monitor").addEventListener("click", () => {
   $("monitor-form-hint").textContent = "";
 });
 $("mon-kind").addEventListener("change", updateMonitorFormKind);
+$("mon-mode").addEventListener("change", updateMonitorFormKind);
 
 $("monitor-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -957,7 +963,14 @@ $("monitor-form").addEventListener("submit", async (e) => {
       hint.textContent = "URL 必须以 http:// 或 https:// 开头";
       return;
     }
+    const selector = $("mon-selector").value.trim();
+    const jsonPath = $("mon-jsonpath").value.trim();
     Object.assign(config, { url, mode: $("mon-mode").value });
+    if ($("mon-mode").value === "json") {
+      if (jsonPath) config.jsonPath = jsonPath;
+    } else if (selector) {
+      config.selector = selector;
+    }
   }
 
   const save = $("btn-save-monitor");

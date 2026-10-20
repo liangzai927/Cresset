@@ -1,26 +1,32 @@
 /**
  * 网页 / RSS 监测器（M2 / PRD FR-B3）
  *
- * 当前切片支持两种模式：
- *   - page：抓取页面，提取标题 + 可见文本，规范化后做指纹；内容真正变化才产生事实；
+ * 支持三种模式：
+ *   - page：抓取页面；可用 CSS selector 只监控某块内容，否则监控标题 + 可见文本；
+ *   - json：抓取 JSON API；可用受限 JSONPath（`data.items[0].status`）只监控某个字段；
  *   - rss：解析 RSS/Atom 的 item/entry，出现新条目时逐条产生事实。
  *
- * 刻意不引入 HTML/XML 解析依赖：M2 先保证"变化检测 + 失败可见"，
- * CSS 选择器/JSONPath 与完整 XML 解析在后续迭代补齐。
+ * HTML 解析用 node-html-parser（纯 JS，可被打包进 dist）；JSONPath 只实现
+ * 点路径 + 数字下标的安全子集，不执行任意表达式。
  */
 
 import { createHash } from "node:crypto";
 import { type Clock, SystemClock } from "@aegis/clock";
+import { parse as parseHtml } from "node-html-parser";
 import type { Monitor, MonitorError, MonitorFact, MonitorScanResult } from "./types.js";
 
 /** 网页监测模式 */
-export type WebMonitorMode = "page" | "rss";
+export type WebMonitorMode = "page" | "json" | "rss";
 
 /** 网页监测器配置 */
 export interface WebMonitorOptions {
   id: string;
   url: string;
   mode?: WebMonitorMode;
+  /** page 模式的 CSS 选择器；为空时监控整页标题 + 可见文本 */
+  selector?: string;
+  /** json 模式的受限 JSONPath，如 data.items[0].status */
+  jsonPath?: string;
   clock?: Clock;
   /** 测试注入；默认使用全局 fetch */
   fetchImpl?: typeof fetch;
@@ -62,6 +68,37 @@ function normalizePage(html: string): { title: string; text: string } {
   return { title: textOf(title), text: textOf(text) };
 }
 
+/**
+ * 受限 JSONPath：只支持 `a.b[0].c` 形式。
+ *
+ * 不引入 jsonpath 依赖、也不执行表达式 —— 监测配置来自 YAML，
+ * 不能获得任意代码执行能力。字段不存在时抛错，由 scan 转成 errors。
+ */
+function readJsonPath(root: unknown, path: string): unknown {
+  const clean = path.trim().replace(/^\$\.?/, "");
+  if (!clean) return root;
+  let current: unknown = root;
+  for (const segment of clean.split(".")) {
+    if (!segment) continue;
+    const m = /^([^[\]]+)(?:\[(\d+)\])?$/.exec(segment);
+    if (!m) throw new Error(`不支持的 JSONPath 片段：${segment}`);
+    const [, key, index] = m;
+    if (key) {
+      if (typeof current !== "object" || current === null || !(key in current)) {
+        throw new Error(`JSONPath 字段不存在：${key}`);
+      }
+      current = (current as Record<string, unknown>)[key];
+    }
+    if (index !== undefined) {
+      if (!Array.isArray(current)) throw new Error(`JSONPath 下标用在非数组：${segment}`);
+      const i = Number(index);
+      if (i >= current.length) throw new Error(`JSONPath 下标越界：${segment}`);
+      current = current[i];
+    }
+  }
+  return current;
+}
+
 /** 从 RSS `<item>` / Atom `<entry>` 中提取 id/title/link */
 function parseFeedItems(xml: string): FeedItem[] {
   const blocks = xml.match(/<(item|entry)\b[\s\S]*?<\/\1>/gi) ?? [];
@@ -88,6 +125,8 @@ export class WebMonitor implements Monitor {
   readonly permission = "network.read" as const;
   readonly #url: string;
   readonly #mode: WebMonitorMode;
+  readonly #selector: string | undefined;
+  readonly #jsonPath: string | undefined;
   readonly #clock: Clock;
   readonly #fetch: typeof fetch;
   readonly #maxChars: number;
@@ -99,6 +138,8 @@ export class WebMonitor implements Monitor {
     this.id = options.id;
     this.#url = options.url;
     this.#mode = options.mode ?? "page";
+    this.#selector = options.selector;
+    this.#jsonPath = options.jsonPath;
     this.#clock = options.clock ?? new SystemClock();
     this.#fetch = options.fetchImpl ?? fetch;
     this.#maxChars = options.maxChars ?? 2_000_000;
@@ -157,8 +198,69 @@ export class WebMonitor implements Monitor {
       return { facts, errors };
     }
 
-    const page = normalizePage(body);
-    const hash = createHash("sha256").update(`${page.title}\n${page.text}`).digest("hex");
+    if (this.#mode === "json") {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(body);
+      } catch (err) {
+        errors.push({ path: this.#url, message: `JSON 解析失败：${(err as Error).message}` });
+        return { facts, errors };
+      }
+      let selected: unknown;
+      try {
+        selected = this.#jsonPath ? readJsonPath(parsed, this.#jsonPath) : parsed;
+      } catch (err) {
+        errors.push({ path: this.#url, message: (err as Error).message });
+        return { facts, errors };
+      }
+      const normalized = JSON.stringify(selected);
+      const hash = createHash("sha256").update(normalized).digest("hex");
+      if (!this.#baselineDone) {
+        this.#lastPageHash = hash;
+        this.#baselineDone = true;
+        return { facts, errors };
+      }
+      if (hash !== this.#lastPageHash) {
+        this.#lastPageHash = hash;
+        facts.push({
+          monitor: this.id,
+          kind: "web.changed",
+          at,
+          fields: {
+            url: this.#url,
+            fingerprint: hash,
+            json_path: this.#jsonPath ?? "$",
+            excerpt: normalized.slice(0, 500),
+          },
+        });
+      }
+      return { facts, errors };
+    }
+
+    let title: string;
+    let text: string;
+    if (this.#selector) {
+      try {
+        const root = parseHtml(body);
+        const nodes = root.querySelectorAll(this.#selector);
+        if (nodes.length === 0) throw new Error(`CSS 选择器没有匹配：${this.#selector}`);
+        title = textOf(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(body)?.[1] ?? "");
+        text = nodes
+          .map((n) => n.textContent)
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+      } catch (err) {
+        errors.push({ path: this.#url, message: (err as Error).message });
+        return { facts, errors };
+      }
+    } else {
+      const page = normalizePage(body);
+      title = page.title;
+      text = page.text;
+    }
+
+    const hash = createHash("sha256").update(`${title}\n${text}`).digest("hex");
     if (!this.#baselineDone) {
       this.#lastPageHash = hash;
       this.#baselineDone = true;
@@ -173,8 +275,9 @@ export class WebMonitor implements Monitor {
         fields: {
           url: this.#url,
           fingerprint: hash,
-          title: page.title,
-          excerpt: page.text.slice(0, 500),
+          title,
+          excerpt: text.slice(0, 500),
+          selector: this.#selector ?? null,
         },
       });
     }

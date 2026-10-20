@@ -144,8 +144,15 @@
               <label class="form-field">模式
                 <select id="mon-mode">
                   <option value="page">页面变化</option>
+                  <option value="json">JSON 字段</option>
                   <option value="rss">RSS / Atom 新条目</option>
                 </select>
+              </label>
+              <label class="form-field" id="mon-selector-field">CSS 选择器
+                <input id="mon-selector" type="text" placeholder=".price / #main" />
+              </label>
+              <label class="form-field hidden" id="mon-jsonpath-field">JSONPath
+                <input id="mon-jsonpath" type="text" placeholder="data.items[0].status" />
               </label>
             </div>
 

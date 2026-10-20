@@ -42,7 +42,17 @@ daemon 会拒绝保存并提示原因。
       "kind": "web",
       "url": "https://example.com/news",
       "mode": "page",
+      "selector": ".headline",
       "intervalS": 120,
+      "skills": ["skills/page-change.yaml"]
+    },
+    {
+      "id": "api.status",
+      "kind": "web",
+      "url": "https://example.com/api/status",
+      "mode": "json",
+      "jsonPath": "data.status",
+      "intervalS": 60,
       "skills": ["skills/page-change.yaml"]
     },
     {
@@ -100,7 +110,8 @@ aegis skill check ~/Library/Application\ Support/Aegis/skills/disk-space-guard.y
 ## 5. 当前限制
 
 - 还没有 Skill 管理/导入界面；
-- Web 监测的 page 模式目前按"标题 + 可见文本"做变化检测，尚未支持 CSS 选择器/JSONPath；
+- Web 的 `page` 模式支持 CSS 选择器；不填时按"标题 + 可见文本"做变化检测；
+- Web 的 `json` 模式支持受限 JSONPath（`a.b[0].c`），不支持过滤器/通配符；
 - RSS/Atom 使用轻量正则解析（标题/link/guid）；复杂命名空间/嵌套结构后续用 XML 解析器替换；
 - 文件重命名暂时表现为删除 + 新增；
 - 不做脚本执行、不调模型。

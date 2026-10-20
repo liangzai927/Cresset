@@ -60,6 +60,26 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M2：Web CSS 选择器与 JSONPath
+**里程碑**：M2（R5 并行观察）
+**改了什么**：
+- WebMonitor 新增 `selector`（page）与 `jsonPath`（json）：
+  - page + CSS selector 只对选中文本做指纹，页面其他区域变化不触发；
+  - json 模式取受限 JSONPath（点路径 + 数字下标），字段缺失返回 errors；
+  - 选择器无匹配同样返回 errors，不静默监控空内容；
+- config/contract/UI 表单同步支持 selector、jsonPath、mode=json；
+- 新增 2 个本机 HTTP 测试（CSS 只监控选中块、JSONPath 字段变化/缺失）；
+- 新增依赖 node-html-parser（纯 JS，esbuild 打包进 dist，不额外复制运行时）。
+**为什么**：只监控整页会被广告/时间戳等噪声淹没；M2 的网页监测必须能锁定一个字段/区块。
+**验证**：
+- `pnpm verify`：362 通过 / 9 跳过
+- 打包后的 monitors dist 直接运行 CSS selector 测试通过
+- 打包产物真实启动通过
+**踩到的坑**：CSS 选择器无匹配时若按空字符串建基线，会显示"监控成功"但永远不触发；
+必须把无匹配作为采集错误暴露。
+**留给下次**：完整 RSS/Atom XML、文件重命名配对、M2 7 天验收；
+仍禁止 M3 的 LLM/知识库。
+
 ### 2026-10-20 · M2：监测器启停
 **里程碑**：M2（R5 并行观察）
 **改了什么**：

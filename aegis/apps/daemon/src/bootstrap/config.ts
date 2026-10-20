@@ -43,7 +43,11 @@ export const MonitorConfigSchema = z.discriminatedUnion("kind", [
         .string()
         .url()
         .refine((u) => /^https?:\/\//.test(u), "只支持 http/https"),
-      mode: z.enum(["page", "rss"]).default("page"),
+      mode: z.enum(["page", "json", "rss"]).default("page"),
+      /** page 模式的 CSS 选择器；只监控选中区域 */
+      selector: z.string().max(200).optional(),
+      /** json 模式的受限 JSONPath，如 data.items[0].status */
+      jsonPath: z.string().max(300).optional(),
       intervalS: z.number().int().min(5).max(3_600).default(60),
       skills: z.array(z.string()).default([]),
     })

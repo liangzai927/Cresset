@@ -14,9 +14,9 @@
 | R2 调度引擎 | ✅ 完成：recurrence ｜ scheduler ｜ notify ｜ daemon 接入 ｜ CLI |
 | **R3 桌面外壳 + 界面** | ✅ **完成**：Electron 三层 ｜ 原生通知 ｜ 三块界面 ｜ 托盘 |
 | R4 系统集成（打包/自启/自恢复） | 🚧 进行中：自启 ✅ ｜ 自恢复（崩溃/启动卡死）✅ ｜ 打包（ad-hoc）✅ ｜ 备份导出 ✅ ｜ 正式签名/公证 待做 |
-| **M2 Skill + 规则引擎 + 本地监测** | 🚧 进行中：Skill YAML/规则引擎 ✅ ｜ File/System/Web/RSS 监测 ✅ ｜ Monitor 运行时 + Skill→通知 ✅ ｜ 监测器增删/启停/手动扫描/连续失败告警 + Skill 导入 UI ✅ ｜ CSS/JSONPath 待做 |
+| **M2 Skill + 规则引擎 + 本地监测** | 🚧 进行中：Skill YAML/规则引擎 ✅ ｜ File/System/Web/RSS 监测 + CSS/JSONPath ✅ ｜ Monitor 运行时 + Skill→通知 ✅ ｜ 监测器增删/启停/手动扫描/连续失败告警 + Skill 导入 UI ✅ ｜ 完整 XML/重命名待做 |
 
-**当前验证状态**：`pnpm verify` 全绿 ｜ **14 个工作区包** ｜ **360 测试通过** ｜ 注释占比 17.8%
+**当前验证状态**：`pnpm verify` 全绿 ｜ **14 个工作区包** ｜ **362 测试通过** ｜ 注释占比 17.7%
 **桌面验证**：`pnpm verify:desktop` 11 项集成检查全部通过（含 SIGKILL 后自动重启）
 
 ### 一条命令启动

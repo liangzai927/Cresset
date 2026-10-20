@@ -12,6 +12,7 @@
     }
   },
   "dependencies": {
-    "@aegis/clock": "workspace:*"
+    "@aegis/clock": "workspace:*",
+    "node-html-parser": "^9.0.4"
   }
 }

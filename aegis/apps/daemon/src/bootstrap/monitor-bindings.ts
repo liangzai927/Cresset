@@ -64,7 +64,14 @@ export function buildMonitorBindings(
             clock,
           })
         : cfg.kind === "web"
-          ? new WebMonitor({ id: cfg.id, url: cfg.url, mode: cfg.mode, clock })
+          ? new WebMonitor({
+              id: cfg.id,
+              url: cfg.url,
+              mode: cfg.mode,
+              ...(cfg.selector ? { selector: cfg.selector } : {}),
+              ...(cfg.jsonPath ? { jsonPath: cfg.jsonPath } : {}),
+              clock,
+            })
           : new SystemMonitor({ id: cfg.id, clock });
 
     const permitted = skills.filter((skill) => {

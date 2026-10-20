@@ -195,7 +195,9 @@ export const MonitorConfigViewSchema = z.discriminatedUnion("kind", [
         .string()
         .url()
         .refine((u) => /^https?:\/\//.test(u), "只支持 http/https"),
-      mode: z.enum(["page", "rss"]),
+      mode: z.enum(["page", "json", "rss"]),
+      selector: z.string().max(200).optional(),
+      jsonPath: z.string().max(300).optional(),
       intervalS: z.number().int().min(5).max(3_600),
       skills: z.array(z.string()),
     })

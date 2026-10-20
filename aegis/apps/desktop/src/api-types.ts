@@ -231,7 +231,9 @@ export type MonitorConfigView =
       kind: "web";
       enabled?: boolean;
       url: string;
-      mode: "page" | "rss";
+      mode: "page" | "json" | "rss";
+      selector?: string;
+      jsonPath?: string;
       intervalS: number;
       skills: string[];
     };
