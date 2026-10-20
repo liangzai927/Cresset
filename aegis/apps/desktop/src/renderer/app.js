@@ -828,7 +828,11 @@ async function loadLlm() {
 function readLlmForm() {
   const enabled = $("llm-enabled").checked;
   const provider = $("llm-provider").value;
-  const baseUrl = $("llm-base-url").value.trim();
+  // 预设服务商即使输入框被隐藏/尚未回填，也必须能从预设推导出 Base URL；
+  // 这条路径曾经因为 loadLlm 失败导致 Base URL 为空，连接按钮无法使用。
+  const baseUrl =
+    $("llm-base-url").value.trim() ||
+    (provider === "custom" ? "" : (LLM_PROVIDERS[provider]?.baseUrl ?? ""));
   const modelSelect = $("llm-model");
   const model =
     (!modelSelect.classList.contains("hidden") && modelSelect.value) || llmCurrentModel;
@@ -958,6 +962,8 @@ $("btn-test-llm").addEventListener("click", async (e) => {
   btn.disabled = true;
   $("llm-hint").textContent = "正在保存设置并测试连接…";
   try {
+    // 先按当前服务商回填 Base URL，再读表单；避免隐藏字段为空导致连接失败。
+    applyLlmProvider({ resetModel: false });
     const settings = readLlmForm();
     // 「连接并获取模型」本身表达启用意图：未勾选时自动启用，避免用户被一个
     // 与当前动作无关的复选框挡住。
