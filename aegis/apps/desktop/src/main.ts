@@ -47,6 +47,7 @@ import type {
   CreateTaskPayload,
   DiagnosticInfo,
   DndSettingsView,
+  LlmAuditEntry,
   LlmSettingsView,
   LlmTestResult,
   LlmView,
@@ -837,6 +838,11 @@ async function ipcGetLlm(): Promise<LlmView> {
   return (await client.call("llm.get", {})) as LlmView;
 }
 
+async function ipcGetLlmAudit(limit: number): Promise<{ entries: LlmAuditEntry[] }> {
+  const client = await ensureClient();
+  return (await client.call("llm.audit", { limit })) as { entries: LlmAuditEntry[] };
+}
+
 async function ipcSetLlm(settings: LlmSettingsView): Promise<LlmView> {
   const client = await ensureClient();
   return (await client.call("llm.set", settings)) as LlmView;
@@ -1199,6 +1205,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:llm:get",
     wrap(() => ipcGetLlm()),
+  );
+  ipcMain.handle(
+    "aegis:llm:audit",
+    wrap((limit: number) => ipcGetLlmAudit(limit)),
   );
   ipcMain.handle(
     "aegis:llm:set",

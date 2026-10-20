@@ -190,12 +190,30 @@ export interface LlmSettingsView {
   model: string;
   timeoutMs: number;
   maxOutboundClass: "L0" | "L1" | "L2";
+  dailyCallLimit: number;
 }
 
 /** LLM 设置页视图；不含 API Key */
 export interface LlmView extends LlmSettingsView {
   hasApiKey: boolean;
   keychainError: string | null;
+  callsToday: number;
+  remainingCalls: number;
+}
+
+/** 外发审计视图（不含原文） */
+export interface LlmAuditEntry {
+  id: string;
+  at: number;
+  actor: string;
+  purpose: string;
+  destination: string;
+  dataClass: string;
+  detectorSummary: Array<{ category: string; count: number }>;
+  redactionCount: number;
+  policyVersion: string;
+  payloadSha256: string;
+  outcome: "allowed" | "blocked" | "failed";
 }
 
 /** LLM 测试结果 */
@@ -310,6 +328,8 @@ export interface DesktopApi {
   checkUpdate(): Promise<UpdateInfo>;
   /** 读取 LLM 设置（API Key 只返回是否已配置） */
   getLlm(): Promise<LlmView>;
+  /** 最近外发审计（无原文） */
+  getLlmAudit(limit?: number): Promise<{ entries: LlmAuditEntry[] }>;
   /** 保存非敏感 LLM 设置 */
   setLlm(settings: LlmSettingsView): Promise<LlmView>;
   /** 写入 API Key 到系统钥匙串 */

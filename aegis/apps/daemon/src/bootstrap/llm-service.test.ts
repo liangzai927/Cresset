@@ -86,6 +86,38 @@ describe("LlmService", () => {
     expect(audits).toHaveLength(1);
     expect(audits[0]).toMatchObject({ purpose: "llm-test", outcome: "allowed", dataClass: "L0" });
     expect(JSON.stringify(audits)).not.toContain("sk-test");
+    expect(await service.audit(10)).toHaveLength(1);
+  });
+
+  it("达到每日调用上限后不再调用 Provider", async () => {
+    writeFileSync(
+      join(dir, "config.json"),
+      JSON.stringify({
+        version: 1,
+        llm: {
+          enabled: true,
+          baseUrl,
+          model: "test-model",
+          timeoutMs: 5_000,
+          maxOutboundClass: "L1",
+          dailyCallLimit: 1,
+        },
+      }),
+    );
+    const service = new LlmService({
+      configFile: join(dir, "config.json"),
+      db,
+      clock: new VirtualClock(1_000),
+      secrets: new MemorySecrets(),
+    });
+    await service.setApiKey("sk-test");
+
+    expect(await service.test()).toMatchObject({ ok: true });
+    expect(await service.test()).toMatchObject({ ok: false, errorKind: "rate_limit" });
+    const view = await service.get();
+    expect(view.callsToday).toBe(1);
+    expect(view.remainingCalls).toBe(0);
+    expect(new AuditRepo(db).recent(10)).toHaveLength(1);
   });
 
   it("未配置 Key 时测试失败，但不调用 Provider", async () => {

@@ -113,6 +113,7 @@ export const DaemonConfigSchema = z
         model: z.string().min(1).max(120).default("gpt-4o-mini"),
         timeoutMs: z.number().int().min(1_000).max(120_000).default(30_000),
         maxOutboundClass: z.enum(["L0", "L1", "L2"]).default("L1"),
+        dailyCallLimit: z.number().int().min(1).max(10_000).default(200),
       })
       .default({}),
     /** 通知优先级规则：DND 期间哪些级别可穿透（FR-A7） */

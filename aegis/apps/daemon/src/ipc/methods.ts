@@ -538,6 +538,7 @@ export function createMethods(
           model: z.string().min(1).max(120),
           timeoutMs: z.number().int().min(1_000).max(120_000),
           maxOutboundClass: z.enum(["L0", "L1", "L2"]),
+          dailyCallLimit: z.number().int().min(1).max(10_000),
         })
         .strict()
         .parse(params);
@@ -571,6 +572,15 @@ export function createMethods(
     "llm.test": async () => {
       if (!context.llm) throw new MethodError(E_INTERNAL, "LLM 服务未初始化");
       return context.llm.test();
+    },
+
+    "llm.audit": async (params) => {
+      const p = z
+        .object({ limit: z.number().int().min(1).max(100).default(20) })
+        .strict()
+        .parse(params);
+      if (!context.llm) throw new MethodError(E_INTERNAL, "LLM 服务未初始化");
+      return { entries: context.llm.audit(p.limit) };
     },
 
     "monitor.config": async () => {

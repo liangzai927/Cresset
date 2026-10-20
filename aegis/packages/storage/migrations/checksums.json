@@ -18,6 +18,12 @@
       "name": "monitor_notifications",
       "file": "0003_monitor_notifications.sql",
       "checksum": "f97b74968ab7f0bfe8e72f76624cd8aa9bc743decfb7322023bd400fedf4b641"
+    },
+    {
+      "id": 4,
+      "name": "llm_usage",
+      "file": "0004_llm_usage.sql",
+      "checksum": "34200d5ab6fb50de0bb11d94a084fdde037b1faa7bf34f2a8684296935967683"
     }
   ]
 }

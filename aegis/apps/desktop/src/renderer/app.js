@@ -142,6 +142,7 @@ async function refreshStatus() {
     "btn-set-llm-key",
     "btn-clear-llm-key",
     "btn-test-llm",
+    "btn-refresh-llm-audit",
     "btn-monitor-preset",
     "btn-import-skill",
     "btn-install-defaults",
@@ -613,7 +614,9 @@ async function loadLlm() {
     $("llm-model").value = view.model;
     $("llm-timeout").value = String(view.timeoutMs);
     $("llm-max-class").value = view.maxOutboundClass;
+    $("llm-daily-limit").value = String(view.dailyCallLimit);
     $("llm-key-status").textContent = view.hasApiKey ? "已配置 API Key" : "未配置 API Key";
+    $("llm-usage").textContent = `今日调用 ${view.callsToday} 次，剩余 ${view.remainingCalls} 次`;
     if (view.keychainError) $("llm-key-status").textContent = `钥匙串不可用：${view.keychainError}`;
     $("llm-hint").textContent = view.hasApiKey ? "测试连接会发起一次真实外发" : "先保存 API Key 再测试";
   } catch (err) {
@@ -628,10 +631,12 @@ function readLlmForm() {
   const model = $("llm-model").value.trim();
   const timeoutMs = Number($("llm-timeout").value);
   const maxOutboundClass = $("llm-max-class").value;
+  const dailyCallLimit = Number($("llm-daily-limit").value);
   if (!/^https?:\/\//.test(baseUrl)) throw new Error("Base URL 必须以 http:// 或 https:// 开头");
   if (!model) throw new Error("模型名不能为空");
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000) throw new Error("超时必须 ≥1000 毫秒");
-  return { enabled, baseUrl, model, timeoutMs, maxOutboundClass };
+  if (!Number.isInteger(dailyCallLimit) || dailyCallLimit < 1) throw new Error("每日调用上限必须 ≥1");
+  return { enabled, baseUrl, model, timeoutMs, maxOutboundClass, dailyCallLimit };
 }
 
 $("btn-save-llm").addEventListener("click", async (e) => {
@@ -680,15 +685,61 @@ $("btn-clear-llm-key").addEventListener("click", async () => {
   }
 });
 
+/** 渲染最近外发审计；只有摘要，没有原文/Key */
+function renderLlmAudit(entries) {
+  const box = $("llm-audit");
+  box.textContent = "";
+  if (entries.length === 0) {
+    box.appendChild(el("p", "hint", "还没有外发记录"));
+    return;
+  }
+  for (const entry of entries) {
+    const row = el("div", "audit-row");
+    const outcome = el("span", `audit-outcome ${entry.outcome}`, entry.outcome);
+    row.appendChild(outcome);
+    row.appendChild(
+      document.createTextNode(
+        ` ${entry.purpose} · ${new Date(entry.at).toLocaleString("zh-CN")} · ${entry.destination} · ${entry.dataClass} · 脱敏 ${entry.redactionCount} · ${entry.payloadSha256.slice(0, 10)}…`,
+      ),
+    );
+    box.appendChild(row);
+  }
+}
+
+/** 读取审计列表；失败只显示在列表里 */
+async function loadLlmAudit() {
+  try {
+    const result = await window.aegis.getLlmAudit(20);
+    renderLlmAudit(result.entries);
+  } catch (err) {
+    const box = $("llm-audit");
+    box.textContent = "";
+    box.appendChild(el("p", "hint", `读取审计失败：${err.message}`));
+  }
+}
+
+$("btn-refresh-llm-audit").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await loadLlmAudit();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 $("btn-test-llm").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
   $("llm-hint").textContent = "测试中（会发起一次真实外发）…";
   try {
     const result = await window.aegis.testLlm();
-    $("llm-hint").textContent = result.ok
+    const message = result.ok
       ? `连接成功：${result.text.slice(0, 80)}（目标 ${result.destination}）`
       : `测试失败：${result.reason}`;
+    await loadLlm();
+    await loadLlmAudit();
+    $("llm-hint").textContent = message;
   } catch (err) {
     $("llm-hint").textContent = `测试失败：${err.message}`;
   } finally {

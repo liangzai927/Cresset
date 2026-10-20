@@ -30,6 +30,7 @@ import type {
   DesktopApi,
   DiagnosticInfo,
   DndSettingsView,
+  LlmAuditEntry,
   LlmSettingsView,
   LlmTestResult,
   LlmView,
@@ -82,6 +83,8 @@ function buildApi(): DesktopApi {
     exportBackup: () => ipcRenderer.invoke("aegis:backup:export") as Promise<BackupExportResult>,
 
     getLlm: () => ipcRenderer.invoke("aegis:llm:get") as Promise<LlmView>,
+    getLlmAudit: (limit = 20) =>
+      ipcRenderer.invoke("aegis:llm:audit", { limit }) as Promise<{ entries: LlmAuditEntry[] }>,
     setLlm: (settings: LlmSettingsView) => ipcRenderer.invoke("aegis:llm:set", settings) as Promise<LlmView>,
     setLlmKey: (apiKey: string) =>
       ipcRenderer.invoke("aegis:llm:set-key", { apiKey }) as Promise<{ hasApiKey: boolean }>,

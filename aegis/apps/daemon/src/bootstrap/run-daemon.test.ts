@@ -44,7 +44,7 @@ describe("启动序列（详细设计 §3）", () => {
     expect(existsSync(running.paths.dbFile)).toBe(true);
     expect(existsSync(running.paths.handshakeFile)).toBe(true);
     expect(existsSync(running.paths.readyFile)).toBe(true);
-    expect(running.startup.appliedMigrations).toEqual([1, 2, 3]);
+    expect(running.startup.appliedMigrations).toEqual([1, 2, 3, 4]);
   });
 
   it("握手文件权限为 0600（token 不可被其他用户读取）", async () => {
@@ -332,7 +332,7 @@ describe("数据库状态（R1 交付面）", () => {
     const rows = running.db
       .prepare("SELECT id, name, checksum FROM schema_migration ORDER BY id")
       .all() as Array<{ id: number; name: string; checksum: string }>;
-    expect(rows.map((r) => r.id)).toEqual([1, 2, 3]);
+    expect(rows.map((r) => r.id)).toEqual([1, 2, 3, 4]);
     expect(rows.every((r) => r.checksum.length === 64)).toBe(true);
   });
 

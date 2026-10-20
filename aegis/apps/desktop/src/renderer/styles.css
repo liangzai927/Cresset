@@ -485,6 +485,40 @@ main {
   margin-bottom: 8px;
 }
 
+.audit-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 6px;
+  font-size: 12px;
+}
+
+.audit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.audit-row {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+.audit-outcome {
+  display: inline-block;
+  min-width: 58px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.audit-outcome.blocked,
+.audit-outcome.failed {
+  color: var(--err);
+}
+
 .llm-key {
   display: flex;
   align-items: center;

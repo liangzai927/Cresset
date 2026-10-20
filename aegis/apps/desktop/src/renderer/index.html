@@ -119,6 +119,9 @@
                 <option value="L2">L2 敏感（谨慎）</option>
               </select>
             </label>
+            <label class="form-field">每日调用上限
+              <input id="llm-daily-limit" type="number" min="1" max="10000" />
+            </label>
           </div>
           <div class="llm-key">
             <input id="llm-api-key" type="password" placeholder="API Key（只写入系统钥匙串）" autocomplete="off" />
@@ -130,7 +133,13 @@
             <button class="btn" id="btn-save-llm">保存设置</button>
             <button class="btn btn-ghost" id="btn-test-llm">测试连接</button>
             <span class="hint" id="llm-hint"></span>
+            <span class="hint" id="llm-usage"></span>
           </div>
+          <div class="audit-head">
+            <strong>最近外发审计</strong>
+            <button class="btn btn-ghost btn-small" id="btn-refresh-llm-audit">刷新</button>
+          </div>
+          <div class="audit-list" id="llm-audit"></div>
         </div>
 
         <div class="settings-group">

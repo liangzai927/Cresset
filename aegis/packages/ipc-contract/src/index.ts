@@ -173,6 +173,7 @@ export const LlmSettingsSchema = z
     model: z.string().min(1).max(120),
     timeoutMs: z.number().int().min(1_000).max(120_000),
     maxOutboundClass: z.enum(["L0", "L1", "L2"]),
+    dailyCallLimit: z.number().int().min(1).max(10_000),
   })
   .strict();
 export type LlmSettingsView = z.infer<typeof LlmSettingsSchema>;
@@ -181,7 +182,27 @@ export type LlmSettingsView = z.infer<typeof LlmSettingsSchema>;
 export const LlmViewSchema = LlmSettingsSchema.extend({
   hasApiKey: z.boolean(),
   keychainError: z.string().nullable(),
+  callsToday: z.number().int().nonnegative(),
+  remainingCalls: z.number().int().nonnegative(),
 }).strict();
+
+/** 外发审计视图；只含安全摘要 */
+export const LlmAuditEntrySchema = z
+  .object({
+    id: z.string(),
+    at: z.number().int(),
+    actor: z.string(),
+    purpose: z.string(),
+    destination: z.string(),
+    dataClass: z.string(),
+    detectorSummary: z.array(z.object({ category: z.string(), count: z.number().int() }).strict()),
+    redactionCount: z.number().int().nonnegative(),
+    policyVersion: z.string(),
+    payloadSha256: z.string(),
+    outcome: z.enum(["allowed", "blocked", "failed"]),
+  })
+  .strict();
+export type LlmAuditEntryView = z.infer<typeof LlmAuditEntrySchema>;
 
 /** LLM 测试结果 */
 export const LlmTestResultSchema = z.union([
