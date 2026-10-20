@@ -166,6 +166,7 @@ export type SkillListEntryView = z.infer<typeof SkillListEntrySchema>;
 export const LlmSettingsSchema = z
   .object({
     enabled: z.boolean(),
+    provider: z.enum(["openai", "deepseek", "kimi", "glm", "custom"]),
     baseUrl: z
       .string()
       .url()

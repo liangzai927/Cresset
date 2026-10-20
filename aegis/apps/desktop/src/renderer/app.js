@@ -774,20 +774,51 @@ $("knowledge-query").addEventListener("keydown", (e) => {
 
 // ── 模型（LLM）设置 ─────────────────────────────────────────────────────
 
+/** 常用 OpenAI 兼容服务商预设；模型列表以 /models 的结果为准 */
+const LLM_PROVIDERS = {
+  openai: { baseUrl: "https://api.openai.com/v1", fallback: ["gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"] },
+  deepseek: { baseUrl: "https://api.deepseek.com/v1", fallback: ["deepseek-chat", "deepseek-reasoner"] },
+  kimi: { baseUrl: "https://api.moonshot.cn/v1", fallback: ["moonshot-v1-8k", "moonshot-v1-32k", "moonshot-v1-128k"] },
+  glm: { baseUrl: "https://open.bigmodel.cn/api/paas/v4", fallback: ["glm-4-flash", "glm-4-plus"] },
+  custom: { baseUrl: "", fallback: [] },
+};
+
+let llmCurrentModel = "";
+
+/** 切换服务商时自动填 Base URL；自定义才显示输入框 */
+function applyLlmProvider({ resetModel = true } = {}) {
+  const provider = $("llm-provider").value;
+  const preset = LLM_PROVIDERS[provider] ?? LLM_PROVIDERS.custom;
+  const isCustom = provider === "custom";
+  $("llm-base-url-field").classList.toggle("hidden", !isCustom);
+  if (!isCustom) $("llm-base-url").value = preset.baseUrl;
+  if (resetModel) {
+    llmCurrentModel = preset.fallback[0] ?? "";
+    $("llm-model").classList.add("hidden");
+    $("llm-model").textContent = "";
+    $("llm-model-current").textContent = llmCurrentModel ? `当前：${llmCurrentModel}（连接后可切换）` : "尚未连接";
+  }
+}
+
 /** 拉取设置并回填表单；API Key 只显示"是否已配置" */
 async function loadLlm() {
   try {
     const view = await window.aegis.getLlm();
     $("llm-enabled").checked = view.enabled;
+    $("llm-provider").value = view.provider;
     $("llm-base-url").value = view.baseUrl;
-    $("llm-model").value = view.model;
+    llmCurrentModel = view.model;
+    applyLlmProvider({ resetModel: false });
+    $("llm-model-current").textContent = `当前：${view.model}`;
     $("llm-timeout").value = String(view.timeoutMs);
     $("llm-max-class").value = view.maxOutboundClass;
     $("llm-daily-limit").value = String(view.dailyCallLimit);
     $("llm-key-status").textContent = view.hasApiKey ? "已配置 API Key" : "未配置 API Key";
     $("llm-usage").textContent = `今日调用 ${view.callsToday} 次，剩余 ${view.remainingCalls} 次`;
     if (view.keychainError) $("llm-key-status").textContent = `钥匙串不可用：${view.keychainError}`;
-    $("llm-hint").textContent = view.hasApiKey ? "测试连接会发起一次真实外发" : "先保存 API Key 再测试";
+    $("llm-hint").textContent = view.hasApiKey
+      ? "选择服务商后点「连接并获取模型」"
+      : "填入 API Key 后点「连接并获取模型」";
   } catch (err) {
     $("llm-hint").textContent = `读取失败：${err.message}`;
   }
@@ -796,8 +827,11 @@ async function loadLlm() {
 /** 从表单构建设置；URL/数字在前端先做基本检查 */
 function readLlmForm() {
   const enabled = $("llm-enabled").checked;
+  const provider = $("llm-provider").value;
   const baseUrl = $("llm-base-url").value.trim();
-  const model = $("llm-model").value.trim();
+  const modelSelect = $("llm-model");
+  const model =
+    (!modelSelect.classList.contains("hidden") && modelSelect.value) || llmCurrentModel;
   const timeoutMs = Number($("llm-timeout").value);
   const maxOutboundClass = $("llm-max-class").value;
   const dailyCallLimit = Number($("llm-daily-limit").value);
@@ -805,7 +839,27 @@ function readLlmForm() {
   if (!model) throw new Error("模型名不能为空");
   if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000) throw new Error("超时必须 ≥1000 毫秒");
   if (!Number.isInteger(dailyCallLimit) || dailyCallLimit < 1) throw new Error("每日调用上限必须 ≥1");
-  return { enabled, baseUrl, model, timeoutMs, maxOutboundClass, dailyCallLimit };
+  return { enabled, provider, baseUrl, model, timeoutMs, maxOutboundClass, dailyCallLimit };
+}
+
+/** 用发现结果填充模型下拉；没有远程列表时用预设候选 */
+function showLlmModels(models) {
+  const select = $("llm-model");
+  select.textContent = "";
+  for (const model of models) {
+    const option = el("option", "", model);
+    option.value = model;
+    select.appendChild(option);
+  }
+  if (models.length === 0) {
+    $("llm-model-current").textContent = "未能获取模型列表";
+    return;
+  }
+  const preferred = models.includes(llmCurrentModel) ? llmCurrentModel : models[0];
+  select.value = preferred;
+  llmCurrentModel = preferred;
+  select.classList.remove("hidden");
+  $("llm-model-current").textContent = "连接成功，可切换模型后保存";
 }
 
 $("btn-save-llm").addEventListener("click", async (e) => {
@@ -821,6 +875,8 @@ $("btn-save-llm").addEventListener("click", async (e) => {
     btn.disabled = false;
   }
 });
+
+$("llm-provider").addEventListener("change", () => applyLlmProvider());
 
 $("btn-set-llm-key").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
@@ -900,17 +956,38 @@ $("btn-refresh-llm-audit").addEventListener("click", async (e) => {
 $("btn-test-llm").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
-  $("llm-hint").textContent = "测试中（会发起一次真实外发）…";
+  $("llm-hint").textContent = "正在保存设置并测试连接…";
   try {
+    const settings = readLlmForm();
+    await window.aegis.setLlm(settings);
+    const key = $("llm-api-key").value.trim();
+    if (key) {
+      await window.aegis.setLlmKey(key);
+      $("llm-api-key").value = "";
+    }
+
     const result = await window.aegis.testLlm();
-    const message = result.ok
-      ? `连接成功：${result.text.slice(0, 80)}（目标 ${result.destination}）`
-      : `测试失败：${result.reason}`;
-    await loadLlm();
+    if (!result.ok) {
+      $("llm-hint").textContent = `连接失败：${result.reason}`;
+      return;
+    }
+
+    let models = LLM_PROVIDERS[settings.provider]?.fallback ?? [];
+    let source = "内置候选";
+    try {
+      const discovered = await window.aegis.discoverLlmModels();
+      if (discovered.models.length > 0) {
+        models = discovered.models;
+        source = "服务商模型列表";
+      }
+    } catch {
+      // /models 不是所有兼容服务都支持；聊天测试成功时退回内置候选
+    }
+    showLlmModels(models);
+    $("llm-hint").textContent = `连接成功（${source}）；选择模型后点「保存设置」`;
     await loadLlmAudit();
-    $("llm-hint").textContent = message;
   } catch (err) {
-    $("llm-hint").textContent = `测试失败：${err.message}`;
+    $("llm-hint").textContent = `连接失败：${err.message}`;
   } finally {
     btn.disabled = false;
   }

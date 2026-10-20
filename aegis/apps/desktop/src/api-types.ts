@@ -186,6 +186,7 @@ export interface DndSettingsView {
 /** LLM 非敏感设置 */
 export interface LlmSettingsView {
   enabled: boolean;
+  provider: "openai" | "deepseek" | "kimi" | "glm" | "custom";
   baseUrl: string;
   model: string;
   timeoutMs: number;
@@ -392,6 +393,8 @@ export interface DesktopApi {
   getLlm(): Promise<LlmView>;
   /** 最近外发审计（无原文） */
   getLlmAudit(limit?: number): Promise<{ entries: LlmAuditEntry[] }>;
+  /** 从服务商获取可用模型（GET /models） */
+  discoverLlmModels(): Promise<{ models: string[] }>;
   /** 保存非敏感 LLM 设置 */
   setLlm(settings: LlmSettingsView): Promise<LlmView>;
   /** 写入 API Key 到系统钥匙串 */

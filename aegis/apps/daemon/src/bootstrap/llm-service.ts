@@ -28,6 +28,7 @@ export const LLM_API_KEY = "llm.apiKey";
 /** 模型设置（非敏感） */
 export interface LlmSettings {
   enabled: boolean;
+  provider: "openai" | "deepseek" | "kimi" | "glm" | "custom";
   baseUrl: string;
   model: string;
   timeoutMs: number;
@@ -97,6 +98,20 @@ export class LlmService {
     this.#db = options.db;
     this.#audit = new AuditRepo(options.db);
     this.#knowledge = new KnowledgeBase({ db: options.db, now: () => options.clock.wall() });
+  }
+
+  /** 从服务商获取模型列表；无 Key/网络失败会抛错，由 IPC 转成可读错误 */
+  async listModels(): Promise<{ models: string[] }> {
+    const cfg = loadConfig(this.#configFile).config;
+    const apiKey = await this.#secrets.get(LLM_API_KEY);
+    if (!apiKey) throw new Error("未配置 API Key");
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: cfg.llm.baseUrl,
+      apiKey,
+      model: cfg.llm.model,
+      timeoutMs: cfg.llm.timeoutMs,
+    });
+    return { models: await provider.listModels() };
   }
 
   /** 读取设置；钥匙串不可用时把错误带到视图里，而不是静默假装没有 key */

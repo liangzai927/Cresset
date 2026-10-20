@@ -598,6 +598,7 @@ export function createMethods(
       const p = z
         .object({
           enabled: z.boolean(),
+          provider: z.enum(["openai", "deepseek", "kimi", "glm", "custom"]),
           baseUrl: z.string().url(),
           model: z.string().min(1).max(120),
           timeoutMs: z.number().int().min(1_000).max(120_000),
@@ -636,6 +637,15 @@ export function createMethods(
     "llm.test": async () => {
       if (!context.llm) throw new MethodError(E_INTERNAL, "LLM 服务未初始化");
       return context.llm.test();
+    },
+
+    "llm.models": async () => {
+      if (!context.llm) throw new MethodError(E_INTERNAL, "LLM 服务未初始化");
+      try {
+        return await context.llm.listModels();
+      } catch (err) {
+        throw new MethodError(E_INTERNAL, `获取模型列表失败：${(err as Error).message}`);
+      }
     },
 
     "llm.audit": async (params) => {

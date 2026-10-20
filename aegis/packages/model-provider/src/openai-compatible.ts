@@ -57,6 +57,39 @@ export class OpenAICompatibleProvider implements ModelProvider {
     this.#fetch = options.fetchImpl ?? fetch;
   }
 
+  /** 获取服务商模型列表（OpenAI 兼容 /models）；失败同样只暴露安全类别 */
+  async listModels(): Promise<string[]> {
+    if (!this.#apiKey) throw new ProviderError(this.id, "configuration", "未配置 API Key");
+    let response: Response;
+    try {
+      response = await this.#fetch(`${this.#baseUrl}/models`, {
+        headers: { authorization: `Bearer ${this.#apiKey}` },
+        signal: AbortSignal.timeout(this.#timeoutMs),
+      });
+    } catch (err) {
+      const name = (err as Error).name;
+      const kind = name === "TimeoutError" || name === "AbortError" ? "timeout" : "network";
+      throw new ProviderError(this.id, kind, `请求失败：${kind}`, { cause: err });
+    }
+    if (!response.ok) {
+      throw new ProviderError(this.id, kindForHttpStatus(response.status), `HTTP ${response.status}`, {
+        status: response.status,
+      });
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(await response.text());
+    } catch (err) {
+      throw new ProviderError(this.id, "invalid_response", "模型列表不是合法 JSON", { cause: err });
+    }
+    const record = asRecord(body);
+    const data = Array.isArray(record?.data) ? record.data : [];
+    const models = data
+      .map((item) => asRecord(item)?.id)
+      .filter((id): id is string => typeof id === "string" && id.length > 0);
+    return [...new Set(models)].slice(0, 200);
+  }
+
   /** 发起一次补全；错误只包含安全类别与状态码 */
   async complete(request: CompletionRequest): Promise<CompletionResponse> {
     if (!this.#apiKey) {

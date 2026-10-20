@@ -61,6 +61,21 @@ describe("OpenAICompatibleProvider", () => {
     });
   });
 
+  it("listModels 解析 /models 并去重", async () => {
+    const fakeFetch = (async () =>
+      new Response(JSON.stringify({ data: [{ id: "m1" }, { id: "m2" }, { id: "m1" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as typeof fetch;
+    const provider = new OpenAICompatibleProvider({
+      baseUrl,
+      apiKey: "k",
+      model: "m",
+      fetchImpl: fakeFetch,
+    });
+    expect(await provider.listModels()).toEqual(["m1", "m2"]);
+  });
+
   it("HTTP 401 → auth 错误，且不包含响应体", async () => {
     reply = () => ({ status: 401, body: JSON.stringify({ error: "secret-ish detail" }) });
     const provider = new OpenAICompatibleProvider({ baseUrl, apiKey: "bad", model: "m" });

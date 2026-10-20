@@ -103,11 +103,21 @@
             启用模型判断（关闭时保持纯规则模式）
           </label>
           <div class="form-grid">
-            <label class="form-field">Base URL
-              <input id="llm-base-url" type="text" placeholder="https://api.openai.com/v1" />
+            <label class="form-field">服务商
+              <select id="llm-provider">
+                <option value="openai">OpenAI</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="kimi">Kimi（Moonshot）</option>
+                <option value="glm">GLM（智谱）</option>
+                <option value="custom">自定义</option>
+              </select>
+            </label>
+            <label class="form-field hidden" id="llm-base-url-field">Base URL
+              <input id="llm-base-url" type="text" placeholder="https://api.example.com/v1" />
             </label>
             <label class="form-field">模型
-              <input id="llm-model" type="text" placeholder="gpt-4o-mini" />
+              <select id="llm-model" class="hidden"></select>
+              <span class="hint" id="llm-model-current">尚未连接</span>
             </label>
             <label class="form-field">超时（毫秒）
               <input id="llm-timeout" type="number" min="1000" max="120000" />
@@ -131,7 +141,7 @@
           </div>
           <div class="settings-actions">
             <button class="btn" id="btn-save-llm">保存设置</button>
-            <button class="btn btn-ghost" id="btn-test-llm">测试连接</button>
+            <button class="btn" id="btn-test-llm">连接并获取模型</button>
             <span class="hint" id="llm-hint"></span>
             <span class="hint" id="llm-usage"></span>
           </div>

@@ -895,6 +895,11 @@ async function ipcGetLlm(): Promise<LlmView> {
   return (await client.call("llm.get", {})) as LlmView;
 }
 
+async function ipcDiscoverLlmModels(): Promise<{ models: string[] }> {
+  const client = await ensureClient();
+  return (await client.call("llm.models", {})) as { models: string[] };
+}
+
 async function ipcGetLlmAudit(limit: number): Promise<{ entries: LlmAuditEntry[] }> {
   const client = await ensureClient();
   return (await client.call("llm.audit", { limit })) as { entries: LlmAuditEntry[] };
@@ -1292,6 +1297,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:knowledge:open",
     wrap((p: { sourcePath: string }) => ipcOpenKnowledgeSource(p.sourcePath)),
+  );
+  ipcMain.handle(
+    "aegis:llm:models",
+    wrap(() => ipcDiscoverLlmModels()),
   );
   ipcMain.handle(
     "aegis:llm:audit",

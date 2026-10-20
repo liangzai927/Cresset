@@ -111,6 +111,7 @@ export const DaemonConfigSchema = z
     llm: z
       .object({
         enabled: z.boolean().default(false),
+        provider: z.enum(["openai", "deepseek", "kimi", "glm", "custom"]).default("openai"),
         baseUrl: z
           .string()
           .url()

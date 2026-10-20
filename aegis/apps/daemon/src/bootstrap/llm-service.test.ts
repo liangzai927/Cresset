@@ -50,7 +50,12 @@ beforeEach(async () => {
   migrate(db);
   chatReply = "OK";
   chatCalls = 0;
-  server = createServer((_req, res) => {
+  server = createServer((req, res) => {
+    if (req.url?.endsWith("/models")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ data: [{ id: "test-model" }, { id: "test-model-2" }] }));
+      return;
+    }
     chatCalls += 1;
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ choices: [{ message: { content: chatReply } }], model: "test-model" }));
@@ -137,6 +142,17 @@ describe("LlmService", () => {
     const result = await service.test();
     expect(result).toMatchObject({ ok: false, blocked: false, errorKind: "configuration" });
     expect(new AuditRepo(db).count()).toBe(0);
+  });
+
+  it("listModels 从 /models 获取并去重", async () => {
+    const service = new LlmService({
+      configFile: join(dir, "config.json"),
+      db,
+      clock: new VirtualClock(1_000),
+      secrets: new MemorySecrets(),
+    });
+    await service.setApiKey("sk-test");
+    expect(await service.listModels()).toEqual({ models: ["test-model", "test-model-2"] });
   });
 
   it("judge 只在规则命中后调用，并采用模型改写", async () => {
