@@ -60,6 +60,25 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · R5：M1 14 天验收启动与自动化门禁
+**里程碑**：R5（M1 验收）
+**改了什么**：
+- 新增 `tools/acceptance.mjs` 与 `pnpm acceptance`：
+  - 默认跑 `pnpm verify`；
+  - `--desktop` / `--package` / `--full` 追加真实 Electron 与打包产物验证；
+  - 报告写 `docs/acceptance/last-run.json`（gitignore，不入库）。
+- 新增 `docs/acceptance/R5.md`：时间窗 2026-10-20 至 2026-11-02、每日记录表、
+  手工验收清单与结束判据。
+- 单仓库门禁继续位于 `verify` 第一步。
+**为什么**：R4 的可离线代码已完成；R5 不能靠"感觉能用"，需要每天一条可查记录。
+自动化门禁负责证明代码没坏，14 天真实使用负责证明它真的没漏提醒。
+**验证**：
+- `pnpm acceptance`：`pnpm verify` 全绿（329 测试）
+- `docs/acceptance/last-run.json` 生成且被 gitignore
+**踩到的坑**：验收运行器不能替代真实使用；`--full` 里的桌面验证需要
+`AEGIS_E2E_NO_SANDBOX=1`（DSH/CI 外层沙箱）。
+**留给下次**：每天记录 R5；只修 M1 缺陷；14 天通过后才开 M2。
+
 ### 2026-10-20 · R4/M1：运行缺口自监控（system_gap）
 **里程碑**：R4/M1
 **改了什么**：

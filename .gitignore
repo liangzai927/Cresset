@@ -17,3 +17,6 @@ dist/
 *.db
 *.db-wal
 *.db-shm
+
+# R5 验收运行报告（本机证据，不入库）
+aegis/docs/acceptance/last-run.json
