@@ -154,6 +154,7 @@ async function refreshStatus() {
     "btn-test-telegram",
     "btn-set-bark-token",
     "btn-test-bark",
+    "btn-test-tts",
     "btn-monitor-preset",
     "btn-import-skill",
     "btn-install-defaults",
@@ -631,6 +632,9 @@ async function loadNotify() {
     $("bark-enabled").checked = view.barkEnabled === true;
     $("bark-server-url").value = view.barkServerUrl ?? "https://api.day.app";
     $("bark-hint").textContent = view.barkHasToken ? "已配置 Device Key" : "未配置 Device Key";
+    $("tts-enabled").checked = view.ttsEnabled === true;
+    $("tts-voice").value = view.ttsVoice ?? "";
+    $("tts-hint").textContent = view.ttsEnabled ? "已启用" : "未启用";
     $("webhook-hint").textContent = view.webhookEnabled
       ? "已启用；保存后需重启 daemon 生效"
       : "未启用";
@@ -647,6 +651,8 @@ function readNotifySettings() {
   const telegramChatId = $("telegram-chat-id").value.trim();
   const barkEnabled = $("bark-enabled").checked;
   const barkServerUrl = $("bark-server-url").value.trim() || "https://api.day.app";
+  const ttsEnabled = $("tts-enabled").checked;
+  const ttsVoice = $("tts-voice").value.trim();
   if (webhookEnabled && !/^https?:\/\//.test(webhookUrl)) throw new Error("启用 Webhook 时必须填写 http/https URL");
   if (telegramEnabled && !telegramChatId) throw new Error("启用 Telegram 时必须填写 chat_id");
   if (barkEnabled && !/^https?:\/\//.test(barkServerUrl)) throw new Error("Bark 服务地址必须是 http/https");
@@ -657,6 +663,8 @@ function readNotifySettings() {
   else channels.delete("telegram");
   if (barkEnabled) channels.add("bark");
   else channels.delete("bark");
+  if (ttsEnabled) channels.add("tts");
+  else channels.delete("tts");
   return {
     channels: [...channels],
     webhookEnabled,
@@ -665,6 +673,8 @@ function readNotifySettings() {
     ...(telegramChatId ? { telegramChatId } : {}),
     barkEnabled,
     barkServerUrl,
+    ttsEnabled,
+    ...(ttsVoice ? { ttsVoice } : {}),
   };
 }
 
@@ -683,6 +693,23 @@ $("btn-set-bark-token").addEventListener("click", async (e) => {
     $("bark-hint").textContent = "Device Key 已写入钥匙串";
   } catch (err) {
     $("bark-hint").textContent = `保存失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-test-tts").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $("tts-hint").textContent = "播报中…";
+  try {
+    const saved = await window.aegis.setNotify(readNotifySettings());
+    notifyChannels = saved.channels;
+    const r = await window.aegis.testTts();
+    $("tts-hint").textContent =
+      r.outcome === "success" ? "播报成功" : `测试失败：${r.error ?? r.outcome}`;
+  } catch (err) {
+    $("tts-hint").textContent = `测试失败：${err.message}`;
   } finally {
     btn.disabled = false;
   }

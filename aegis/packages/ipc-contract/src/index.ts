@@ -221,7 +221,7 @@ export const LlmTestResultSchema = z.union([
 /** 通知渠道设置（Webhook 为当前唯一可配置的远程渠道） */
 export const NotifySettingsSchema = z
   .object({
-    channels: z.array(z.enum(["os_notification", "cli_fallback", "webhook", "telegram", "bark"])),
+    channels: z.array(z.enum(["os_notification", "cli_fallback", "webhook", "telegram", "bark", "tts"])),
     webhookEnabled: z.boolean(),
     webhookUrl: z.string().max(2_000).optional(),
     telegramEnabled: z.boolean().default(false),
@@ -230,6 +230,8 @@ export const NotifySettingsSchema = z
     barkEnabled: z.boolean().default(false),
     barkServerUrl: z.string().url().optional(),
     barkHasToken: z.boolean().optional(),
+    ttsEnabled: z.boolean().default(false),
+    ttsVoice: z.string().max(100).optional(),
   })
   .strict();
 export type NotifySettingsView = z.infer<typeof NotifySettingsSchema>;

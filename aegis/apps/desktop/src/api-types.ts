@@ -224,7 +224,7 @@ export type LlmTestResult =
 
 /** 通知渠道设置 */
 export interface NotifySettings {
-  channels: Array<"os_notification" | "cli_fallback" | "webhook" | "telegram" | "bark">;
+  channels: Array<"os_notification" | "cli_fallback" | "webhook" | "telegram" | "bark" | "tts">;
   webhookEnabled: boolean;
   webhookUrl?: string;
   telegramEnabled?: boolean;
@@ -233,6 +233,8 @@ export interface NotifySettings {
   barkEnabled?: boolean;
   barkServerUrl?: string;
   barkHasToken?: boolean;
+  ttsEnabled?: boolean;
+  ttsVoice?: string;
 }
 
 /** 每日简报设置 */
@@ -408,6 +410,8 @@ export interface DesktopApi {
   clearBarkToken(): Promise<{ hasToken: boolean }>;
   /** 发送一次 Bark 测试推送 */
   testBark(): Promise<{ outcome: string; error?: string }>;
+  /** 播放一次语音测试 */
+  testTts(): Promise<{ outcome: string; error?: string }>;
   /** 读取每日简报设置 */
   getBriefing(): Promise<BriefingSettings>;
   /** 保存每日简报设置 */

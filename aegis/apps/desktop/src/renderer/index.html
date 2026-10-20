@@ -309,6 +309,17 @@
           </div>
           <div class="webhook-config">
             <label class="dnd-toggle">
+              <input type="checkbox" id="tts-enabled" />
+              启用语音播报（macOS say）
+            </label>
+            <input id="tts-voice" type="text" placeholder="语音名，例如 Tingting；留空用系统默认" />
+            <div class="settings-actions">
+              <button class="btn btn-ghost btn-small" id="btn-test-tts">测试播报</button>
+              <span class="hint" id="tts-hint"></span>
+            </div>
+          </div>
+          <div class="webhook-config">
+            <label class="dnd-toggle">
               <input type="checkbox" id="bark-enabled" />
               启用 Bark
             </label>

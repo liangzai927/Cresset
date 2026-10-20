@@ -37,7 +37,7 @@
 当桌面 + Webhook + Telegram 同时启用时：
 
 ```text
-fanout(os_notification + webhook + telegram + bark) → cli_fallback
+fanout(os_notification + webhook + telegram + bark + tts) → cli_fallback
 ```
 
 - 所有远程/桌面渠道**并行发送**，任一个成功就算投递成功；
@@ -70,6 +70,17 @@ Bot Token 存钥匙串 `com.aegis.credentials / notify.telegram.token`，
 - 保存通知渠道
 
 Device Key 存钥匙串 `com.aegis.credentials / notify.bark.deviceKey`。
+
+## TTS（macOS say）
+
+设置 → 通知渠道 → 语音播报：
+
+- 勾选启用
+- 可填语音名（如 `Tingting`），留空用系统默认
+- 「测试播报」会保存设置并朗读一句测试
+
+TTS 完全本地，不产生网络外发。它和桌面/远程渠道一样属于 fanout：
+启用后会朗读每一条通过 fanout 的提醒，因此只建议在需要强提醒时开启。
 
 ## Payload
 

@@ -27,7 +27,7 @@ import {
 } from "@aegis/ipc-contract";
 import type { KnowledgeBase } from "@aegis/knowledge";
 import { SystemMonitor } from "@aegis/monitors";
-import { BarkNotifier, TelegramNotifier, WebhookNotifier } from "@aegis/platform";
+import { BarkNotifier, TelegramNotifier, TtsNotifier, WebhookNotifier } from "@aegis/platform";
 import type { DataPaths } from "@aegis/product";
 import {
   describeRecurrence,
@@ -546,12 +546,13 @@ export function createMethods(
       }
       return {
         channels: notify.channels.filter(
-          (c): c is "os_notification" | "cli_fallback" | "webhook" | "telegram" | "bark" =>
+          (c): c is "os_notification" | "cli_fallback" | "webhook" | "telegram" | "bark" | "tts" =>
             c === "os_notification" ||
             c === "cli_fallback" ||
             c === "webhook" ||
             c === "telegram" ||
-            c === "bark",
+            c === "bark" ||
+            c === "tts",
         ),
         webhookEnabled: notify.webhook.enabled,
         ...(notify.webhook.url ? { webhookUrl: notify.webhook.url } : {}),
@@ -561,6 +562,8 @@ export function createMethods(
         barkEnabled: notify.bark.enabled,
         barkServerUrl: notify.bark.serverUrl,
         barkHasToken,
+        ttsEnabled: notify.tts.enabled,
+        ...(notify.tts.voice ? { ttsVoice: notify.tts.voice } : {}),
       };
     },
 
@@ -569,7 +572,9 @@ export function createMethods(
       if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
       const p = z
         .object({
-          channels: z.array(z.enum(["os_notification", "cli_fallback", "webhook", "telegram"])),
+          channels: z.array(
+            z.enum(["os_notification", "cli_fallback", "webhook", "telegram", "bark", "tts"]),
+          ),
           webhookEnabled: z.boolean(),
           webhookUrl: z.string().max(2_000).optional(),
           telegramEnabled: z.boolean().default(false),
@@ -578,6 +583,8 @@ export function createMethods(
           barkEnabled: z.boolean().default(false),
           barkServerUrl: z.string().url().optional(),
           barkHasToken: z.boolean().optional(),
+          ttsEnabled: z.boolean().default(false),
+          ttsVoice: z.string().max(100).optional(),
         })
         .strict()
         .parse(params);
@@ -612,6 +619,10 @@ export function createMethods(
           bark: {
             enabled: p.barkEnabled,
             serverUrl: p.barkServerUrl ?? current.config.notify.bark.serverUrl,
+          },
+          tts: {
+            enabled: p.ttsEnabled,
+            ...(p.ttsVoice ? { voice: p.ttsVoice } : {}),
           },
         },
       });
@@ -679,6 +690,15 @@ export function createMethods(
       } catch (err) {
         throw new MethodError(E_INTERNAL, `清除 Bark Key 失败：${(err as Error).message}`);
       }
+    },
+
+    "notify.testTts": async () => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      const cfg = loadConfig(configFile).config;
+      const n = new TtsNotifier({ ...(cfg.notify.tts.voice ? { voice: cfg.notify.tts.voice } : {}) });
+      const r = await n.send({ title: "Aegis 测试", body: "语音播报连通性测试" });
+      return { outcome: r.outcome, ...(r.error ? { error: r.error } : {}) };
     },
 
     "notify.testBark": async () => {

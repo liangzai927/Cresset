@@ -30,6 +30,7 @@ import {
   defaultNotifiers,
   type Notifier,
   TelegramNotifier,
+  TtsNotifier,
   WebhookNotifier,
 } from "@aegis/platform";
 import { type DataPaths, KEYCHAIN_SERVICE, resolveDataPaths } from "@aegis/product";
@@ -628,6 +629,9 @@ function buildNotifiers(cfg: DaemonConfig, paths: DataPaths): Notifier[] {
         deviceKey: () => keychain.get(BARK_DEVICE_KEY),
       }),
     );
+  }
+  if (enabled.has("tts") && cfg.notify.tts.enabled) {
+    primary.push(new TtsNotifier({ ...(cfg.notify.tts.voice ? { voice: cfg.notify.tts.voice } : {}) }));
   }
   if (enabled.has("telegram") && cfg.notify.telegram.enabled && cfg.notify.telegram.chatId) {
     const keychain = new MacOsKeychain({ service: KEYCHAIN_SERVICE });

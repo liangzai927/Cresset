@@ -96,6 +96,12 @@ export const DaemonConfigSchema = z
             serverUrl: z.string().url().default("https://api.day.app"),
           })
           .default({}),
+        tts: z
+          .object({
+            enabled: z.boolean().default(false),
+            voice: z.string().max(100).optional(),
+          })
+          .default({}),
         /** 补偿批量：≥N 条才合并为摘要（I2 决策） */
         catchupMergeThreshold: z.number().int().min(1).max(50).default(3),
       })

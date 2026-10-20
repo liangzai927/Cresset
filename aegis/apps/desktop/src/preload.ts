@@ -109,6 +109,8 @@ function buildApi(): DesktopApi {
       ipcRenderer.invoke("aegis:notify:clear-bark-token") as Promise<{ hasToken: boolean }>,
     testBark: () =>
       ipcRenderer.invoke("aegis:notify:test-bark") as Promise<{ outcome: string; error?: string }>,
+    testTts: () =>
+      ipcRenderer.invoke("aegis:notify:test-tts") as Promise<{ outcome: string; error?: string }>,
     getBriefing: () => ipcRenderer.invoke("aegis:briefing:get") as Promise<BriefingSettings>,
     setBriefing: (settings: BriefingSettings) =>
       ipcRenderer.invoke("aegis:briefing:set", settings) as Promise<BriefingSettings>,

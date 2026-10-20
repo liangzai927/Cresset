@@ -868,6 +868,11 @@ async function ipcClearBarkToken(): Promise<{ hasToken: boolean }> {
   return (await client.call("notify.clearBarkToken", {})) as { hasToken: boolean };
 }
 
+async function ipcTestTts(): Promise<{ outcome: string; error?: string }> {
+  const client = await ensureClient();
+  return (await client.call("notify.testTts", {})) as { outcome: string; error?: string };
+}
+
 async function ipcTestBark(): Promise<{ outcome: string; error?: string }> {
   const client = await ensureClient();
   return (await client.call("notify.testBark", {})) as { outcome: string; error?: string };
@@ -1363,6 +1368,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:notify:test-bark",
     wrap(() => ipcTestBark()),
+  );
+  ipcMain.handle(
+    "aegis:notify:test-tts",
+    wrap(() => ipcTestTts()),
   );
   ipcMain.handle(
     "aegis:briefing:get",
