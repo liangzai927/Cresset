@@ -513,6 +513,31 @@ main {
   margin-bottom: 6px;
 }
 
+.routing-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 6px 0;
+}
+
+.routing-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+}
+
+.routing-level {
+  width: 28px;
+  color: var(--muted);
+}
+
+.routing-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
 .inline-select {
   padding: 3px 6px;
   border: 1px solid var(--border);

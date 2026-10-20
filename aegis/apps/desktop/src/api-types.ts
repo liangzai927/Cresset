@@ -235,6 +235,10 @@ export interface NotifySettings {
   barkHasToken?: boolean;
   ttsEnabled?: boolean;
   ttsVoice?: string;
+  routingEnabled?: boolean;
+  routingLow?: Array<"os_notification" | "webhook" | "telegram" | "bark" | "tts">;
+  routingNormal?: Array<"os_notification" | "webhook" | "telegram" | "bark" | "tts">;
+  routingHigh?: Array<"os_notification" | "webhook" | "telegram" | "bark" | "tts">;
 }
 
 /** 每日简报设置 */

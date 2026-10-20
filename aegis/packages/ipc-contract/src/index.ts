@@ -232,6 +232,10 @@ export const NotifySettingsSchema = z
     barkHasToken: z.boolean().optional(),
     ttsEnabled: z.boolean().default(false),
     ttsVoice: z.string().max(100).optional(),
+    routingEnabled: z.boolean().default(false),
+    routingLow: z.array(z.enum(["os_notification", "webhook", "telegram", "bark", "tts"])).default([]),
+    routingNormal: z.array(z.enum(["os_notification", "webhook", "telegram", "bark", "tts"])).default([]),
+    routingHigh: z.array(z.enum(["os_notification", "webhook", "telegram", "bark", "tts"])).default([]),
   })
   .strict();
 export type NotifySettingsView = z.infer<typeof NotifySettingsSchema>;

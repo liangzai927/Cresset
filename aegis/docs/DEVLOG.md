@@ -60,6 +60,23 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M3：优先级分流配置 UI
+**里程碑**：M3
+**改了什么**：
+- notify.get/set 增加 routingEnabled/routingLow/Normal/High；
+- 设置页增加 3×5 的优先级 × 渠道勾选矩阵；
+- 保存时与 Webhook/Telegram/Bark/TTS 一起写入；
+- notify.set 测试补充 routing 断言。
+**为什么**：路由功能只能改 JSON，普通使用路径不通；矩阵比三行 JSON 更直观。
+**验证**：
+- `pnpm verify`：413 通过 / 9 跳过
+- notify.set 保存 routingHigh=[telegram,bark] 后 notify.get 能读回
+- 打包产物真实启动通过
+**踩到的坑**：通知设置的保存现在是一个整体，任何单个渠道保存都必须带上 routing 字段，
+否则会把用户的路由配置清空。
+**留给下次**：邮件/SMTP、邮件/日历、PDF/Word；
+仍禁止 M4。
+
 ### 2026-10-20 · M3：按优先级分流
 **里程碑**：M3
 **改了什么**：

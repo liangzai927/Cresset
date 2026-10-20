@@ -331,6 +331,14 @@
               <span class="hint" id="bark-hint"></span>
             </div>
           </div>
+          <div class="webhook-config">
+            <label class="dnd-toggle">
+              <input type="checkbox" id="routing-enabled" />
+              按优先级分流（关闭时全部渠道并行）
+            </label>
+            <div id="routing-matrix" class="routing-matrix"></div>
+            <span class="hint">未勾选某个级别时，回退到当前全部已启用渠道。</span>
+          </div>
           <div class="settings-actions">
             <button class="btn btn-ghost" id="btn-open-notification-settings">打开系统通知设置</button>
             <span class="hint">若被系统拒绝，先在通知设置里允许 Aegis；未签名版本仍可能被拒绝。</span>

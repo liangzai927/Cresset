@@ -564,6 +564,10 @@ export function createMethods(
         barkHasToken,
         ttsEnabled: notify.tts.enabled,
         ...(notify.tts.voice ? { ttsVoice: notify.tts.voice } : {}),
+        routingEnabled: notify.routing.enabled,
+        routingLow: notify.routing.low ?? [],
+        routingNormal: notify.routing.normal ?? [],
+        routingHigh: notify.routing.high ?? [],
       };
     },
 
@@ -585,6 +589,12 @@ export function createMethods(
           barkHasToken: z.boolean().optional(),
           ttsEnabled: z.boolean().default(false),
           ttsVoice: z.string().max(100).optional(),
+          routingEnabled: z.boolean().default(false),
+          routingLow: z.array(z.enum(["os_notification", "webhook", "telegram", "bark", "tts"])).default([]),
+          routingNormal: z
+            .array(z.enum(["os_notification", "webhook", "telegram", "bark", "tts"]))
+            .default([]),
+          routingHigh: z.array(z.enum(["os_notification", "webhook", "telegram", "bark", "tts"])).default([]),
         })
         .strict()
         .parse(params);
@@ -623,6 +633,12 @@ export function createMethods(
           tts: {
             enabled: p.ttsEnabled,
             ...(p.ttsVoice ? { voice: p.ttsVoice } : {}),
+          },
+          routing: {
+            enabled: p.routingEnabled,
+            ...(p.routingLow.length > 0 ? { low: p.routingLow } : {}),
+            ...(p.routingNormal.length > 0 ? { normal: p.routingNormal } : {}),
+            ...(p.routingHigh.length > 0 ? { high: p.routingHigh } : {}),
           },
         },
       });

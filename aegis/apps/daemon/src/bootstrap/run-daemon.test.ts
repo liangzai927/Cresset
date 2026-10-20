@@ -829,12 +829,20 @@ action:
       channels: ["os_notification", "cli_fallback", "webhook"],
       webhookEnabled: true,
       webhookUrl: "https://example.com/aegis-hook",
+      routingEnabled: true,
+      routingHigh: ["telegram", "bark"],
     })) as { webhookEnabled: boolean; webhookUrl: string };
     expect(saved).toMatchObject({ webhookEnabled: true, webhookUrl: "https://example.com/aegis-hook" });
 
     const after = (await client.call("notify.get", {})) as { webhookEnabled: boolean; channels: string[] };
     expect(after.webhookEnabled).toBe(true);
     expect(after.channels).toContain("webhook");
+    const routed = (await client.call("notify.get", {})) as {
+      routingEnabled: boolean;
+      routingHigh: string[];
+    };
+    expect(routed.routingEnabled).toBe(true);
+    expect(routed.routingHigh).toEqual(["telegram", "bark"]);
 
     client.close();
     await daemon.stop("test");

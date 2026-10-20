@@ -155,6 +155,7 @@ async function refreshStatus() {
     "btn-set-bark-token",
     "btn-test-bark",
     "btn-test-tts",
+    "routing-enabled",
     "btn-monitor-preset",
     "btn-import-skill",
     "btn-install-defaults",
@@ -619,6 +620,47 @@ $("btn-refresh-health").addEventListener("click", async (e) => {
 
 let notifyChannels = ["os_notification", "cli_fallback"];
 
+/** 可参与优先级分流的渠道（CLI 只做兜底，不进入路由） */
+const ROUTING_CHANNELS = [
+  { id: "os_notification", label: "桌面" },
+  { id: "webhook", label: "Webhook" },
+  { id: "telegram", label: "Telegram" },
+  { id: "bark", label: "Bark" },
+  { id: "tts", label: "语音" },
+];
+const ROUTING_LEVELS = [
+  { id: "low", label: "低" },
+  { id: "normal", label: "普通" },
+  { id: "high", label: "重要" },
+];
+
+/** 构建优先级 × 渠道矩阵；每次 loadNotify 重建，避免残留旧状态 */
+function renderRoutingMatrix() {
+  const box = $("routing-matrix");
+  box.textContent = "";
+  for (const level of ROUTING_LEVELS) {
+    const row = el("div", "routing-row");
+    row.appendChild(el("span", "routing-level", level.label));
+    for (const channel of ROUTING_CHANNELS) {
+      const label = el("label", "routing-choice");
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.id = `routing-${level.id}-${channel.id}`;
+      input.dataset.level = level.id;
+      input.dataset.channel = channel.id;
+      label.appendChild(input);
+      label.appendChild(document.createTextNode(channel.label));
+      row.appendChild(label);
+    }
+    box.appendChild(row);
+  }
+}
+
+/** 读取某级别已勾选渠道 */
+function routingChecked(level) {
+  return ROUTING_CHANNELS.map((c) => c.id).filter((id) => $(`routing-${level}-${id}`)?.checked);
+}
+
 /** 读取 Webhook 配置；保存后需要重启 daemon 才会重建 notifier 链 */
 async function loadNotify() {
   try {
@@ -635,6 +677,18 @@ async function loadNotify() {
     $("tts-enabled").checked = view.ttsEnabled === true;
     $("tts-voice").value = view.ttsVoice ?? "";
     $("tts-hint").textContent = view.ttsEnabled ? "已启用" : "未启用";
+    $("routing-enabled").checked = view.routingEnabled === true;
+    renderRoutingMatrix();
+    for (const [level, values] of [
+      ["low", view.routingLow ?? []],
+      ["normal", view.routingNormal ?? []],
+      ["high", view.routingHigh ?? []],
+    ]) {
+      for (const id of values) {
+        const input = $(`routing-${level}-${id}`);
+        if (input) input.checked = true;
+      }
+    }
     $("webhook-hint").textContent = view.webhookEnabled
       ? "已启用；保存后需重启 daemon 生效"
       : "未启用";
@@ -653,6 +707,7 @@ function readNotifySettings() {
   const barkServerUrl = $("bark-server-url").value.trim() || "https://api.day.app";
   const ttsEnabled = $("tts-enabled").checked;
   const ttsVoice = $("tts-voice").value.trim();
+  const routingEnabled = $("routing-enabled").checked;
   if (webhookEnabled && !/^https?:\/\//.test(webhookUrl)) throw new Error("启用 Webhook 时必须填写 http/https URL");
   if (telegramEnabled && !telegramChatId) throw new Error("启用 Telegram 时必须填写 chat_id");
   if (barkEnabled && !/^https?:\/\//.test(barkServerUrl)) throw new Error("Bark 服务地址必须是 http/https");
@@ -675,6 +730,10 @@ function readNotifySettings() {
     barkServerUrl,
     ttsEnabled,
     ...(ttsVoice ? { ttsVoice } : {}),
+    routingEnabled,
+    routingLow: routingChecked("low"),
+    routingNormal: routingChecked("normal"),
+    routingHigh: routingChecked("high"),
   };
 }
 
