@@ -23,7 +23,12 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { type Clock, detectSkew, SystemClock } from "@aegis/clock";
 import type { HealthView } from "@aegis/ipc-contract";
 import { KnowledgeBase } from "@aegis/knowledge";
-import { createDesktopChannelSender, defaultNotifiers, type Notifier } from "@aegis/platform";
+import {
+  createDesktopChannelSender,
+  defaultNotifiers,
+  type Notifier,
+  WebhookNotifier,
+} from "@aegis/platform";
 import { type DataPaths, KEYCHAIN_SERVICE, resolveDataPaths } from "@aegis/product";
 import { Scheduler, type TickResult } from "@aegis/scheduler";
 import { MacOsKeychain } from "@aegis/secrets";
@@ -594,6 +599,10 @@ function buildNotifiers(cfg: DaemonConfig, paths: DataPaths): Notifier[] {
     native,
     includeCliFallback: enabled.has("cli_fallback"),
   });
+  if (enabled.has("webhook") && cfg.notify.webhook.enabled && cfg.notify.webhook.url) {
+    // 作为最后兜底：只有桌面/CLI 都失败时才尝试远程 webhook，避免重复打扰。
+    list.push(new WebhookNotifier({ url: cfg.notify.webhook.url }));
+  }
 
   // 若配置把两者都关了，仍保留 CLI 兜底 —— 否则"配置错误"会变成"静默不提醒"，
   // 与"零静默失败"的硬约束冲突。宁可多发一条，也不能什么都不发。

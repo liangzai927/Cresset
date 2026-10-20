@@ -78,6 +78,12 @@ export const DaemonConfigSchema = z
       .object({
         channels: z.array(z.string()).default(["os_notification", "cli_fallback"]),
         soundEnabled: z.boolean().default(true),
+        webhook: z
+          .object({
+            enabled: z.boolean().default(false),
+            url: z.string().url().optional(),
+          })
+          .default({}),
         /** 补偿批量：≥N 条才合并为摘要（I2 决策） */
         catchupMergeThreshold: z.number().int().min(1).max(50).default(3),
       })

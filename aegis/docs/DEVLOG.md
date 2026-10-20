@@ -60,6 +60,23 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M3：Webhook 兜底渠道
+**里程碑**：M3
+**改了什么**：
+- 新增 `WebhookNotifier`：JSON POST、2xx/4xx/5xx 分类、超时、无探测请求；
+- config 增加 `notify.webhook`（enabled/url）；
+- `buildNotifiers` 在 channels 包含 webhook 时作为最后兜底；
+- 新增 3 个本机 HTTP 测试。
+**为什么**：离开电脑时，桌面通道全挂后仍需要一个远程提醒出口。
+**验证**：
+- `pnpm verify`：394 通过 / 9 跳过
+- 2xx success；5xx transient；4xx permanent；probe 不发请求
+- 错误信息不回显完整 URL
+**设计取舍**：当前是**顺序兜底**，不是多端并行推送；若桌面成功，webhook 不发送。
+真正的 fanout/按优先级路由需要调度器改造，留到后续。
+**留给下次**：Bark/Telegram/邮件/TTS、渠道 UI、每日简报；
+仍禁止 M4。
+
 ### 2026-10-20 · M3：知识库引用问答与拒答
 **里程碑**：M3
 **改了什么**：
