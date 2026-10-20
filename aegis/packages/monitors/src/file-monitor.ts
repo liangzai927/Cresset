@@ -6,7 +6,8 @@
  *   - **稳定期**：新文件/刚变化的文件要连续 stableMs 不变才发事实，避免半截下载；
  *   - **内容指纹**：默认 sha256 文件内容；超大文件退化为 size+mtime，避免读爆内存；
  *   - **基线不刷屏**：首次扫描只建立基线，不把已有文件全部当成"新增"；
- *   - 删除立即产生事实；重命名先按删除+新增处理，M2 后续再加配对。
+ *   - 删除产生事实；同一次扫描里"旧路径消失 + 新路径出现且内容指纹相同"
+ *     会配对为 file.renamed，而不是删除+新增两条。
  */
 
 import { createHash } from "node:crypto";
@@ -146,25 +147,37 @@ export class FileMonitor implements Monitor {
     }
 
     const facts: MonitorFact[] = [];
-
-    // 删除立即产生事实
-    for (const rel of [...this.#observed.keys()]) {
-      if (seen.has(rel)) continue;
-      const old = this.#observed.get(rel);
-      this.#observed.delete(rel);
-      if (old) {
-        facts.push({
-          monitor: this.id,
-          kind: "file.deleted",
-          at: now,
-          fields: { path: rel, fingerprint: old.fingerprint, size: old.size },
-        });
-      }
-    }
+    // 先收集"看不见了"的旧文件，等新增文件处理后配对重命名；
+    // 未配对的才作为删除发出，避免 rename 被拆成 deleted + added 两条。
+    const deleted = [...this.#observed.entries()].filter(([rel]) => !seen.has(rel));
+    const consumedDeleted = new Set<string>();
 
     for (const [rel, file] of current) {
       const old = this.#observed.get(rel);
       if (!old) {
+        // 重命名配对：同一轮里删掉的旧文件与新文件指纹相同
+        const renamedFrom = deleted.find(
+          ([from, oldFile]) => !consumedDeleted.has(from) && oldFile.fingerprint === file.fingerprint,
+        );
+        if (renamedFrom) {
+          consumedDeleted.add(renamedFrom[0]);
+          this.#observed.delete(renamedFrom[0]);
+          this.#observed.set(rel, { ...file, status: "stable", stableSince: now });
+          facts.push({
+            monitor: this.id,
+            kind: "file.renamed",
+            at: now,
+            fields: {
+              path: rel,
+              from: renamedFrom[0],
+              fingerprint: file.fingerprint,
+              size: file.size,
+              mtime_ms: file.mtimeMs,
+            },
+          });
+          continue;
+        }
+
         // 新出现：先进入 new，稳定期后才发 added
         if (this.#stableMs === 0) {
           facts.push({
@@ -195,6 +208,18 @@ export class FileMonitor implements Monitor {
         });
         this.#observed.set(rel, { ...file, status: "stable", stableSince: now });
       }
+    }
+
+    // 没有配对成重命名的旧文件，才是真正的删除
+    for (const [rel, old] of deleted) {
+      if (consumedDeleted.has(rel)) continue;
+      this.#observed.delete(rel);
+      facts.push({
+        monitor: this.id,
+        kind: "file.deleted",
+        at: now,
+        fields: { path: rel, fingerprint: old.fingerprint, size: old.size },
+      });
     }
 
     return { facts, errors };

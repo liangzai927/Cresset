@@ -2,7 +2,7 @@
  * FileMonitor 测试：基线、稳定期、新增/修改/删除、glob/ignore。
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { VirtualClock } from "@aegis/clock";
@@ -76,6 +76,20 @@ describe("FileMonitor", () => {
     const deleted = await monitor.scan();
     expect(deleted.facts).toHaveLength(1);
     expect(deleted.facts[0]?.kind).toBe("file.deleted");
+  });
+
+  it("同一次扫描里旧路径消失、新路径出现且指纹相同 → file.renamed", async () => {
+    writeFileSync(join(dir, "old.txt"), "same content");
+    await monitor.scan();
+    renameSync(join(dir, "old.txt"), join(dir, "new.txt"));
+
+    const result = await monitor.scan();
+    expect(result.facts).toHaveLength(1);
+    expect(result.facts[0]?.kind).toBe("file.renamed");
+    expect(result.facts[0]?.fields).toMatchObject({ path: "new.txt", from: "old.txt" });
+
+    // 下一轮不应把新路径再当成 added/deleted
+    expect((await monitor.scan()).facts).toEqual([]);
   });
 
   it("支持 glob 过滤与 ignore", async () => {

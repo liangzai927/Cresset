@@ -21,7 +21,7 @@
 | R2 调度引擎（M1 核心） | ✅ 完成 |
 | **R3 Electron 外壳 + 界面** | ✅ **完成：可本地打开使用** |
 | R4 系统集成（打包 / 自启 / 自恢复） | 🚧 进行中：自启、自恢复、ad-hoc 打包、备份导出（CLI + 设置页）完成；正式签名/公证待做 |
-| **M2 Skill + 规则引擎 + 本地监测** | 🚧 进行中（R5 并行观察）：Skill、File/System/Web/RSS 监测、CSS/JSONPath、Monitor 运行时、Skill→通知、监测器增删/启停/手动扫描/失败告警、Skill 导入 UI 完成；完整 XML/重命名待做 |
+| **M2 Skill + 规则引擎 + 本地监测** | 🚧 进行中（R5 并行观察）：Skill、File/System/Web/RSS 监测、CSS/JSONPath、文件重命名、Monitor 运行时、Skill→通知、监测器增删/启停/手动扫描/失败告警、Skill 导入 UI 完成；完整 XML/验收待做 |
 
 文档在 `../personal-agent/`：PRD、技术选型与架构设计、M0+M1 详细设计、R0 spike 报告。
 
