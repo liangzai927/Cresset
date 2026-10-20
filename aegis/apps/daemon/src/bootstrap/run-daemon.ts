@@ -30,6 +30,7 @@ import { createMethods } from "../ipc/methods.js";
 import type { HandshakeFile } from "../ipc/server.js";
 import { IpcServer } from "../ipc/server.js";
 import { type DaemonConfig, loadConfig, type MonitorConfig, saveConfig } from "./config.js";
+import { installDefaultSkills } from "./default-skills.js";
 import { DaemonLock } from "./lock.js";
 import { buildMonitorBindings } from "./monitor-bindings.js";
 import { MonitorRuntime } from "./monitor-runtime.js";
@@ -314,6 +315,46 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
    * `requireId` 用于新增：若该监测器没有成功绑定（Skill 路径错、trigger 不匹配、
    * 权限不足），拒绝落盘并抛错 —— 避免 UI 显示"已添加"但运行时根本没有它。
    */
+  /** 一键补齐 M2 验收场景：默认 Skills + 系统磁盘 + 下载目录 */
+  const installAcceptancePreset = (): {
+    installedSkills: string[];
+    addedMonitors: string[];
+    skippedMonitors: string[];
+    monitors: MonitorConfig[];
+  } => {
+    const installed = installDefaultSkills(paths.dataDir);
+    const current = loadConfig(paths.configFile).config.monitors;
+    const presets: MonitorConfig[] = [
+      {
+        id: "system.host",
+        kind: "system",
+        enabled: true,
+        intervalS: 60,
+        skills: ["skills/disk-space-guard.yaml"],
+      },
+      {
+        id: "files.downloads",
+        kind: "files",
+        enabled: true,
+        root: "~/Downloads",
+        patterns: [],
+        ignore: [],
+        intervalS: 30,
+        stableMs: 2_000,
+        skills: ["skills/downloads-change.yaml", "skills/large-file-guard.yaml"],
+      },
+    ];
+    const added = presets.filter((p) => !current.some((m) => m.id === p.id));
+    const skipped = presets.filter((p) => current.some((m) => m.id === p.id)).map((p) => p.id);
+    const next = added.length > 0 ? saveMonitors([...current, ...added]) : current;
+    return {
+      installedSkills: installed.installed,
+      addedMonitors: added.map((p) => p.id),
+      skippedMonitors: skipped,
+      monitors: next,
+    };
+  };
+
   const saveMonitors = (next: MonitorConfig[], requireId?: string): MonitorConfig[] => {
     const bindings = buildMonitorBindings(next, paths.dataDir, clock, log);
     if (requireId && !bindings.some((b) => b.monitor.id === requireId)) {
@@ -361,6 +402,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
           status: () => monitorRuntime.status(),
           scan: (id) => monitorRuntime.scanById(id),
           config: () => loadConfig(paths.configFile).config.monitors,
+          preset: installAcceptancePreset,
           add: (input) =>
             saveMonitors(
               [...loadConfig(paths.configFile).config.monitors, input],

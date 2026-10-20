@@ -60,6 +60,29 @@ action:
 `,
   },
   {
+    filename: "large-file-guard.yaml",
+    content: `name: large-file-guard
+version: 1.0.0
+description: 下载目录出现超大文件时提醒
+author: aegis
+permissions: [files.read]
+cooldown: 30m
+params:
+  threshold_bytes: 104857600
+trigger:
+  type: threshold
+  monitor: files.downloads
+  field: size
+  op: ">"
+  value: "{{params.threshold_bytes}}"
+action:
+  notify:
+    priority: normal
+    title: "下载了超大文件"
+    body: "{{monitor.path}}（{{monitor.size}} 字节）"
+`,
+  },
+  {
     filename: "page-change.yaml",
     content: `name: page-change
 version: 1.0.0

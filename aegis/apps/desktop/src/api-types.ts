@@ -292,6 +292,13 @@ export interface DesktopApi {
   getSystemHealth(): Promise<{ health: SystemHealthView; errors: Array<{ path: string; message: string }> }>;
   /** 读取监测器运行状态 */
   getMonitorStatus(): Promise<{ monitors: MonitorStatusItem[] }>;
+  /** 一键补齐 M2 验收场景（默认 Skills + 系统/下载监测器） */
+  installAcceptancePreset(): Promise<{
+    installedSkills: string[];
+    addedMonitors: string[];
+    skippedMonitors: string[];
+    monitors: MonitorConfigView[];
+  }>;
   /** 读取监测器配置 */
   getMonitorConfig(): Promise<{ monitors: MonitorConfigView[] }>;
   /** 新增监测器并热重载运行时 */

@@ -845,6 +845,21 @@ async function ipcGetMonitorStatus(): Promise<{ monitors: MonitorStatusItem[] }>
   return (await client.call("monitor.status", {})) as { monitors: MonitorStatusItem[] };
 }
 
+async function ipcInstallAcceptancePreset(): Promise<{
+  installedSkills: string[];
+  addedMonitors: string[];
+  skippedMonitors: string[];
+  monitors: MonitorConfigView[];
+}> {
+  const client = await ensureClient();
+  return (await client.call("monitor.preset", {})) as {
+    installedSkills: string[];
+    addedMonitors: string[];
+    skippedMonitors: string[];
+    monitors: MonitorConfigView[];
+  };
+}
+
 async function ipcGetMonitorConfig(): Promise<{ monitors: MonitorConfigView[] }> {
   const client = await ensureClient();
   return (await client.call("monitor.config", {})) as { monitors: MonitorConfigView[] };
@@ -1168,6 +1183,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:monitor:config",
     wrap(() => ipcGetMonitorConfig()),
+  );
+  ipcMain.handle(
+    "aegis:monitor:preset",
+    wrap(() => ipcInstallAcceptancePreset()),
   );
   ipcMain.handle(
     "aegis:monitor:add",

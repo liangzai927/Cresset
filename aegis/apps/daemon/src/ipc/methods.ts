@@ -258,6 +258,12 @@ export interface MonitorMethodsContext {
   status: () => MonitorStatus[];
   scan: (id: string) => Promise<{ notified: number; errors: number } | null>;
   config: () => MonitorConfig[];
+  preset: () => {
+    installedSkills: string[];
+    addedMonitors: string[];
+    skippedMonitors: string[];
+    monitors: MonitorConfig[];
+  };
   add: (input: MonitorConfig) => MonitorConfig[];
   toggle: (id: string, enabled: boolean) => MonitorConfig[];
   remove: (id: string) => MonitorConfig[];
@@ -519,6 +525,11 @@ export function createMethods(
 
     "monitor.config": async () => {
       return { monitors: context.monitors?.config() ?? [] };
+    },
+
+    "monitor.preset": async () => {
+      if (!context.monitors) throw new MethodError(E_INTERNAL, "监测器运行时未初始化");
+      return context.monitors.preset();
     },
 
     "monitor.add": async (params) => {

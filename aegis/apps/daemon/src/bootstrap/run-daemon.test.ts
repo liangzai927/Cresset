@@ -638,6 +638,38 @@ describe("R2：调度器接入与 RPC 方法", () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
+  it("★ monitor.preset 一键补齐验收场景且幂等", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-preset-"));
+    const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
+    const hs = readHandshakeFile(join(dataDir, "handshake.json"));
+    const client = new IpcClient({ endpoint: hs.endpoint, token: hs.token });
+    await client.connect();
+
+    const first = (await client.call("monitor.preset", {})) as {
+      installedSkills: string[];
+      addedMonitors: string[];
+      skippedMonitors: string[];
+      monitors: Array<{ id: string; skills: string[] }>;
+    };
+    expect(first.installedSkills).toHaveLength(5);
+    expect(first.addedMonitors.sort()).toEqual(["files.downloads", "system.host"]);
+    expect(first.skippedMonitors).toEqual([]);
+    expect(first.monitors.flatMap((m) => m.skills)).toHaveLength(3);
+
+    const second = (await client.call("monitor.preset", {})) as {
+      installedSkills: string[];
+      addedMonitors: string[];
+      skippedMonitors: string[];
+    };
+    expect(second.installedSkills).toEqual([]);
+    expect(second.addedMonitors).toEqual([]);
+    expect(second.skippedMonitors.sort()).toEqual(["files.downloads", "system.host"]);
+
+    client.close();
+    await daemon.stop("test");
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
   it("★ monitor.add/remove 热更新配置并验证绑定", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-monitor-config-"));
     const skillsDir = join(dataDir, "skills");
@@ -743,7 +775,7 @@ action:
       installed: string[];
       skipped: string[];
     };
-    expect(defaults.installed).toHaveLength(4);
+    expect(defaults.installed).toHaveLength(5);
     expect(defaults.skipped).toEqual([]);
 
     client.close();

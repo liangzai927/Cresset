@@ -91,6 +91,13 @@ function buildApi(): DesktopApi {
         notified: number;
         errors: number;
       }>,
+    installAcceptancePreset: () =>
+      ipcRenderer.invoke("aegis:monitor:preset") as Promise<{
+        installedSkills: string[];
+        addedMonitors: string[];
+        skippedMonitors: string[];
+        monitors: MonitorConfigView[];
+      }>,
     getMonitorConfig: () =>
       ipcRenderer.invoke("aegis:monitor:config") as Promise<{ monitors: MonitorConfigView[] }>,
     addMonitor: (config: MonitorConfigView) =>

@@ -60,6 +60,24 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M2：一键验收场景
+**里程碑**：M2（R5 并行观察）
+**改了什么**：
+- 默认包新增 `large-file-guard`（下载目录 >100MB 提醒），默认包变为 5 个；
+- monitor.preset：安装默认 Skills，并补齐 system.host + files.downloads 两个监测器；
+- files.downloads 绑定 3 个 Skill（新文件/大文件），一键即可满足"3 个 Skill"验收场景；
+- 支持 `~/Downloads` 路径展开；
+- 设置页增加「添加验收示例」，重复点击幂等（已存在的监测器跳过）；
+- 新增 preset 幂等测试。
+**为什么**：M2 验收需要 3 个 Skill 稳定跑 7 天；手工配置容易漏绑定或写错路径，
+一键场景把启动成本降到一次点击。
+**验证**：
+- `pnpm verify`：367 通过 / 9 跳过
+- preset 首次 installed=5 / added=2；第二次 installed=0 / added=0 / skipped=2
+**踩到的坑**：配置里的 `~/Downloads` 不能直接交给 FileMonitor；必须先展开 home，
+再按 dataDir 解析绝对路径。
+**留给下次**：运行满 7 天后按 M2.md 人工确认；仍禁止 M3。
+
 ### 2026-10-20 · M2：验收证据汇总工具
 **里程碑**：M2（R5 并行观察）
 **改了什么**：

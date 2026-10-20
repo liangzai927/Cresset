@@ -7,12 +7,18 @@
  *   3. Skill 必须声明监测器所需权限。
  */
 
+import { homedir } from "node:os";
 import { resolve } from "node:path";
 import type { Clock } from "@aegis/clock";
 import { FileMonitor, SystemMonitor, WebMonitor } from "@aegis/monitors";
 import { loadSkillFile, type Skill } from "@aegis/skills";
 import type { DaemonConfig } from "./config.js";
 import type { MonitorBinding, MonitorLog } from "./monitor-runtime.js";
+
+/** 展开 `~/`；配置文件里的下载目录通常写 `~/Downloads` */
+function expandHome(path: string): string {
+  return path === "~" || path.startsWith("~/") ? resolve(homedir(), path.slice(2)) : path;
+}
 
 /** 一个 config.monitors 元素 */
 type MonitorConfig = DaemonConfig["monitors"][number];
@@ -57,7 +63,7 @@ export function buildMonitorBindings(
       cfg.kind === "files"
         ? new FileMonitor({
             id: cfg.id,
-            root: resolve(dataDir, cfg.root),
+            root: resolve(dataDir, expandHome(cfg.root)),
             patterns: cfg.patterns,
             ignore: cfg.ignore,
             stableMs: cfg.stableMs,

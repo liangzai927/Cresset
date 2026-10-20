@@ -138,6 +138,7 @@ async function refreshStatus() {
     "btn-refresh-health",
     "btn-refresh-monitors",
     "btn-add-monitor",
+    "btn-monitor-preset",
     "btn-import-skill",
     "btn-install-defaults",
     "btn-refresh-skills",
@@ -946,6 +947,24 @@ async function openMonitorForm() {
 }
 
 $("btn-add-monitor").addEventListener("click", () => void openMonitorForm());
+
+$("btn-monitor-preset").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $("monitor-hint").textContent = "正在补齐验收场景…";
+  try {
+    const result = await window.aegis.installAcceptancePreset();
+    $("monitor-hint").textContent =
+      `已安装 Skill ${result.installedSkills.length} 个，添加监测器 ${result.addedMonitors.length} 个` +
+      `${result.skippedMonitors.length > 0 ? `，跳过 ${result.skippedMonitors.join("、")}` : ""}`;
+    await loadMonitorStatus();
+    await loadSkillList();
+  } catch (err) {
+    $("monitor-hint").textContent = `补齐验收场景失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
 $("btn-cancel-monitor").addEventListener("click", () => {
   $("monitor-form").classList.add("hidden");
   $("monitor-form-hint").textContent = "";
