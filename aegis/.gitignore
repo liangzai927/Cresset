@@ -23,6 +23,4 @@ spike-artifacts/
 *.log
 
 # 验收报告是本机证据
-acceptance/m3-report.md
-acceptance/m2-report.md
-acceptance/r5-report.md
+docs/acceptance/*-report.md
