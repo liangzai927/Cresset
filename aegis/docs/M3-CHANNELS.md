@@ -1,7 +1,7 @@
 # M3：Webhook 通知渠道
 
-> M3 的第一个“离开电脑也能收到”渠道。当前作为**桌面/CLI 都失败后的最后兜底**，
-> 不是并行群发。
+> M3 的第一个“离开电脑也能收到”渠道。启用 Webhook 后，桌面与 Webhook
+> 会并行扇出；只有两者都失败才落到 CLI 兜底。
 
 ## 配置
 
@@ -25,16 +25,17 @@
 
 ## 投递语义
 
-调度器按渠道顺序尝试：
+当桌面 + Webhook 同时启用时：
 
 ```text
-os_notification → cli_fallback → webhook
+fanout(os_notification + webhook) → cli_fallback
 ```
 
-- 前面的渠道成功，webhook 不会发送；
-- 桌面与 CLI 都失败时才 POST webhook；
+- 桌面与 Webhook **并行发送**，任一个成功就算投递成功；
+- 两者都失败才使用 CLI 兜底；
+- 如果只启用其中一个，则按普通渠道顺序执行；
 - 2xx = success；5xx/网络/超时 = transient；4xx = permanent；
-- 失败由调度器按现有重试/降级规则处理。
+- fanout 全失败时，error 里会列出每个子渠道的结果（不含敏感 URL）。
 
 ## Payload
 
@@ -58,8 +59,9 @@ os_notification → cli_fallback → webhook
 
 ## 当前限制
 
-- 目前是顺序兜底，不是多端同时推送；
+- 目前只扇出桌面 + Webhook；Bark/Telegram 等尚未接入；
 - 没有 UI 配置页（先编辑 config.json）；
+- 还没有按优先级/类型分流；
 - Bark / Telegram / 邮件 / TTS 待做。
 
 ## 验证

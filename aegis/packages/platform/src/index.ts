@@ -30,7 +30,7 @@ export interface NotifyPayload {
  * （D5 决策要求实现 CLI 兜底通道，正是为了消除"UI 挂了就不响"的单点依赖）。
  */
 export interface Notifier {
-  readonly channel: "os_notification" | "cli_fallback" | "webhook";
+  readonly channel: "os_notification" | "cli_fallback" | "webhook" | "fanout";
   /** 是否可用（权限、依赖是否存在） */
   probe(): Promise<{ ok: boolean; detail: string }>;
   send(payload: NotifyPayload): Promise<{ outcome: ChannelOutcome; error?: string }>;
@@ -48,6 +48,7 @@ export interface PermissionStatus {
 }
 
 export * from "./autostart.js";
+export * from "./composite-notifier.js";
 export * from "./desktop-channel.js";
 export * from "./macos-notifier.js";
 export * from "./webhook-notifier.js";

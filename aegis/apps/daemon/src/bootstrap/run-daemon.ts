@@ -24,6 +24,7 @@ import { type Clock, detectSkew, SystemClock } from "@aegis/clock";
 import type { HealthView } from "@aegis/ipc-contract";
 import { KnowledgeBase } from "@aegis/knowledge";
 import {
+  CompositeNotifier,
   createDesktopChannelSender,
   defaultNotifiers,
   type Notifier,
@@ -607,14 +608,22 @@ function buildNotifiers(cfg: DaemonConfig, paths: DataPaths): Notifier[] {
     ? createDesktopChannelSender({ channelFilePath: paths.channelFile, timeoutMs: 5_000 })
     : null;
 
-  const list = defaultNotifiers({
-    native,
-    includeCliFallback: enabled.has("cli_fallback"),
-  });
+  // CLI 是最后兜底；它不参与 fanout，否则会重复提醒。
+  const cli = defaultNotifiers({ native: null, includeCliFallback: enabled.has("cli_fallback") });
+
+  const primary: Notifier[] = [];
+  if (native) primary.push(native);
   if (enabled.has("webhook") && cfg.notify.webhook.enabled && cfg.notify.webhook.url) {
-    // 作为最后兜底：只有桌面/CLI 都失败时才尝试远程 webhook，避免重复打扰。
-    list.push(new WebhookNotifier({ url: cfg.notify.webhook.url }));
+    primary.push(new WebhookNotifier({ url: cfg.notify.webhook.url }));
   }
+
+  // 同时启用桌面 + Webhook 时并行扇出；只有全部失败才落到 CLI。
+  const list =
+    primary.length > 1
+      ? [new CompositeNotifier(primary), ...cli]
+      : primary.length === 1
+        ? [primary[0], ...cli].filter((n): n is Notifier => Boolean(n))
+        : [...cli];
 
   // 若配置把两者都关了，仍保留 CLI 兜底 —— 否则"配置错误"会变成"静默不提醒"，
   // 与"零静默失败"的硬约束冲突。宁可多发一条，也不能什么都不发。
