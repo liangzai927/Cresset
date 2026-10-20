@@ -29,6 +29,7 @@ import {
   createDesktopChannelSender,
   defaultNotifiers,
   type Notifier,
+  RoutingNotifier,
   TelegramNotifier,
   TtsNotifier,
   WebhookNotifier,
@@ -641,6 +642,46 @@ function buildNotifiers(cfg: DaemonConfig, paths: DataPaths): Notifier[] {
         token: () => keychain.get(TELEGRAM_BOT_TOKEN_KEY),
       }),
     );
+  }
+
+  // 可选：按通知优先级分流。路由内部仍然是并行扇出，CLI 只做最后兜底。
+  if (cfg.notify.routing.enabled) {
+    const map: Record<string, Notifier> = {};
+    if (native) map.os_notification = native;
+    if (enabled.has("webhook") && cfg.notify.webhook.enabled && cfg.notify.webhook.url) {
+      map.webhook = new WebhookNotifier({ url: cfg.notify.webhook.url });
+    }
+    if (enabled.has("telegram") && cfg.notify.telegram.enabled && cfg.notify.telegram.chatId) {
+      const keychain = new MacOsKeychain({ service: KEYCHAIN_SERVICE });
+      map.telegram = new TelegramNotifier({
+        chatId: cfg.notify.telegram.chatId,
+        token: () => keychain.get(TELEGRAM_BOT_TOKEN_KEY),
+      });
+    }
+    if (enabled.has("bark") && cfg.notify.bark.enabled) {
+      const keychain = new MacOsKeychain({ service: KEYCHAIN_SERVICE });
+      map.bark = new BarkNotifier({
+        serverUrl: cfg.notify.bark.serverUrl,
+        deviceKey: () => keychain.get(BARK_DEVICE_KEY),
+      });
+    }
+    if (enabled.has("tts") && cfg.notify.tts.enabled) {
+      map.tts = new TtsNotifier({
+        ...(cfg.notify.tts.voice ? { voice: cfg.notify.tts.voice } : {}),
+      });
+    }
+    const choose = (names: string[] | undefined): Notifier[] => {
+      const list = names ? names.map((n) => map[n]).filter((n): n is Notifier => Boolean(n)) : [];
+      return list.length > 0 ? list : primary;
+    };
+    const routing = new RoutingNotifier({
+      routes: {
+        low: choose(cfg.notify.routing.low),
+        normal: choose(cfg.notify.routing.normal),
+        high: choose(cfg.notify.routing.high),
+      },
+    });
+    return [routing, ...cli];
   }
 
   // 同时启用桌面 + Webhook 时并行扇出；只有全部失败才落到 CLI。

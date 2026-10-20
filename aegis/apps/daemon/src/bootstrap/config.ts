@@ -102,6 +102,15 @@ export const DaemonConfigSchema = z
             voice: z.string().max(100).optional(),
           })
           .default({}),
+        /** 按优先级分流；未启用时保持 fanout */
+        routing: z
+          .object({
+            enabled: z.boolean().default(false),
+            low: z.array(z.string()).optional(),
+            normal: z.array(z.string()).optional(),
+            high: z.array(z.string()).optional(),
+          })
+          .default({}),
         /** 补偿批量：≥N 条才合并为摘要（I2 决策） */
         catchupMergeThreshold: z.number().int().min(1).max(50).default(3),
       })

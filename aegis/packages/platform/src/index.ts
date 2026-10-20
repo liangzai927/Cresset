@@ -21,6 +21,8 @@ export interface NotifyPayload {
    * `task.complete` / `task.snooze`。系统通知与 CLI 渠道忽略它。
    */
   occurrenceId?: string;
+  /** 通知优先级；供路由渠道使用 */
+  priority?: "low" | "normal" | "high";
 }
 
 /**
@@ -30,7 +32,15 @@ export interface NotifyPayload {
  * （D5 决策要求实现 CLI 兜底通道，正是为了消除"UI 挂了就不响"的单点依赖）。
  */
 export interface Notifier {
-  readonly channel: "os_notification" | "cli_fallback" | "webhook" | "telegram" | "bark" | "tts" | "fanout";
+  readonly channel:
+    | "os_notification"
+    | "cli_fallback"
+    | "webhook"
+    | "telegram"
+    | "bark"
+    | "tts"
+    | "fanout"
+    | "routing";
   /** 是否可用（权限、依赖是否存在） */
   probe(): Promise<{ ok: boolean; detail: string }>;
   send(payload: NotifyPayload): Promise<{ outcome: ChannelOutcome; error?: string }>;
@@ -52,6 +62,7 @@ export * from "./bark-notifier.js";
 export * from "./composite-notifier.js";
 export * from "./desktop-channel.js";
 export * from "./macos-notifier.js";
+export * from "./routing-notifier.js";
 export * from "./telegram-notifier.js";
 export * from "./tts-notifier.js";
 export * from "./webhook-notifier.js";

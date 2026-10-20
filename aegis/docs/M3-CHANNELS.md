@@ -71,6 +71,11 @@ Bot Token 存钥匙串 `com.aegis.credentials / notify.telegram.token`，
 
 Device Key 存钥匙串 `com.aegis.credentials / notify.bark.deviceKey`。
 
+## 按优先级分流
+
+默认是全部渠道并行扇出。需要"重要提醒才发远程/语音"时，配置
+`notify.routing`，见 [M3-ROUTING.md](M3-ROUTING.md)。
+
 ## TTS（macOS say）
 
 设置 → 通知渠道 → 语音播报：

@@ -60,6 +60,23 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M3：按优先级分流
+**里程碑**：M3
+**改了什么**：
+- 新增 RoutingNotifier：low/normal/high 各自渠道组，组内并行；
+- NotifyPayload 增加 priority；调度器投递时传入通知优先级；
+- config 增加 notify.routing（enabled/low/normal/high）；
+- 未配置级别回退当前全部渠道；CLI 仍是最后兜底；
+- 新增 2 个路由测试。
+**为什么**：五渠道全量 fanout 会让普通提醒也发 Telegram/Bark/语音，必须能按重要性收敛。
+**验证**：
+- `pnpm verify`：413 通过 / 9 跳过（含 30 天长跑）
+- high 只走 high 组；未配置回退 normal；全空 permanent
+- 打包产物真实启动通过
+**踩到的坑**：路由组不能包含 CLI，否则 CLI 会被当成普通渠道重复发；CLI 只做最后兜底。
+**留给下次**：路由配置 UI、按 kind 分流、邮件/SMTP、邮件/日历；
+仍禁止 M4。
+
 ### 2026-10-20 · M3：TTS 渠道
 **里程碑**：M3
 **改了什么**：

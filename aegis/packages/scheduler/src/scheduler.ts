@@ -450,6 +450,7 @@ export class Scheduler {
         notification.title,
         notification.body,
         entry.attempts,
+        notification.priority,
       );
       if (result.ok) {
         this.#notifications.markDelivered(notificationId);
@@ -480,6 +481,7 @@ export class Scheduler {
     title: string,
     body: string | null,
     priorAttempts: number,
+    priority: string,
   ): Promise<{ ok: boolean; retryable: boolean; error?: string }> {
     let attemptNo = priorAttempts + 1;
     let lastError: string | undefined;
@@ -491,6 +493,7 @@ export class Scheduler {
         sound: true,
         ...(body ? { body } : {}),
         ...(occurrenceId ? { occurrenceId } : {}),
+        priority: priority === "low" || priority === "high" ? priority : "normal",
       });
       this.#recordAttempt({
         notificationId,
