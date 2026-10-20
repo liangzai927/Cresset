@@ -224,12 +224,15 @@ export type LlmTestResult =
 
 /** 通知渠道设置 */
 export interface NotifySettings {
-  channels: Array<"os_notification" | "cli_fallback" | "webhook" | "telegram">;
+  channels: Array<"os_notification" | "cli_fallback" | "webhook" | "telegram" | "bark">;
   webhookEnabled: boolean;
   webhookUrl?: string;
   telegramEnabled?: boolean;
   telegramChatId?: string;
   telegramHasToken?: boolean;
+  barkEnabled?: boolean;
+  barkServerUrl?: string;
+  barkHasToken?: boolean;
 }
 
 /** 每日简报设置 */
@@ -399,6 +402,12 @@ export interface DesktopApi {
   clearTelegramToken(): Promise<{ hasToken: boolean }>;
   /** 发送一次 Telegram 测试消息 */
   testTelegram(): Promise<{ outcome: string; error?: string }>;
+  /** 保存 Bark Device Key 到钥匙串 */
+  setBarkToken(token: string): Promise<{ hasToken: boolean }>;
+  /** 清除 Bark Device Key */
+  clearBarkToken(): Promise<{ hasToken: boolean }>;
+  /** 发送一次 Bark 测试推送 */
+  testBark(): Promise<{ outcome: string; error?: string }>;
   /** 读取每日简报设置 */
   getBriefing(): Promise<BriefingSettings>;
   /** 保存每日简报设置 */

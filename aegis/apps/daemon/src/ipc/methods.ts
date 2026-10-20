@@ -27,7 +27,7 @@ import {
 } from "@aegis/ipc-contract";
 import type { KnowledgeBase } from "@aegis/knowledge";
 import { SystemMonitor } from "@aegis/monitors";
-import { TelegramNotifier, WebhookNotifier } from "@aegis/platform";
+import { BarkNotifier, TelegramNotifier, WebhookNotifier } from "@aegis/platform";
 import type { DataPaths } from "@aegis/product";
 import {
   describeRecurrence,
@@ -46,7 +46,7 @@ import { loadConfig, type MonitorConfig, MonitorConfigSchema, saveConfig } from 
 import { installDefaultSkills } from "../bootstrap/default-skills.js";
 import type { LlmService } from "../bootstrap/llm-service.js";
 import type { MonitorStatus } from "../bootstrap/monitor-runtime.js";
-import { TELEGRAM_BOT_TOKEN_KEY } from "../bootstrap/notify-secrets.js";
+import { BARK_DEVICE_KEY, TELEGRAM_BOT_TOKEN_KEY } from "../bootstrap/notify-secrets.js";
 import {
   deleteSkill,
   importSkill,
@@ -536,21 +536,31 @@ export function createMethods(
       if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
       const notify = loadConfig(configFile).config.notify;
       let telegramHasToken = false;
+      let barkHasToken = false;
       try {
         telegramHasToken = Boolean(await context.secrets?.get(TELEGRAM_BOT_TOKEN_KEY));
+        barkHasToken = Boolean(await context.secrets?.get(BARK_DEVICE_KEY));
       } catch {
         telegramHasToken = false;
+        barkHasToken = false;
       }
       return {
         channels: notify.channels.filter(
-          (c): c is "os_notification" | "cli_fallback" | "webhook" | "telegram" =>
-            c === "os_notification" || c === "cli_fallback" || c === "webhook" || c === "telegram",
+          (c): c is "os_notification" | "cli_fallback" | "webhook" | "telegram" | "bark" =>
+            c === "os_notification" ||
+            c === "cli_fallback" ||
+            c === "webhook" ||
+            c === "telegram" ||
+            c === "bark",
         ),
         webhookEnabled: notify.webhook.enabled,
         ...(notify.webhook.url ? { webhookUrl: notify.webhook.url } : {}),
         telegramEnabled: notify.telegram.enabled,
         ...(notify.telegram.chatId ? { telegramChatId: notify.telegram.chatId } : {}),
         telegramHasToken,
+        barkEnabled: notify.bark.enabled,
+        barkServerUrl: notify.bark.serverUrl,
+        barkHasToken,
       };
     },
 
@@ -565,6 +575,9 @@ export function createMethods(
           telegramEnabled: z.boolean().default(false),
           telegramChatId: z.string().max(100).optional(),
           telegramHasToken: z.boolean().optional(),
+          barkEnabled: z.boolean().default(false),
+          barkServerUrl: z.string().url().optional(),
+          barkHasToken: z.boolean().optional(),
         })
         .strict()
         .parse(params);
@@ -595,6 +608,10 @@ export function createMethods(
           telegram: {
             enabled: p.telegramEnabled,
             ...(p.telegramChatId ? { chatId: p.telegramChatId } : {}),
+          },
+          bark: {
+            enabled: p.barkEnabled,
+            serverUrl: p.barkServerUrl ?? current.config.notify.bark.serverUrl,
           },
         },
       });
@@ -637,6 +654,43 @@ export function createMethods(
         token: () => context.secrets?.get(TELEGRAM_BOT_TOKEN_KEY) ?? Promise.resolve(null),
       });
       const r = await n.send({ title: "Aegis 测试", body: "Telegram 连通性测试" });
+      return { outcome: r.outcome, ...(r.error ? { error: r.error } : {}) };
+    },
+
+    "notify.setBarkToken": async (params) => {
+      const p = z
+        .object({ token: z.string().min(1).max(500) })
+        .strict()
+        .parse(params);
+      if (!context.secrets) throw new MethodError(E_INTERNAL, "钥匙串未初始化");
+      try {
+        await context.secrets.set(BARK_DEVICE_KEY, p.token.trim());
+        return { hasToken: true };
+      } catch (err) {
+        throw new MethodError(E_INTERNAL, `保存 Bark Key 失败：${(err as Error).message}`);
+      }
+    },
+
+    "notify.clearBarkToken": async () => {
+      if (!context.secrets) throw new MethodError(E_INTERNAL, "钥匙串未初始化");
+      try {
+        await context.secrets.delete(BARK_DEVICE_KEY);
+        return { hasToken: false };
+      } catch (err) {
+        throw new MethodError(E_INTERNAL, `清除 Bark Key 失败：${(err as Error).message}`);
+      }
+    },
+
+    "notify.testBark": async () => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      if (!context.secrets) throw new MethodError(E_INTERNAL, "钥匙串未初始化");
+      const cfg = loadConfig(configFile).config;
+      const n = new BarkNotifier({
+        serverUrl: cfg.notify.bark.serverUrl,
+        deviceKey: () => context.secrets?.get(BARK_DEVICE_KEY) ?? Promise.resolve(null),
+      });
+      const r = await n.send({ title: "Aegis 测试", body: "Bark 连通性测试" });
       return { outcome: r.outcome, ...(r.error ? { error: r.error } : {}) };
     },
 

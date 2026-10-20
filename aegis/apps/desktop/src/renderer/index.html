@@ -307,6 +307,19 @@
               <span class="hint" id="telegram-hint"></span>
             </div>
           </div>
+          <div class="webhook-config">
+            <label class="dnd-toggle">
+              <input type="checkbox" id="bark-enabled" />
+              启用 Bark
+            </label>
+            <input id="bark-server-url" type="text" placeholder="https://api.day.app" />
+            <input id="bark-device-key" type="password" placeholder="Bark Device Key（只写入钥匙串）" autocomplete="off" />
+            <div class="settings-actions">
+              <button class="btn btn-ghost btn-small" id="btn-set-bark-token">保存 Key</button>
+              <button class="btn btn-ghost btn-small" id="btn-test-bark">测试 Bark</button>
+              <span class="hint" id="bark-hint"></span>
+            </div>
+          </div>
           <div class="settings-actions">
             <button class="btn btn-ghost" id="btn-open-notification-settings">打开系统通知设置</button>
             <span class="hint">若被系统拒绝，先在通知设置里允许 Aegis；未签名版本仍可能被拒绝。</span>

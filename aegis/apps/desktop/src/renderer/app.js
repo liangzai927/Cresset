@@ -152,6 +152,8 @@ async function refreshStatus() {
     "btn-test-webhook",
     "btn-set-telegram-token",
     "btn-test-telegram",
+    "btn-set-bark-token",
+    "btn-test-bark",
     "btn-monitor-preset",
     "btn-import-skill",
     "btn-install-defaults",
@@ -626,6 +628,9 @@ async function loadNotify() {
     $("telegram-enabled").checked = view.telegramEnabled === true;
     $("telegram-chat-id").value = view.telegramChatId ?? "";
     $("telegram-hint").textContent = view.telegramHasToken ? "已配置 Bot Token" : "未配置 Bot Token";
+    $("bark-enabled").checked = view.barkEnabled === true;
+    $("bark-server-url").value = view.barkServerUrl ?? "https://api.day.app";
+    $("bark-hint").textContent = view.barkHasToken ? "已配置 Device Key" : "未配置 Device Key";
     $("webhook-hint").textContent = view.webhookEnabled
       ? "已启用；保存后需重启 daemon 生效"
       : "未启用";
@@ -640,21 +645,63 @@ function readNotifySettings() {
   const webhookUrl = $("webhook-url").value.trim();
   const telegramEnabled = $("telegram-enabled").checked;
   const telegramChatId = $("telegram-chat-id").value.trim();
+  const barkEnabled = $("bark-enabled").checked;
+  const barkServerUrl = $("bark-server-url").value.trim() || "https://api.day.app";
   if (webhookEnabled && !/^https?:\/\//.test(webhookUrl)) throw new Error("启用 Webhook 时必须填写 http/https URL");
   if (telegramEnabled && !telegramChatId) throw new Error("启用 Telegram 时必须填写 chat_id");
+  if (barkEnabled && !/^https?:\/\//.test(barkServerUrl)) throw new Error("Bark 服务地址必须是 http/https");
   const channels = new Set(notifyChannels);
   if (webhookEnabled) channels.add("webhook");
   else channels.delete("webhook");
   if (telegramEnabled) channels.add("telegram");
   else channels.delete("telegram");
+  if (barkEnabled) channels.add("bark");
+  else channels.delete("bark");
   return {
     channels: [...channels],
     webhookEnabled,
     ...(webhookUrl ? { webhookUrl } : {}),
     telegramEnabled,
     ...(telegramChatId ? { telegramChatId } : {}),
+    barkEnabled,
+    barkServerUrl,
   };
 }
+
+$("btn-set-bark-token").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const input = $("bark-device-key");
+  const token = input.value.trim();
+  if (!token) {
+    $("bark-hint").textContent = "Device Key 不能为空";
+    return;
+  }
+  btn.disabled = true;
+  try {
+    await window.aegis.setBarkToken(token);
+    input.value = "";
+    $("bark-hint").textContent = "Device Key 已写入钥匙串";
+  } catch (err) {
+    $("bark-hint").textContent = `保存失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-test-bark").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $("bark-hint").textContent = "测试中…";
+  try {
+    const r = await window.aegis.testBark();
+    $("bark-hint").textContent =
+      r.outcome === "success" ? "Bark 测试成功" : `测试失败：${r.error ?? r.outcome}`;
+  } catch (err) {
+    $("bark-hint").textContent = `测试失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 /** 保存 Webhook/Telegram 设置；notifier 链需要重启 daemon 重建 */
 async function saveNotifySettings(btn) {

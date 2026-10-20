@@ -858,6 +858,21 @@ async function ipcClearTelegramToken(): Promise<{ hasToken: boolean }> {
   return (await client.call("notify.clearTelegramToken", {})) as { hasToken: boolean };
 }
 
+async function ipcSetBarkToken(token: string): Promise<{ hasToken: boolean }> {
+  const client = await ensureClient();
+  return (await client.call("notify.setBarkToken", { token })) as { hasToken: boolean };
+}
+
+async function ipcClearBarkToken(): Promise<{ hasToken: boolean }> {
+  const client = await ensureClient();
+  return (await client.call("notify.clearBarkToken", {})) as { hasToken: boolean };
+}
+
+async function ipcTestBark(): Promise<{ outcome: string; error?: string }> {
+  const client = await ensureClient();
+  return (await client.call("notify.testBark", {})) as { outcome: string; error?: string };
+}
+
 async function ipcTestTelegram(): Promise<{ outcome: string; error?: string }> {
   const client = await ensureClient();
   return (await client.call("notify.testTelegram", {})) as { outcome: string; error?: string };
@@ -1336,6 +1351,18 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:notify:test-telegram",
     wrap(() => ipcTestTelegram()),
+  );
+  ipcMain.handle(
+    "aegis:notify:set-bark-token",
+    wrap((p: { token: string }) => ipcSetBarkToken(p.token)),
+  );
+  ipcMain.handle(
+    "aegis:notify:clear-bark-token",
+    wrap(() => ipcClearBarkToken()),
+  );
+  ipcMain.handle(
+    "aegis:notify:test-bark",
+    wrap(() => ipcTestBark()),
   );
   ipcMain.handle(
     "aegis:briefing:get",

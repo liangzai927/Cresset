@@ -60,6 +60,25 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M3：Bark 渠道
+**里程碑**：M3
+**改了什么**：
+- 新增 BarkNotifier：Device Key 从钥匙串异步读取，POST /push；
+- config 增加 notify.bark（enabled/serverUrl）；
+- 桌面/Webhook/Telegram/Bark 同时启用时组成 fanout，CLI 最后兜底；
+- 设置页增加 Bark 服务地址/Key/测试；
+- Device Key 存钥匙串 key `notify.bark.deviceKey`；
+- 新增 3 个 Bark 测试。
+**为什么**：Bark 是 iOS 上低门槛的推送渠道，不需要自建 webhook。
+**验证**：
+- `pnpm verify`：408 通过 / 9 跳过
+- 本机 HTTP server 测试：成功、无 Key、5xx/4xx 分类
+- 错误信息不含 Device Key
+- 打包产物真实启动通过
+**踩到的坑**：Bark 的 Device Key 是凭据，必须走钥匙串，不能写进 config.json。
+**留给下次**：邮件/TTS、按优先级分流、邮件/日历；
+仍禁止 M4。
+
 ### 2026-10-20 · M3：Telegram 渠道
 **里程碑**：M3
 **改了什么**：

@@ -90,6 +90,12 @@ export const DaemonConfigSchema = z
             chatId: z.string().max(100).optional(),
           })
           .default({}),
+        bark: z
+          .object({
+            enabled: z.boolean().default(false),
+            serverUrl: z.string().url().default("https://api.day.app"),
+          })
+          .default({}),
         /** 补偿批量：≥N 条才合并为摘要（I2 决策） */
         catchupMergeThreshold: z.number().int().min(1).max(50).default(3),
       })

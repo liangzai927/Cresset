@@ -37,7 +37,7 @@
 当桌面 + Webhook + Telegram 同时启用时：
 
 ```text
-fanout(os_notification + webhook + telegram) → cli_fallback
+fanout(os_notification + webhook + telegram + bark) → cli_fallback
 ```
 
 - 所有远程/桌面渠道**并行发送**，任一个成功就算投递成功；
@@ -58,6 +58,18 @@ fanout(os_notification + webhook + telegram) → cli_fallback
 
 Bot Token 存钥匙串 `com.aegis.credentials / notify.telegram.token`，
 配置、日志、审计里都没有明文。
+
+## Bark
+
+设置 → 通知渠道 → Bark：
+
+- 服务地址默认 `https://api.day.app`
+- 填 Device Key（只写入系统钥匙串）
+- 保存 Key
+- 测试 Bark
+- 保存通知渠道
+
+Device Key 存钥匙串 `com.aegis.credentials / notify.bark.deviceKey`。
 
 ## Payload
 
