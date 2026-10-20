@@ -135,6 +135,8 @@ async function refreshStatus() {
     "btn-pause-all",
     "btn-resume-all",
     "btn-refresh-history",
+    "btn-refresh-health",
+    "btn-refresh-monitors",
     "btn-export-backup",
     "btn-dnd-add",
     "btn-dnd-save",
@@ -586,6 +588,73 @@ $("btn-refresh-health").addEventListener("click", async (e) => {
   btn.disabled = true;
   try {
     await refreshSystemHealth();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── 监测器状态 ──────────────────────────────────────────────────────────
+
+/** 渲染监测器列表；空列表时给出配置入口，而不是假装一切正常 */
+function renderMonitorStatus(monitors) {
+  const box = $("monitor-list");
+  box.textContent = "";
+
+  if (monitors.length === 0) {
+    box.appendChild(
+      el("p", "hint", "还没有配置监测器。编辑 config.json 的 monitors，参考 docs/M2-MONITORS.md。"),
+    );
+    return;
+  }
+
+  for (const monitor of monitors) {
+    const row = el("div", "monitor-row");
+    const head = el("div", "monitor-head");
+    head.appendChild(el("strong", "", monitor.id));
+    head.appendChild(el("span", "monitor-badge", monitor.kind === "files" ? "文件" : "系统"));
+    row.appendChild(head);
+
+    const meta = el("div", "monitor-meta");
+    meta.appendChild(
+      el(
+        "div",
+        "",
+        `每 ${Math.round(monitor.intervalMs / 1_000)} 秒 · Skills：${monitor.skills.join("、") || "无"}`,
+      ),
+    );
+    const last = monitor.lastScanAt ? new Date(monitor.lastScanAt).toLocaleTimeString("zh-CN") : "尚未扫描";
+    meta.appendChild(
+      el(
+        "div",
+        "",
+        `上次：${last} · facts ${monitor.lastFacts} · 通知 ${monitor.lastNotified} · 错误 ${monitor.lastErrors}`,
+      ),
+    );
+    row.appendChild(meta);
+
+    if (monitor.error) row.appendChild(el("div", "monitor-error", monitor.error));
+    box.appendChild(row);
+  }
+}
+
+/** 读取监测器状态；失败时只更新 hint，不打断设置页其他内容 */
+async function loadMonitorStatus() {
+  try {
+    const result = await window.aegis.getMonitorStatus();
+    renderMonitorStatus(result.monitors);
+    $("monitor-hint").textContent =
+      result.monitors.length > 0 ? "状态来自 daemon 最近一次扫描" : "";
+  } catch (err) {
+    $("monitor-hint").textContent = `读取失败：${err.message}`;
+  }
+}
+
+$("btn-refresh-monitors").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $("monitor-hint").textContent = "刷新中…";
+  try {
+    await loadMonitorStatus();
   } finally {
     btn.disabled = false;
   }

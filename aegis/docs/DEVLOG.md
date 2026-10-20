@@ -60,6 +60,23 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M2：监测器状态可见
+**里程碑**：M2（R5 并行观察）
+**改了什么**：
+- `MonitorRuntime` 记录每个实例的 kind/interval/skills/上次扫描/facts/通知/错误/是否扫描中；
+- 契约新增 `monitor.status`，桌面 API 增加 `getMonitorStatus`；
+- 设置页新增「监测器」卡片：状态列表 + 刷新；无配置时直接指向 `docs/M2-MONITORS.md`；
+- 失败信息在卡片中可见，不再只写 daemon 日志。
+**为什么**：监测器是无人值守能力，用户必须能判断"它到底有没有在扫描、上次有没有报错"；
+只靠日志不符合"失败必须可见"。
+**验证**：
+- `pnpm verify`：349 通过 / 9 跳过
+- Metric runtime 测试断言 status 的 lastScanAt/lastFacts/lastNotified/error
+- 设置页监测器卡片按配置渲染（空配置显示引导）
+**踩到的坑**：状态只能在扫描 finally 中落账，否则异常路径会永远显示"扫描中"。
+**留给下次**：Web/RSS 监测、Skill 管理/导入界面、监测器启停与手动触发；
+仍禁止 M3 的 LLM/知识库。
+
 ### 2026-10-20 · M2：Monitor 运行时 + Skill→通知端到端
 **里程碑**：M2（R5 并行观察）
 **改了什么**：

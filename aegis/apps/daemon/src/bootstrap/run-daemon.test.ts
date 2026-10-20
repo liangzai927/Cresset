@@ -628,6 +628,9 @@ describe("R2：调度器接入与 RPC 方法", () => {
     expect(result.health.memoryFreePercent).toBeGreaterThanOrEqual(0);
     expect(result.errors).toEqual([]);
 
+    const monitors = (await client.call("monitor.status", {})) as { monitors: unknown[] };
+    expect(monitors.monitors).toEqual([]);
+
     client.close();
     await daemon.stop("test");
     rmSync(dataDir, { recursive: true, force: true });

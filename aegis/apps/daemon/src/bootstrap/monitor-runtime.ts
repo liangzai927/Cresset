@@ -20,9 +20,25 @@ import { type Db, rowOf } from "@aegis/storage";
 /** 一个监测器实例与它绑定的 Skill */
 export interface MonitorBinding {
   monitor: Monitor;
+  /** 配置里的监测器类型，供状态页展示 */
+  kind: "files" | "system";
   skills: Skill[];
   /** 扫描间隔（毫秒） */
   intervalMs: number;
+}
+
+/** 单个监测器的运行状态 */
+export interface MonitorStatus {
+  id: string;
+  kind: "files" | "system";
+  intervalMs: number;
+  skills: string[];
+  lastScanAt: number | null;
+  lastFacts: number;
+  lastNotified: number;
+  lastErrors: number;
+  error: string | null;
+  running: boolean;
 }
 
 /** 运行时日志出口；与 daemon 的结构化日志对齐 */
@@ -58,6 +74,7 @@ export class MonitorRuntime {
   readonly #log: MonitorLog;
   readonly #timers: NodeJS.Timeout[] = [];
   readonly #busy = new Set<string>();
+  readonly #status = new Map<string, MonitorStatus>();
 
   constructor(options: MonitorRuntimeOptions) {
     this.#db = options.db;
@@ -65,6 +82,20 @@ export class MonitorRuntime {
     this.#scheduler = options.scheduler;
     this.#bindings = options.bindings;
     this.#log = options.onLog ?? (() => {});
+    for (const binding of options.bindings) {
+      this.#status.set(binding.monitor.id, {
+        id: binding.monitor.id,
+        kind: binding.kind,
+        intervalMs: binding.intervalMs,
+        skills: binding.skills.map((s) => s.name),
+        lastScanAt: null,
+        lastFacts: 0,
+        lastNotified: 0,
+        lastErrors: 0,
+        error: null,
+        running: false,
+      });
+    }
   }
 
   /** 启动扫描循环（立即扫一次，然后按 interval 轮询） */
@@ -80,6 +111,11 @@ export class MonitorRuntime {
   stop(): void {
     for (const timer of this.#timers) clearInterval(timer);
     this.#timers.length = 0;
+  }
+
+  /** 当前状态快照；供 `monitor.status` IPC 与设置页使用 */
+  status(): MonitorStatus[] {
+    return [...this.#status.values()].map((s) => ({ ...s, skills: [...s.skills] }));
   }
 
   /** 测试/诊断入口：立即扫描全部绑定，返回本轮统计 */
@@ -101,15 +137,19 @@ export class MonitorRuntime {
       return { notified: 0, errors: 0 };
     }
     this.#busy.add(id);
+    const status = this.#status.get(id);
+    if (status) status.running = true;
 
     let facts = 0;
     let notified = 0;
     let errors = 0;
+    let lastError: string | null = null;
     try {
       const result = await binding.monitor.scan();
       facts = result.facts.length;
       for (const err of result.errors) {
         errors += 1;
+        lastError = `${err.path}: ${err.message}`;
         this.#log("warn", "monitor.scan_error", { monitor: id, path: err.path, error: err.message });
       }
 
@@ -170,6 +210,7 @@ export class MonitorRuntime {
             });
           } catch (err) {
             errors += 1;
+            lastError = (err as Error).message;
             this.#log("error", "monitor.evaluate_error", {
               monitor: id,
               skill: skill.name,
@@ -180,9 +221,18 @@ export class MonitorRuntime {
       }
     } catch (err) {
       errors += 1;
+      lastError = (err as Error).message;
       this.#log("error", "monitor.scan_fatal", { monitor: id, error: (err as Error).message });
     } finally {
       this.#busy.delete(id);
+      if (status) {
+        status.running = false;
+        status.lastScanAt = this.#clock.wall();
+        status.lastFacts = facts;
+        status.lastNotified = notified;
+        status.lastErrors = errors;
+        status.error = lastError;
+      }
     }
 
     this.#log("debug", "monitor.scan_done", { monitor: id, facts, notified, errors });

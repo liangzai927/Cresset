@@ -439,6 +439,51 @@ main {
   margin-bottom: 10px;
 }
 
+.monitor-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.monitor-row {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 88%, var(--border));
+  font-size: 12px;
+}
+
+.monitor-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.monitor-head strong {
+  font-size: 12.5px;
+}
+
+.monitor-badge {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-dim) 12%, transparent);
+  color: var(--text-dim);
+  font-size: 10.5px;
+}
+
+.monitor-meta {
+  color: var(--text-dim);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.monitor-error {
+  color: var(--err);
+  font-size: 11.5px;
+  margin-top: 3px;
+}
+
 .dnd-toggle {
   display: flex;
   align-items: center;

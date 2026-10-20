@@ -75,6 +75,7 @@ export function buildMonitorBindings(
 
     bindings.push({
       monitor,
+      kind: cfg.kind,
       skills: permitted,
       intervalMs: Math.max(1_000, cfg.intervalS * 1_000),
     });

@@ -47,6 +47,7 @@ import type {
   CreateTaskPayload,
   DiagnosticInfo,
   DndSettingsView,
+  MonitorStatusItem,
   NotificationItem,
   SystemHealthView,
   TaskEditItem,
@@ -836,6 +837,11 @@ async function ipcGetSystemHealth(): Promise<{
   };
 }
 
+async function ipcGetMonitorStatus(): Promise<{ monitors: MonitorStatusItem[] }> {
+  const client = await ensureClient();
+  return (await client.call("monitor.status", {})) as { monitors: MonitorStatusItem[] };
+}
+
 async function ipcGetDnd(): Promise<DndSettingsView> {
   const client = await ensureClient();
   return (await client.call("dnd.get", {})) as DndSettingsView;
@@ -1050,6 +1056,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:system:health",
     wrap(() => ipcGetSystemHealth()),
+  );
+  ipcMain.handle(
+    "aegis:monitor:status",
+    wrap(() => ipcGetMonitorStatus()),
   );
   ipcMain.handle(
     "aegis:dnd:get",

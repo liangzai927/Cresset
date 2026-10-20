@@ -200,6 +200,20 @@ export interface SystemHealthView {
   uptimeS: number;
 }
 
+/** 监测器状态（设置页展示） */
+export interface MonitorStatusItem {
+  id: string;
+  kind: "files" | "system";
+  intervalMs: number;
+  skills: string[];
+  lastScanAt: number | null;
+  lastFacts: number;
+  lastNotified: number;
+  lastErrors: number;
+  error: string | null;
+  running: boolean;
+}
+
 /** 导出备份的结果：取消与成功用可辨识联合，避免 UI 把取消当失败 */
 export type BackupExportResult =
   | { canceled: true }
@@ -235,6 +249,8 @@ export interface DesktopApi {
   checkUpdate(): Promise<UpdateInfo>;
   /** 读取系统健康指标（由 daemon 采集） */
   getSystemHealth(): Promise<{ health: SystemHealthView; errors: Array<{ path: string; message: string }> }>;
+  /** 读取监测器运行状态 */
+  getMonitorStatus(): Promise<{ monitors: MonitorStatusItem[] }>;
   /** 读取免打扰设置 */
   getDnd(): Promise<DndSettingsView>;
   /** 保存免打扰设置；daemon 会持久化到 config.json 并立即影响后续派发 */

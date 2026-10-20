@@ -81,10 +81,24 @@ describe("MonitorRuntime", () => {
       db,
       clock,
       scheduler,
-      bindings: [{ monitor, skills: [parseSkill(SKILL)], intervalMs: 1_000 }],
+      bindings: [{ monitor, kind: "system", skills: [parseSkill(SKILL)], intervalMs: 1_000 }],
     });
 
     expect(await runtime.scanOnce()).toEqual({ notified: 1, errors: 0 });
+    expect(runtime.status()).toEqual([
+      {
+        id: "system.test",
+        kind: "system",
+        intervalMs: 1_000,
+        skills: ["low-space"],
+        lastScanAt: 1_000_000,
+        lastFacts: 1,
+        lastNotified: 1,
+        lastErrors: 0,
+        error: null,
+        running: false,
+      },
+    ]);
     const rows = db
       .prepare("SELECT kind, title, body, priority FROM notification WHERE kind = 'monitor'")
       .all() as Array<{ kind: string; title: string; body: string; priority: string }>;

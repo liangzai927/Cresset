@@ -30,6 +30,7 @@ import type {
   DesktopApi,
   DiagnosticInfo,
   DndSettingsView,
+  MonitorStatusItem,
   NotificationsPage,
   OnboardingState,
   SystemHealthView,
@@ -79,6 +80,8 @@ function buildApi(): DesktopApi {
         health: SystemHealthView;
         errors: Array<{ path: string; message: string }>;
       }>,
+    getMonitorStatus: () =>
+      ipcRenderer.invoke("aegis:monitor:status") as Promise<{ monitors: MonitorStatusItem[] }>,
     getDnd: () => ipcRenderer.invoke("aegis:dnd:get") as Promise<DndSettingsView>,
     setDnd: (settings: DndSettingsView) =>
       ipcRenderer.invoke("aegis:dnd:set", settings) as Promise<{ ok: boolean }>,

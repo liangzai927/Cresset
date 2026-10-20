@@ -38,6 +38,7 @@ import type { Scheduler } from "@aegis/scheduler";
 import type { AttemptSummary } from "@aegis/storage";
 import { z } from "zod";
 import { createBackup } from "../bootstrap/backup.js";
+import type { MonitorStatus } from "../bootstrap/monitor-runtime.js";
 
 /** RPC 处理失败：携带错误码，交由 IpcServer 序列化 */
 export class MethodError extends Error {
@@ -242,10 +243,16 @@ export interface DndMethodsContext {
   updateDnd: (settings: DndSettingsView) => void;
 }
 
+/** `monitor.status` 需要的运行期上下文 */
+export interface MonitorMethodsContext {
+  status: () => MonitorStatus[];
+}
+
 /** 构造 RPC handler 时注入的可选运行期能力 */
 export interface MethodsContext {
   backup?: BackupMethodsContext;
   dnd?: DndMethodsContext;
+  monitors?: MonitorMethodsContext;
 }
 
 /** 构造全部 RPC handler。返回对象直接交给 IpcServer 的 `methods` 选项 */
@@ -483,6 +490,10 @@ export function createMethods(
     "ctrl.resumeAll": async () => {
       tasks.setAllEnabled(true);
       return { ok: true };
+    },
+
+    "monitor.status": async () => {
+      return { monitors: context.monitors?.status() ?? [] };
     },
 
     "monitor.system": async () => {

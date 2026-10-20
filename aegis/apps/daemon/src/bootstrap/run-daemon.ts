@@ -340,6 +340,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
             scheduler.setDndSettings(dnd);
           },
         },
+        monitors: { status: () => monitorRuntime.status() },
       }),
       /**
        * 关停 daemon。

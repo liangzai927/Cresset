@@ -147,6 +147,23 @@ export type SystemHealthView = z.infer<typeof SystemHealthViewSchema>;
 /** 监测器采集错误 */
 export const MonitorErrorSchema = z.object({ path: z.string(), message: z.string() }).strict();
 
+/** 监测器运行状态（设置页展示；不含 Skill 内容） */
+export const MonitorStatusViewSchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(["files", "system"]),
+    intervalMs: z.number().int().positive(),
+    skills: z.array(z.string()),
+    lastScanAt: z.number().int().nullable(),
+    lastFacts: z.number().int().nonnegative(),
+    lastNotified: z.number().int().nonnegative(),
+    lastErrors: z.number().int().nonnegative(),
+    error: z.string().nullable(),
+    running: z.boolean(),
+  })
+  .strict();
+export type MonitorStatusView = z.infer<typeof MonitorStatusViewSchema>;
+
 /** 通知的对外视图；`isCatchup`/`isUncertain` 用于在界面上区分补偿补发与不确定投递 */
 export const NotificationViewSchema = z
   .object({
