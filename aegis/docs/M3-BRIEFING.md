@@ -47,7 +47,7 @@
 
 ## 当前限制
 
-- 没有天气
+- 天气来自 Open-Meteo（见 [M3-WEATHER.md](M3-WEATHER.md)），无缓存时缺席
 - 日历只支持本地 ICS 文件（见 [M3-CALENDAR.md](M3-CALENDAR.md)）
 - 没有邮件
 - 没有 LLM 摘要；内容是规则拼接

@@ -229,6 +229,14 @@ export interface CalendarSettings {
   reminderMinutes: number;
 }
 
+/** 天气设置 */
+export interface WeatherSettings {
+  enabled: boolean;
+  latitude?: number;
+  longitude?: number;
+  locationName?: string;
+}
+
 /** 重要邮件监测设置 */
 export interface EmailMonitorSettings {
   enabled: boolean;
@@ -426,6 +434,10 @@ export interface DesktopApi {
   resumeAll(): Promise<{ ok: boolean }>;
 
   checkUpdate(): Promise<UpdateInfo>;
+  /** 读取天气设置 */
+  getWeather(): Promise<WeatherSettings>;
+  /** 保存天气设置 */
+  setWeather(settings: WeatherSettings): Promise<WeatherSettings>;
   /** 读取重要邮件监测设置 */
   getEmailMonitor(): Promise<EmailMonitorSettings>;
   /** 保存重要邮件监测设置 */

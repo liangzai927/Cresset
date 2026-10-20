@@ -154,6 +154,7 @@ async function refreshStatus() {
     "btn-pick-calendar",
     "btn-clear-calendar",
     "btn-save-calendar-reminders",
+    "btn-save-weather",
     "btn-save-webhook",
     "btn-test-webhook",
     "btn-set-telegram-token",
@@ -704,6 +705,49 @@ $("btn-test-email-monitor").addEventListener("click", async (e) => {
     $("email-monitor-hint").textContent = r.detail;
   } catch (err) {
     $("email-monitor-hint").textContent = `测试失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── 天气 ──────────────────────────────────────────────────────────────
+
+/** 读取天气设置；坐标只用于 Open-Meteo 请求 */
+async function loadWeather() {
+  try {
+    const v = await window.aegis.getWeather();
+    $("weather-enabled").checked = v.enabled;
+    $("weather-latitude").value = v.latitude !== undefined ? String(v.latitude) : "";
+    $("weather-longitude").value = v.longitude !== undefined ? String(v.longitude) : "";
+    $("weather-location").value = v.locationName ?? "";
+    $("weather-hint").textContent = v.enabled ? "已启用；早报会显示天气" : "未启用";
+  } catch (err) {
+    $("weather-hint").textContent = `读取失败：${err.message}`;
+  }
+}
+
+$("btn-save-weather").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const enabled = $("weather-enabled").checked;
+  const latRaw = $("weather-latitude").value.trim();
+  const lonRaw = $("weather-longitude").value.trim();
+  const latitude = latRaw ? Number(latRaw) : undefined;
+  const longitude = lonRaw ? Number(lonRaw) : undefined;
+  if (enabled && (latitude === undefined || longitude === undefined)) {
+    $("weather-hint").textContent = "启用天气必须填写经纬度";
+    return;
+  }
+  btn.disabled = true;
+  try {
+    await window.aegis.setWeather({
+      enabled,
+      ...(latitude !== undefined ? { latitude } : {}),
+      ...(longitude !== undefined ? { longitude } : {}),
+      ...($("weather-location").value.trim() ? { locationName: $("weather-location").value.trim() } : {}),
+    });
+    $("weather-hint").textContent = "已保存；下一次刷新后显示";
+  } catch (err) {
+    $("weather-hint").textContent = `保存失败：${err.message}`;
   } finally {
     btn.disabled = false;
   }
@@ -2103,6 +2147,7 @@ function switchTab(name) {
     void refreshSystemHealth({ silent: true });
     // 设置页的每张卡片都必须在切页时重新拉取；只在启动时加载会导致
     // "重启后显示成初始化状态"（模型/知识库/监测器都是独立 RPC）。
+    void loadWeather();
     void loadEmailMonitor();
     void loadCalendar();
     void loadNotify();

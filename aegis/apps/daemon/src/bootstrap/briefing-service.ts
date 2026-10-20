@@ -31,6 +31,8 @@ export interface BriefingServiceOptions {
   clock: Clock;
   scheduler: Scheduler;
   monitorStatus: () => BriefingMonitorStatus[];
+  /** 天气缓存读取；没有天气时返回 null，不阻断简报 */
+  weather?: () => { location: string; minC: number; maxC: number; description: string } | null;
 }
 
 /** 每日简报服务 */
@@ -70,6 +72,10 @@ export class BriefingService {
     const monitorErrors = monitors.reduce((n, m) => n + m.lastErrors, 0);
 
     const lines: string[] = [];
+    const weather = this.#opts.weather?.();
+    if (weather) {
+      lines.push(`天气（${weather.location}）：${weather.description} ${weather.minC}–${weather.maxC}°C`);
+    }
     if (occurrences.length === 0) {
       lines.push("今天没有安排。");
     } else {

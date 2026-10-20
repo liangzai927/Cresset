@@ -52,6 +52,7 @@ import { DaemonLock } from "./lock.js";
 import { buildMonitorBindings } from "./monitor-bindings.js";
 import { MonitorRuntime } from "./monitor-runtime.js";
 import { BARK_DEVICE_KEY, EMAIL_PASSWORD_KEY, TELEGRAM_BOT_TOKEN_KEY } from "./notify-secrets.js";
+import { WeatherService } from "./weather-service.js";
 
 /** daemon 版本；与里程碑对应（发 tag 时同步更新） */
 export const DAEMON_VERSION = "0.2.0-r2";
@@ -296,6 +297,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
   let briefing: BriefingService | null = null;
   let emailMonitor: EmailMonitor | null = null;
   let calendarReminder: CalendarReminder | null = null;
+  const weatherService = new WeatherService({ configFile: paths.configFile, clock });
   const tickTimer = setInterval(() => {
     if (ticking) {
       log("warn", "scheduler.tick_skipped", { reason: "上一轮尚未结束" });
@@ -309,6 +311,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
       .then((result) => {
         counters.lastTickResult = result;
         for (const err of result.errors) log("error", "scheduler.tick_error", { error: err });
+        void weatherService.refreshIfStale();
         briefing?.maybeGenerate();
         calendarReminder?.maybeGenerate();
       })
@@ -346,6 +349,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
     clock,
     scheduler,
     monitorStatus: () => monitorRuntime.status(),
+    weather: () => weatherService.summary(),
   });
   if (briefing.maybeGenerate()) log("info", "briefing.generated", { reason: "startup" });
 

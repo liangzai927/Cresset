@@ -56,6 +56,20 @@ describe("BriefingService", () => {
     expect(rows).toHaveLength(1);
   });
 
+  it("有天气缓存时把天气写进简报", () => {
+    const service = new BriefingService({
+      configFile,
+      db,
+      clock,
+      scheduler,
+      monitorStatus: () => [],
+      weather: () => ({ location: "上海", minC: 12, maxC: 20, description: "晴" }),
+    });
+    service.maybeGenerate();
+    const row = db.prepare("SELECT body FROM notification WHERE kind = 'digest'").get() as { body: string };
+    expect(row.body).toContain("天气（上海）：晴 12–20°C");
+  });
+
   it("没有安排时也给出明确内容，并包含监测器状态", () => {
     const service = new BriefingService({
       configFile,

@@ -170,6 +170,30 @@
         </div>
 
         <div class="settings-group">
+          <h2>天气</h2>
+          <p class="hint">Open-Meteo，无需 Key；只发送经纬度，不发送提醒内容。</p>
+          <label class="dnd-toggle">
+            <input type="checkbox" id="weather-enabled" />
+            在早报中显示天气
+          </label>
+          <div class="form-grid">
+            <label class="form-field">纬度
+              <input id="weather-latitude" type="number" step="0.0001" min="-90" max="90" placeholder="31.23" />
+            </label>
+            <label class="form-field">经度
+              <input id="weather-longitude" type="number" step="0.0001" min="-180" max="180" placeholder="121.47" />
+            </label>
+            <label class="form-field">地点名
+              <input id="weather-location" type="text" placeholder="上海" />
+            </label>
+          </div>
+          <div class="settings-actions">
+            <button class="btn btn-ghost btn-small" id="btn-save-weather">保存天气</button>
+            <span class="hint" id="weather-hint"></span>
+          </div>
+        </div>
+
+        <div class="settings-group">
           <h2>日历（ICS）</h2>
           <p class="hint">导入系统日历/Google Calendar 导出的 .ics；只读取文件，不上传。</p>
           <div class="settings-actions">

@@ -537,6 +537,46 @@ export function createMethods(
       return { monitors: context.monitors?.status() ?? [] };
     },
 
+    "weather.get": async () => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      const w = loadConfig(configFile).config.weather;
+      return {
+        enabled: w.enabled,
+        ...(w.latitude !== undefined ? { latitude: w.latitude } : {}),
+        ...(w.longitude !== undefined ? { longitude: w.longitude } : {}),
+        ...(w.locationName ? { locationName: w.locationName } : {}),
+      };
+    },
+
+    "weather.set": async (params) => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      const p = z
+        .object({
+          enabled: z.boolean(),
+          latitude: z.number().min(-90).max(90).optional(),
+          longitude: z.number().min(-180).max(180).optional(),
+          locationName: z.string().max(100).optional(),
+        })
+        .strict()
+        .parse(params);
+      if (p.enabled && (p.latitude === undefined || p.longitude === undefined)) {
+        throw new MethodError(E_INVALID_PARAMS, "启用天气必须填写经纬度");
+      }
+      const current = loadConfig(configFile);
+      saveConfig(configFile, {
+        ...current.config,
+        weather: {
+          enabled: p.enabled,
+          ...(p.latitude !== undefined ? { latitude: p.latitude } : {}),
+          ...(p.longitude !== undefined ? { longitude: p.longitude } : {}),
+          ...(p.locationName ? { locationName: p.locationName } : {}),
+        },
+      });
+      return p;
+    },
+
     "emailMonitor.get": async () => {
       const configFile = context.backup?.paths.configFile;
       if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");

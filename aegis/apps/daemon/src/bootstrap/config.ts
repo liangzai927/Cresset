@@ -179,6 +179,15 @@ export const DaemonConfigSchema = z
         keywords: z.array(z.string().max(50)).default(["紧急", "urgent", "合同", "发票", "面试", "deadline"]),
       })
       .default({}),
+    /** 天气（Open-Meteo，无需 Key；只发送经纬度） */
+    weather: z
+      .object({
+        enabled: z.boolean().default(false),
+        latitude: z.number().min(-90).max(90).optional(),
+        longitude: z.number().min(-180).max(180).optional(),
+        locationName: z.string().max(100).optional(),
+      })
+      .default({}),
     /** 本地 ICS 日历（导出文件），用于早报展示今天的日程 */
     calendar: z
       .object({

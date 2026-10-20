@@ -52,6 +52,7 @@ import type {
   TasksPage,
   UpdateInfo,
   UpdateTaskPayload,
+  WeatherSettings,
 } from "./api-types.js";
 
 /**
@@ -89,6 +90,9 @@ function buildApi(): DesktopApi {
 
     exportBackup: () => ipcRenderer.invoke("aegis:backup:export") as Promise<BackupExportResult>,
 
+    getWeather: () => ipcRenderer.invoke("aegis:weather:get") as Promise<WeatherSettings>,
+    setWeather: (settings: WeatherSettings) =>
+      ipcRenderer.invoke("aegis:weather:set", settings) as Promise<WeatherSettings>,
     getEmailMonitor: () => ipcRenderer.invoke("aegis:email-monitor:get") as Promise<EmailMonitorSettings>,
     setEmailMonitor: (settings: EmailMonitorSettings) =>
       ipcRenderer.invoke("aegis:email-monitor:set", settings) as Promise<EmailMonitorSettings>,

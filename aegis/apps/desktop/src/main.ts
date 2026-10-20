@@ -68,6 +68,7 @@ import type {
   TaskItem,
   UpdateInfo,
   UpdateTaskPayload,
+  WeatherSettings,
 } from "./api-types.js";
 import { deliverWithAttention, probeSystemNotification } from "./attention.js";
 import { type ChannelHostHandle, createElectronPresenter, startChannelHost } from "./channel-host.js";
@@ -840,6 +841,16 @@ async function ipcOpenNotificationSettings(): Promise<{ ok: boolean; detail: str
   return { ok: false, detail: "无法打开系统通知设置，请手动打开系统设置 → 通知" };
 }
 
+async function ipcGetWeather(): Promise<WeatherSettings> {
+  const client = await ensureClient();
+  return (await client.call("weather.get", {})) as WeatherSettings;
+}
+
+async function ipcSetWeather(settings: WeatherSettings): Promise<WeatherSettings> {
+  const client = await ensureClient();
+  return (await client.call("weather.set", settings)) as WeatherSettings;
+}
+
 async function ipcGetEmailMonitor(): Promise<EmailMonitorSettings> {
   const client = await ensureClient();
   return (await client.call("emailMonitor.get", {})) as EmailMonitorSettings;
@@ -1398,6 +1409,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:llm:get",
     wrap(() => ipcGetLlm()),
+  );
+  ipcMain.handle(
+    "aegis:weather:get",
+    wrap(() => ipcGetWeather()),
+  );
+  ipcMain.handle(
+    "aegis:weather:set",
+    wrap((settings: WeatherSettings) => ipcSetWeather(settings)),
   );
   ipcMain.handle(
     "aegis:email-monitor:get",

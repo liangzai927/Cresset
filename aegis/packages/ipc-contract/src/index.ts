@@ -240,6 +240,17 @@ export const NotifySettingsSchema = z
   .strict();
 export type NotifySettingsView = z.infer<typeof NotifySettingsSchema>;
 
+/** 天气设置 */
+export const WeatherSettingsSchema = z
+  .object({
+    enabled: z.boolean(),
+    latitude: z.number().min(-90).max(90).optional(),
+    longitude: z.number().min(-180).max(180).optional(),
+    locationName: z.string().max(100).optional(),
+  })
+  .strict();
+export type WeatherSettingsView = z.infer<typeof WeatherSettingsSchema>;
+
 /** 重要邮件监测设置 */
 export const EmailMonitorSettingsSchema = z
   .object({
