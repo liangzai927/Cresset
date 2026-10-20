@@ -46,6 +46,7 @@ const TARGETS = [
   { name: "contracts", dir: "packages/contracts", entry: "src/index.ts", deps: ["product"] },
   { name: "ipc-contract", dir: "packages/ipc-contract", entry: "src/index.ts", deps: ["contracts"] },
   { name: "recurrence", dir: "packages/recurrence", entry: "src/index.ts", deps: ["clock", "contracts"] },
+  { name: "skills", dir: "packages/skills", entry: "src/index.ts", deps: ["contracts"] },
   {
     name: "scheduler",
     dir: "packages/scheduler",
@@ -98,6 +99,7 @@ const TARGETS = [
       "product",
       "redaction-gateway",
       "secrets",
+      "skills",
       "storage",
     ],
   },
@@ -180,7 +182,7 @@ for (const t of targets) {
       // `electron` 由宿主进程提供，**绝不能打进产物** ——
       // 它的入口用动态 require 探测二进制路径，被 esbuild 内联后在 ESM 下会直接抛
       // "Dynamic require of child_process is not supported"（实测踩到）。
-      external: ["@aegis/*", "electron"],
+      external: ["@aegis/*", "yaml", "electron"],
       format: "esm",
       target: "node24",
       platform: "node",
@@ -217,7 +219,7 @@ for (const t of targets) {
       await esbuildBuild({
         entryPoints: [join(dir, t.preload)],
         bundle: true,
-        external: ["@aegis/*", "electron"],
+        external: ["@aegis/*", "yaml", "electron"],
         format: "cjs",
         target: "node24",
         platform: "node",

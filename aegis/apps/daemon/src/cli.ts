@@ -31,6 +31,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { SystemClock } from "@aegis/clock";
 import { type DataPaths, resolveDataPaths } from "@aegis/product";
+import { loadSkillFile, SkillLoadError } from "@aegis/skills";
 import { createBackup } from "./bootstrap/backup.js";
 import { DAEMON_VERSION } from "./bootstrap/run-daemon.js";
 import { IpcClient, readHandshakeFile } from "./ipc/client.js";
@@ -63,6 +64,7 @@ function usage(): string {
     "  start / stop                  启动 / 停止 daemon",
     "  paths                         打印数据目录",
     "  backup --out <目录>            导出一致性数据备份（不包含钥匙串）",
+    "  skill check <file.yaml>       校验 Skill YAML（M2）",
     "",
     "示例：",
     '  aegis add "交周报" --at 明天9:00 --weekly 5',
@@ -489,6 +491,8 @@ export async function runCli(argv: string[]): Promise<number> {
     }
     case "backup":
       return cmdBackup(args);
+    case "skill":
+      return cmdSkill(args);
     case undefined:
     case "help":
     case "--help":
@@ -538,6 +542,40 @@ function cmdBackup(args: string[]): number {
     );
     return EXIT_OK;
   } catch (err) {
+    fail(err instanceof Error ? err.message : String(err));
+  }
+}
+
+/**
+ * `skill check <file.yaml>` —— 校验 Skill 的 YAML 与字段契约。
+ *
+ * 这是 M2 的第一个可用入口：在接监测器/引擎之前，先让用户能确认
+ * 自己写的 Skill 到底合不合法，而不是等导入后才失败。
+ */
+function cmdSkill(args: string[]): number {
+  const [sub, file] = args;
+  if (sub !== "check" || !file) usageError("用法：aegis skill check <file.yaml>");
+  try {
+    const skill = loadSkillFile(file);
+    const trigger =
+      skill.trigger.type === "threshold"
+        ? `${skill.trigger.monitor}.${skill.trigger.field} ${skill.trigger.op}`
+        : `${skill.trigger.monitor} 变化`;
+    process.stdout.write(
+      `✓ Skill 合法：${skill.name}@${skill.version}\n` +
+        `  描述：${skill.description}\n` +
+        `  权限：${skill.permissions.length > 0 ? skill.permissions.join(", ") : "无"}\n` +
+        `  触发：${trigger}\n` +
+        `  动作：通知「${skill.action.notify.title}」（${skill.action.notify.priority}）\n` +
+        `  冷却：${skill.cooldown}\n`,
+    );
+    return EXIT_OK;
+  } catch (err) {
+    if (err instanceof SkillLoadError) {
+      fail(
+        `${err.message}${err.issues.length > 0 ? `\n${err.issues.map((i) => `  · ${i}`).join("\n")}` : ""}`,
+      );
+    }
     fail(err instanceof Error ? err.message : String(err));
   }
 }

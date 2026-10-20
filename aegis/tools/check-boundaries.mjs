@@ -22,6 +22,7 @@ const ALLOWED = {
   "@aegis/contracts": [],
   "@aegis/ipc-contract": ["@aegis/contracts"],
   "@aegis/recurrence": ["@aegis/clock", "@aegis/contracts"],
+  "@aegis/skills": ["@aegis/contracts"],
   "@aegis/scheduler": [
     "@aegis/clock",
     "@aegis/contracts",
@@ -45,6 +46,7 @@ const ALLOWED = {
     "@aegis/storage",
     "@aegis/scheduler",
     "@aegis/recurrence",
+    "@aegis/skills",
   ],
   // 桌面外壳：需要直接连 daemon 的 IPC 客户端（token 只留在主进程）、
   // 需要 platform 的渠道探测与通道发现、需要 product 的数据目录解析。

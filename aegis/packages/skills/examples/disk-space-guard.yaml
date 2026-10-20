@@ -1,0 +1,19 @@
+name: disk-space-guard
+version: 1.0.0
+description: 磁盘剩余空间低于阈值时告警
+author: aegis
+permissions: [system.read]
+cooldown: 6h
+params:
+  threshold_percent: 10
+trigger:
+  type: threshold
+  monitor: system.disk
+  field: free_percent
+  op: "<"
+  value: "{{params.threshold_percent}}"
+action:
+  notify:
+    priority: high
+    title: "磁盘空间不足"
+    body: "{{monitor.mount}} 剩余 {{monitor.free_percent}}%（{{monitor.free_gb}} GB）"

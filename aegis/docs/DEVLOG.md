@@ -60,6 +60,29 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M2：Skill YAML 契约 / 加载 / 规则引擎 + CLI
+**里程碑**：M2（R5 并行观察；产品负责人 2026-10-20 明确授权）
+**改了什么**：
+- 新增 `@aegis/skills`：
+  - Zod 严格 Schema：name/version/description/permissions/params/cooldown/trigger/action；
+  - 触发支持 `threshold` 与 `change`，动作 M2 只允许 `notify`；
+  - 模板只允许 `{{params.x}}` / `{{monitor.x}}`，不执行任意代码；
+  - 纯规则引擎 `evaluateSkill`，阈值/字符串比较，缺字段抛错不静默；
+  - YAML 加载器，返回结构化 `SkillLoadError`。
+- CLI 新增 `aegis skill check <file.yaml>`，导入前可校验权限/字段/动作。
+- `yaml` 标为构建 external，打包时复制到 `Resources/node_modules/yaml`。
+- 新增 10 个 skills 单测；仓库共 339 测试。
+**为什么**：M2 的第一块地基是"Skill 是人类可读 YAML + 严格契约 + 纯规则引擎"；
+先把契约和失败可见性做对，再接监测器与通知投递，避免把错误格式带进运行时。
+**验证**：
+- `pnpm verify`：339 通过 / 9 跳过，13 个构建目标；
+- `aegis skill check packages/skills/examples/disk-space-guard.yaml`：通过；
+- 打包产物内的 CLI 也能加载 yaml 并校验示例。
+**踩到的坑**：yaml 是 CJS，直接内联进 ESM 产物会报 `Dynamic require of "process"`；
+必须 external + 打包时复制运行时依赖。
+**留给下次**：监测器接口与 File/Web/RSS/System 监测、Skill 管理界面、去重/冷却；
+仍禁止 M3 的 LLM 与知识库。
+
 ### 2026-10-20 · R5：验收证据自动汇总
 **里程碑**：R5（M1 验收）
 **改了什么**：

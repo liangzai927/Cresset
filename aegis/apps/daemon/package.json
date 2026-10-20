@@ -21,7 +21,8 @@
     "@aegis/product": "workspace:*",
     "zod": "^3.24.0",
     "@aegis/scheduler": "workspace:*",
-    "@aegis/recurrence": "workspace:*"
+    "@aegis/recurrence": "workspace:*",
+    "@aegis/skills": "workspace:*"
   },
   "exports": {
     ".": {

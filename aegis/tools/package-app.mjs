@@ -51,8 +51,9 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -118,6 +119,7 @@ async function main() {
   copyDesktopApp(desktopVersion);
   copyDaemon();
   copyWorkspacePackages();
+  copyExternalRuntimeDependencies();
   copyNodeRuntime();
 
   if (!noSign) {
@@ -226,6 +228,20 @@ function copyWorkspacePackages() {
     cpSync(join(dir, "package.json"), join(dest, "package.json"));
     cpSync(dist, join(dest, "dist"), { recursive: true });
   }
+}
+
+/**
+ * 复制工作区包的**非打包**运行时依赖。
+ *
+ * 构建时 `yaml` 被标为 external（它在 ESM 产物里会走 CJS 动态 require，
+ * 内联后会报 "Dynamic require of process"）；因此必须把 yaml 包本身
+ * 放进 Resources/node_modules，否则 Skill 校验命令在打包产物里会缺依赖。
+ */
+function copyExternalRuntimeDependencies() {
+  const requireFromSkills = createRequire(join(ROOT, "packages", "skills", "package.json"));
+  const yamlManifest = requireFromSkills.resolve("yaml/package.json");
+  const dest = join(RESOURCES, "node_modules", "yaml");
+  cpSync(dirname(yamlManifest), dest, { recursive: true });
 }
 
 /**
