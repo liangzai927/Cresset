@@ -712,14 +712,62 @@ $("btn-test-email-monitor").addEventListener("click", async (e) => {
 
 // ── 天气 ──────────────────────────────────────────────────────────────
 
-/** 读取天气设置；坐标只用于 Open-Meteo 请求 */
+/** 预设地区；用户只选名字，经纬度由这里提供 */
+const WEATHER_CITIES = [
+  { name: "北京", latitude: 39.9042, longitude: 116.4074 },
+  { name: "上海", latitude: 31.2304, longitude: 121.4737 },
+  { name: "广州", latitude: 23.1291, longitude: 113.2644 },
+  { name: "深圳", latitude: 22.5431, longitude: 114.0579 },
+  { name: "杭州", latitude: 30.2741, longitude: 120.1551 },
+  { name: "南京", latitude: 32.0603, longitude: 118.7969 },
+  { name: "苏州", latitude: 31.2989, longitude: 120.5853 },
+  { name: "成都", latitude: 30.5728, longitude: 104.0668 },
+  { name: "重庆", latitude: 29.563, longitude: 106.5516 },
+  { name: "武汉", latitude: 30.5928, longitude: 114.3055 },
+  { name: "西安", latitude: 34.3416, longitude: 108.9398 },
+  { name: "长沙", latitude: 28.2282, longitude: 112.9388 },
+  { name: "青岛", latitude: 36.0671, longitude: 120.3826 },
+  { name: "厦门", latitude: 24.4798, longitude: 118.0894 },
+  { name: "福州", latitude: 26.0745, longitude: 119.2965 },
+  { name: "昆明", latitude: 25.0389, longitude: 102.7183 },
+  { name: "贵阳", latitude: 26.647, longitude: 106.6302 },
+  { name: "南宁", latitude: 22.817, longitude: 108.3665 },
+  { name: "海口", latitude: 20.044, longitude: 110.1999 },
+  { name: "三亚", latitude: 18.2528, longitude: 109.5119 },
+  { name: "天津", latitude: 39.3434, longitude: 117.3616 },
+  { name: "郑州", latitude: 34.7466, longitude: 113.6254 },
+  { name: "济南", latitude: 36.6512, longitude: 117.1201 },
+  { name: "沈阳", latitude: 41.8057, longitude: 123.4315 },
+  { name: "大连", latitude: 38.914, longitude: 121.6147 },
+  { name: "哈尔滨", latitude: 45.8038, longitude: 126.535 },
+  { name: "长春", latitude: 43.8171, longitude: 125.3235 },
+  { name: "呼和浩特", latitude: 40.8426, longitude: 111.7492 },
+  { name: "乌鲁木齐", latitude: 43.8256, longitude: 87.6168 },
+  { name: "拉萨", latitude: 29.652, longitude: 91.1721 },
+];
+
+/** 初始化地区多选；只建一次选项 */
+function initWeatherCities() {
+  const select = $("weather-locations");
+  if (select.options.length > 0) return;
+  for (const city of WEATHER_CITIES) {
+    const option = document.createElement("option");
+    option.value = city.name;
+    option.textContent = city.name;
+    select.appendChild(option);
+  }
+}
+
+/** 读取天气设置；用户只看到地区名 */
 async function loadWeather() {
   try {
     const v = await window.aegis.getWeather();
+    initWeatherCities();
     $("weather-enabled").checked = v.enabled;
-    $("weather-latitude").value = v.latitude !== undefined ? String(v.latitude) : "";
-    $("weather-longitude").value = v.longitude !== undefined ? String(v.longitude) : "";
-    $("weather-location").value = v.locationName ?? "";
+    const names = new Set(v.locations.map((l) => l.name));
+    for (const option of $("weather-locations").options) {
+      option.selected = names.has(option.value);
+    }
     $("weather-hint").textContent = v.enabled ? "已启用；早报会显示天气" : "未启用";
   } catch (err) {
     $("weather-hint").textContent = `读取失败：${err.message}`;
@@ -729,22 +777,15 @@ async function loadWeather() {
 $("btn-save-weather").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   const enabled = $("weather-enabled").checked;
-  const latRaw = $("weather-latitude").value.trim();
-  const lonRaw = $("weather-longitude").value.trim();
-  const latitude = latRaw ? Number(latRaw) : undefined;
-  const longitude = lonRaw ? Number(lonRaw) : undefined;
-  if (enabled && (latitude === undefined || longitude === undefined)) {
-    $("weather-hint").textContent = "启用天气必须填写经纬度";
+  const selected = [...$("weather-locations").selectedOptions].map((o) => o.value);
+  if (enabled && selected.length === 0) {
+    $("weather-hint").textContent = "启用天气时至少选择一个地区";
     return;
   }
+  const locations = WEATHER_CITIES.filter((c) => selected.includes(c.name));
   btn.disabled = true;
   try {
-    await window.aegis.setWeather({
-      enabled,
-      ...(latitude !== undefined ? { latitude } : {}),
-      ...(longitude !== undefined ? { longitude } : {}),
-      ...($("weather-location").value.trim() ? { locationName: $("weather-location").value.trim() } : {}),
-    });
+    await window.aegis.setWeather({ enabled, locations });
     $("weather-hint").textContent = "已保存；下一次刷新后显示";
   } catch (err) {
     $("weather-hint").textContent = `保存失败：${err.message}`;

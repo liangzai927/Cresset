@@ -230,11 +230,17 @@ export interface CalendarSettings {
 }
 
 /** 天气设置 */
+/** 一个天气地区（名称 + Open-Meteo 所需坐标） */
+export interface WeatherLocation {
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+
+/** 天气设置：启用的地区列表 */
 export interface WeatherSettings {
   enabled: boolean;
-  latitude?: number;
-  longitude?: number;
-  locationName?: string;
+  locations: WeatherLocation[];
 }
 
 /** 重要邮件监测设置 */

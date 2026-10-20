@@ -244,9 +244,15 @@ export type NotifySettingsView = z.infer<typeof NotifySettingsSchema>;
 export const WeatherSettingsSchema = z
   .object({
     enabled: z.boolean(),
-    latitude: z.number().min(-90).max(90).optional(),
-    longitude: z.number().min(-180).max(180).optional(),
-    locationName: z.string().max(100).optional(),
+    locations: z.array(
+      z
+        .object({
+          name: z.string().max(100),
+          latitude: z.number().min(-90).max(90),
+          longitude: z.number().min(-180).max(180),
+        })
+        .strict(),
+    ),
   })
   .strict();
 export type WeatherSettingsView = z.infer<typeof WeatherSettingsSchema>;

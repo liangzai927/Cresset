@@ -541,12 +541,7 @@ export function createMethods(
       const configFile = context.backup?.paths.configFile;
       if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
       const w = loadConfig(configFile).config.weather;
-      return {
-        enabled: w.enabled,
-        ...(w.latitude !== undefined ? { latitude: w.latitude } : {}),
-        ...(w.longitude !== undefined ? { longitude: w.longitude } : {}),
-        ...(w.locationName ? { locationName: w.locationName } : {}),
-      };
+      return { enabled: w.enabled, locations: w.locations };
     },
 
     "weather.set": async (params) => {
@@ -555,24 +550,25 @@ export function createMethods(
       const p = z
         .object({
           enabled: z.boolean(),
-          latitude: z.number().min(-90).max(90).optional(),
-          longitude: z.number().min(-180).max(180).optional(),
-          locationName: z.string().max(100).optional(),
+          locations: z.array(
+            z
+              .object({
+                name: z.string().max(100),
+                latitude: z.number().min(-90).max(90),
+                longitude: z.number().min(-180).max(180),
+              })
+              .strict(),
+          ),
         })
         .strict()
         .parse(params);
-      if (p.enabled && (p.latitude === undefined || p.longitude === undefined)) {
-        throw new MethodError(E_INVALID_PARAMS, "启用天气必须填写经纬度");
+      if (p.enabled && p.locations.length === 0) {
+        throw new MethodError(E_INVALID_PARAMS, "启用天气时至少选择一个地区");
       }
       const current = loadConfig(configFile);
       saveConfig(configFile, {
         ...current.config,
-        weather: {
-          enabled: p.enabled,
-          ...(p.latitude !== undefined ? { latitude: p.latitude } : {}),
-          ...(p.longitude !== undefined ? { longitude: p.longitude } : {}),
-          ...(p.locationName ? { locationName: p.locationName } : {}),
-        },
+        weather: { enabled: p.enabled, locations: p.locations },
       });
       return p;
     },

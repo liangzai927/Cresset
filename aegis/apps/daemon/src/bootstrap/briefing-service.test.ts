@@ -63,7 +63,7 @@ describe("BriefingService", () => {
       clock,
       scheduler,
       monitorStatus: () => [],
-      weather: () => ({ location: "上海", minC: 12, maxC: 20, description: "晴" }),
+      weather: () => [{ location: "上海", minC: 12, maxC: 20, description: "晴" }],
     });
     service.maybeGenerate();
     const row = db.prepare("SELECT body FROM notification WHERE kind = 'digest'").get() as { body: string };

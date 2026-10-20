@@ -1,8 +1,8 @@
 /**
  * 天气（M3）—— Open-Meteo，无需 API Key。
  *
- * 只发送经纬度；不发送任何用户数据/提醒内容。网络失败不阻断早报，
- * 只让天气行缺席，并在日志里留下原因。
+ * 用户从预设地区下拉多选；每个地区带自己的经纬度。
+ * 只发送经纬度，不发送任何用户数据/提醒内容。单个地区失败只让该地区缺席。
  */
 
 import type { Clock } from "@aegis/clock";
@@ -31,35 +31,54 @@ export function weatherDescription(code: number): string {
   return "未知天气";
 }
 
-/** 天气服务；缓存 30 分钟，失败保留旧缓存 */
+/** 天气服务；缓存 30 分钟，单个地区失败保留旧缓存 */
 export class WeatherService {
   readonly #opts: { configFile: string; clock: Clock; fetchImpl?: typeof fetch };
-  #cache: WeatherSummary | null = null;
+  #cache: WeatherSummary[] = [];
+  #lastFetch = 0;
 
   constructor(opts: { configFile: string; clock: Clock; fetchImpl?: typeof fetch }) {
     this.#opts = opts;
   }
 
-  /** 当前缓存 */
-  summary(): WeatherSummary | null {
+  /** 当前多地区缓存 */
+  summary(): WeatherSummary[] {
     return this.#cache;
   }
 
   /** 缓存超过 30 分钟才刷新 */
-  async refreshIfStale(): Promise<WeatherSummary | null> {
-    if (this.#cache && this.#opts.clock.wall() - this.#cache.fetchedAt < 30 * 60_000) {
+  async refreshIfStale(): Promise<WeatherSummary[]> {
+    if (this.#cache.length > 0 && this.#opts.clock.wall() - this.#lastFetch < 30 * 60_000) {
       return this.#cache;
     }
     return this.refresh();
   }
 
-  /** 拉取今天天气；失败返回旧缓存或 null */
-  async refresh(): Promise<WeatherSummary | null> {
+  /** 拉取所选地区的今天天气；失败的地区保留旧值 */
+  async refresh(): Promise<WeatherSummary[]> {
     const cfg = loadConfig(this.#opts.configFile).config.weather;
-    if (!cfg.enabled || cfg.latitude === undefined || cfg.longitude === undefined) return null;
+    if (!cfg.enabled || cfg.locations.length === 0) {
+      this.#cache = [];
+      this.#lastFetch = this.#opts.clock.wall();
+      return [];
+    }
+    const previous = new Map(this.#cache.map((w) => [w.location, w]));
+    const results = await Promise.all(
+      cfg.locations.map(async (loc) => {
+        const fresh = await this.#fetchOne(loc.name, loc.latitude, loc.longitude);
+        return fresh ?? previous.get(loc.name) ?? null;
+      }),
+    );
+    this.#cache = results.filter((w): w is WeatherSummary => w !== null);
+    this.#lastFetch = this.#opts.clock.wall();
+    return this.#cache;
+  }
+
+  /** 拉取一个地区；失败返回 null */
+  async #fetchOne(name: string, latitude: number, longitude: number): Promise<WeatherSummary | null> {
     const url = new URL("https://api.open-meteo.com/v1/forecast");
-    url.searchParams.set("latitude", String(cfg.latitude));
-    url.searchParams.set("longitude", String(cfg.longitude));
+    url.searchParams.set("latitude", String(latitude));
+    url.searchParams.set("longitude", String(longitude));
     url.searchParams.set("daily", "weather_code,temperature_2m_max,temperature_2m_min");
     url.searchParams.set("forecast_days", "1");
     url.searchParams.set("timezone", "auto");
@@ -69,7 +88,11 @@ export class WeatherService {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const body = (await res.json()) as {
-        daily?: { weather_code?: number[]; temperature_2m_max?: number[]; temperature_2m_min?: number[] };
+        daily?: {
+          weather_code?: number[];
+          temperature_2m_max?: number[];
+          temperature_2m_min?: number[];
+        };
       };
       const code = body.daily?.weather_code?.[0];
       const max = body.daily?.temperature_2m_max?.[0];
@@ -77,16 +100,15 @@ export class WeatherService {
       if (typeof code !== "number" || typeof max !== "number" || typeof min !== "number") {
         throw new Error("天气响应缺少字段");
       }
-      this.#cache = {
-        location: cfg.locationName ?? `${cfg.latitude.toFixed(2)},${cfg.longitude.toFixed(2)}`,
+      return {
+        location: name,
         minC: Math.round(min),
         maxC: Math.round(max),
         description: weatherDescription(code),
         fetchedAt: this.#opts.clock.wall(),
       };
-      return this.#cache;
     } catch {
-      return this.#cache;
+      return null;
     }
   }
 }

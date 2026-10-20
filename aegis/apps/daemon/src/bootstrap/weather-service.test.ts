@@ -19,7 +19,13 @@ beforeEach(() => {
     configFile,
     JSON.stringify({
       version: 1,
-      weather: { enabled: true, latitude: 31.23, longitude: 121.47, locationName: "上海" },
+      weather: {
+        enabled: true,
+        locations: [
+          { name: "上海", latitude: 31.23, longitude: 121.47 },
+          { name: "北京", latitude: 39.9, longitude: 116.4 },
+        ],
+      },
     }),
   );
 });
@@ -27,24 +33,33 @@ beforeEach(() => {
 afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
 describe("WeatherService", () => {
-  it("解析 Open-Meteo 并缓存", async () => {
-    const fake = (async () =>
-      new Response(
+  it("多地区解析并缓存", async () => {
+    const fake = (async (input: URL) => {
+      const lat = Number(input.searchParams.get("latitude"));
+      const max = lat > 35 ? 15 : 20;
+      return new Response(
         JSON.stringify({
-          daily: { weather_code: [0], temperature_2m_max: [20.4], temperature_2m_min: [11.6] },
+          daily: { weather_code: [0], temperature_2m_max: [max], temperature_2m_min: [11.6] },
         }),
         { status: 200 },
-      )) as typeof fetch;
+      );
+    }) as typeof fetch;
     const service = new WeatherService({ configFile, clock: new VirtualClock(1_000), fetchImpl: fake });
-    const summary = await service.refresh();
-    expect(summary).toMatchObject({ location: "上海", minC: 12, maxC: 20, description: "晴" });
-    expect(service.summary()).toEqual(summary);
+    const summaries = await service.refresh();
+    expect(summaries).toHaveLength(2);
+    expect(summaries.find((s) => s.location === "上海")).toMatchObject({
+      minC: 12,
+      maxC: 20,
+      description: "晴",
+    });
+    expect(summaries.find((s) => s.location === "北京")?.maxC).toBe(15);
+    expect(service.summary()).toHaveLength(2);
   });
 
-  it("失败时返回 null，不抛错", async () => {
+  it("全部失败时返回空数组，不抛错", async () => {
     const fake = (async () => new Response("bad", { status: 500 })) as typeof fetch;
     const service = new WeatherService({ configFile, clock: new VirtualClock(1_000), fetchImpl: fake });
-    expect(await service.refresh()).toBeNull();
+    expect(await service.refresh()).toEqual([]);
   });
 
   it("WMO code 映射", () => {

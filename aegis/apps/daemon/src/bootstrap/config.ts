@@ -183,9 +183,16 @@ export const DaemonConfigSchema = z
     weather: z
       .object({
         enabled: z.boolean().default(false),
-        latitude: z.number().min(-90).max(90).optional(),
-        longitude: z.number().min(-180).max(180).optional(),
-        locationName: z.string().max(100).optional(),
+        /** 从预设地区下拉多选；经纬度由预设提供，用户不再手填 */
+        locations: z
+          .array(
+            z.object({
+              name: z.string().max(100),
+              latitude: z.number().min(-90).max(90),
+              longitude: z.number().min(-180).max(180),
+            }),
+          )
+          .default([]),
       })
       .default({}),
     /** 本地 ICS 日历（导出文件），用于早报展示今天的日程 */

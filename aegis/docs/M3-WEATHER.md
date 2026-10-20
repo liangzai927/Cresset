@@ -8,8 +8,8 @@
 设置 → 天气：
 
 - 启用
-- 纬度 / 经度
-- 地点名（只用于显示）
+- 地区下拉框（按住 ⌘ 多选）
+- 不需要手填经纬度；预设地区自带坐标
 
 等价配置：
 
@@ -17,9 +17,10 @@
 {
   "weather": {
     "enabled": true,
-    "latitude": 31.23,
-    "longitude": 121.47,
-    "locationName": "上海"
+    "locations": [
+      { "name": "上海", "latitude": 31.2304, "longitude": 121.4737 },
+      { "name": "北京", "latitude": 39.9042, "longitude": 116.4074 }
+    ]
   }
 }
 ```
@@ -28,6 +29,7 @@
 
 ```text
 天气（上海）：晴 12–20°C
+天气（北京）：多云 8–15°C
 今天有 3 个提醒：
 ...
 ```
@@ -42,7 +44,8 @@
 
 ## 验证
 
-- 解析 Open-Meteo daily 字段
+- 多地区解析/缓存
+- 单个地区失败保留旧缓存
 - 失败返回 null 不抛错
 - WMO weather_code → 中文
 - BriefingService 包含天气行
