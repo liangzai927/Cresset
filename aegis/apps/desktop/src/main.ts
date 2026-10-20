@@ -44,6 +44,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, nativeImage, s
 import type {
   BackupExportResult,
   BriefingSettings,
+  CalendarSettings,
   ChannelStatus,
   CreateTaskPayload,
   DiagnosticInfo,
@@ -838,6 +839,30 @@ async function ipcOpenNotificationSettings(): Promise<{ ok: boolean; detail: str
   return { ok: false, detail: "无法打开系统通知设置，请手动打开系统设置 → 通知" };
 }
 
+async function ipcGetCalendar(): Promise<CalendarSettings> {
+  const client = await ensureClient();
+  return (await client.call("calendar.get", {})) as CalendarSettings;
+}
+
+async function ipcSetCalendar(settings: CalendarSettings): Promise<CalendarSettings> {
+  const client = await ensureClient();
+  return (await client.call("calendar.set", settings)) as CalendarSettings;
+}
+
+async function ipcPickCalendarFile(): Promise<string | null> {
+  const options = {
+    title: "选择日历导出的 .ics 文件",
+    buttonLabel: "使用",
+    filters: [{ name: "日历", extensions: ["ics"] }],
+    properties: ["openFile"] as Array<"openFile">,
+  };
+  const picked =
+    ctx.window && !ctx.window.isDestroyed()
+      ? await dialog.showOpenDialog(ctx.window, options)
+      : await dialog.showOpenDialog(options);
+  return picked.canceled ? null : (picked.filePaths[0] ?? null);
+}
+
 async function ipcGetNotify(): Promise<NotifySettings> {
   const client = await ensureClient();
   return (await client.call("notify.get", {})) as NotifySettings;
@@ -1332,6 +1357,18 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:llm:get",
     wrap(() => ipcGetLlm()),
+  );
+  ipcMain.handle(
+    "aegis:calendar:get",
+    wrap(() => ipcGetCalendar()),
+  );
+  ipcMain.handle(
+    "aegis:calendar:set",
+    wrap((settings: CalendarSettings) => ipcSetCalendar(settings)),
+  );
+  ipcMain.handle(
+    "aegis:calendar:pick",
+    wrap(() => ipcPickCalendarFile()),
   );
   ipcMain.handle(
     "aegis:notify:get",

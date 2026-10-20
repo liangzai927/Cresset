@@ -70,6 +70,30 @@ describe("BriefingService", () => {
     expect(row.body).toContain("最近错误 2");
   });
 
+  it("配置 ICS 时把今天的日程写进简报", () => {
+    const ics = join(dir, "calendar.ics");
+    writeFileSync(
+      ics,
+      [
+        "BEGIN:VCALENDAR",
+        "BEGIN:VEVENT",
+        "DTSTART:20261020T090000",
+        "SUMMARY:周会",
+        "END:VEVENT",
+        "END:VCALENDAR",
+      ].join("\r\n"),
+    );
+    writeFileSync(
+      configFile,
+      JSON.stringify({ version: 1, briefing: { enabled: true, time: "00:00" }, calendar: { icsPath: ics } }),
+    );
+    const service = new BriefingService({ configFile, db, clock, scheduler, monitorStatus: () => [] });
+    service.maybeGenerate();
+    const row = db.prepare("SELECT body FROM notification WHERE kind = 'digest'").get() as { body: string };
+    expect(row.body).toContain("日程：");
+    expect(row.body).toContain("周会");
+  });
+
   it("未启用时不生成", () => {
     writeFileSync(configFile, JSON.stringify({ version: 1, briefing: { enabled: false, time: "08:00" } }));
     const service = new BriefingService({ configFile, db, clock, scheduler, monitorStatus: () => [] });

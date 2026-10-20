@@ -10,11 +10,13 @@
  *   - 幂等由 notification.dedupe_key 唯一索引裁决，不靠内存日期。
  */
 
+import { readFileSync } from "node:fs";
 import type { Clock } from "@aegis/clock";
 import { formatWallClock, resolveTimeZone, utcToWall } from "@aegis/recurrence";
 import type { Scheduler } from "@aegis/scheduler";
 import { type Db, rowsOf } from "@aegis/storage";
 import { loadConfig } from "./config.js";
+import { eventsOn, parseIcs } from "./ics-calendar.js";
 
 /** 简报时可用的监测器状态 */
 export interface BriefingMonitorStatus {
@@ -80,6 +82,21 @@ export class BriefingService {
       if (occurrences.length > 20) lines.push(`…还有 ${occurrences.length - 20} 个`);
       const overdue = occurrences.filter((o) => o.state === "pending" && o.scheduled_wall < nowWall).length;
       if (pending > 0) lines.push(`待处理：${pending}${overdue > 0 ? `，其中已过期 ${overdue}` : ""}`);
+    }
+    if (cfg.calendar.icsPath) {
+      try {
+        const events = eventsOn(parseIcs(readFileSync(cfg.calendar.icsPath, "utf8")), date);
+        if (events.length > 0) {
+          lines.push("日程：");
+          for (const e of events.slice(0, 20)) {
+            const time = e.allDay ? "全天" : e.startWall.slice(11, 16);
+            lines.push(`· ${time} ${e.summary}`);
+          }
+        }
+      } catch {
+        // 日历是可选增强；文件缺失/坏格式不应阻断简报本身
+        lines.push("日历：文件不可读或格式不支持");
+      }
     }
     if (monitors.length > 0) {
       lines.push(

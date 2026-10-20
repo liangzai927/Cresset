@@ -27,6 +27,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   BackupExportResult,
   BriefingSettings,
+  CalendarSettings,
   CreateTaskPayload,
   DesktopApi,
   DiagnosticInfo,
@@ -87,6 +88,10 @@ function buildApi(): DesktopApi {
 
     exportBackup: () => ipcRenderer.invoke("aegis:backup:export") as Promise<BackupExportResult>,
 
+    getCalendar: () => ipcRenderer.invoke("aegis:calendar:get") as Promise<CalendarSettings>,
+    setCalendar: (settings: CalendarSettings) =>
+      ipcRenderer.invoke("aegis:calendar:set", settings) as Promise<CalendarSettings>,
+    pickCalendarFile: () => ipcRenderer.invoke("aegis:calendar:pick") as Promise<string | null>,
     getNotify: () => ipcRenderer.invoke("aegis:notify:get") as Promise<NotifySettings>,
     setNotify: (settings: NotifySettings) =>
       ipcRenderer.invoke("aegis:notify:set", settings) as Promise<NotifySettings>,

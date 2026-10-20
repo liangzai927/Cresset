@@ -150,6 +150,12 @@ export const DaemonConfigSchema = z
         dailyCallLimit: z.number().int().min(1).max(10_000).default(200),
       })
       .default({}),
+    /** 本地 ICS 日历（导出文件），用于早报展示今天的日程 */
+    calendar: z
+      .object({
+        icsPath: z.string().max(2_000).optional(),
+      })
+      .default({}),
     /** 每日简报：本地任务/监测器摘要，到点只生成一次 */
     briefing: z
       .object({

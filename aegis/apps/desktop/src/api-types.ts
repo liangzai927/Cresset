@@ -222,6 +222,11 @@ export type LlmTestResult =
   | { ok: true; text: string; destination: string }
   | { ok: false; blocked: boolean; reason: string; errorKind?: string };
 
+/** 本地日历设置 */
+export interface CalendarSettings {
+  icsPath?: string;
+}
+
 /** 通知渠道设置 */
 export interface NotifySettings {
   channels: Array<"os_notification" | "cli_fallback" | "webhook" | "telegram" | "bark" | "tts">;
@@ -396,6 +401,12 @@ export interface DesktopApi {
   resumeAll(): Promise<{ ok: boolean }>;
 
   checkUpdate(): Promise<UpdateInfo>;
+  /** 读取本地日历设置 */
+  getCalendar(): Promise<CalendarSettings>;
+  /** 保存本地日历设置 */
+  setCalendar(settings: CalendarSettings): Promise<CalendarSettings>;
+  /** 选择本地 .ics 文件（取消返回 null） */
+  pickCalendarFile(): Promise<string | null>;
   /** 读取通知渠道/Webhook 设置 */
   getNotify(): Promise<NotifySettings>;
   /** 保存通知渠道设置（重启 daemon 生效） */

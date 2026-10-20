@@ -148,6 +148,8 @@ async function refreshStatus() {
     "btn-search-knowledge",
     "btn-ask-knowledge",
     "btn-save-briefing",
+    "btn-pick-calendar",
+    "btn-clear-calendar",
     "btn-save-webhook",
     "btn-test-webhook",
     "btn-set-telegram-token",
@@ -611,6 +613,49 @@ $("btn-refresh-health").addEventListener("click", async (e) => {
   btn.disabled = true;
   try {
     await refreshSystemHealth();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── 本地日历（ICS） ───────────────────────────────────────────────────
+
+/** 读取日历路径；文件解析失败由 daemon 早报里给出可见提示 */
+async function loadCalendar() {
+  try {
+    const view = await window.aegis.getCalendar();
+    $("calendar-path").value = view.icsPath ?? "";
+    $("calendar-hint").textContent = view.icsPath ? "已配置；早报会读取此文件" : "未选择";
+  } catch (err) {
+    $("calendar-hint").textContent = `读取失败：${err.message}`;
+  }
+}
+
+$("btn-pick-calendar").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    const path = await window.aegis.pickCalendarFile();
+    if (!path) return;
+    await window.aegis.setCalendar({ icsPath: path });
+    $("calendar-path").value = path;
+    $("calendar-hint").textContent = "已保存；早报会读取此文件";
+  } catch (err) {
+    $("calendar-hint").textContent = `保存失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-clear-calendar").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await window.aegis.setCalendar({});
+    $("calendar-path").value = "";
+    $("calendar-hint").textContent = "已清除";
+  } catch (err) {
+    $("calendar-hint").textContent = `清除失败：${err.message}`;
   } finally {
     btn.disabled = false;
   }
@@ -1873,6 +1918,7 @@ function switchTab(name) {
     void refreshSystemHealth({ silent: true });
     // 设置页的每张卡片都必须在切页时重新拉取；只在启动时加载会导致
     // "重启后显示成初始化状态"（模型/知识库/监测器都是独立 RPC）。
+    void loadCalendar();
     void loadNotify();
     void loadBriefing();
     void loadLlm();

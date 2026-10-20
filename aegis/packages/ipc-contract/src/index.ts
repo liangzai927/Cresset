@@ -240,6 +240,14 @@ export const NotifySettingsSchema = z
   .strict();
 export type NotifySettingsView = z.infer<typeof NotifySettingsSchema>;
 
+/** 本地日历设置（ICS 导出文件） */
+export const CalendarSettingsSchema = z
+  .object({
+    icsPath: z.string().max(2_000).optional(),
+  })
+  .strict();
+export type CalendarSettingsView = z.infer<typeof CalendarSettingsSchema>;
+
 /** 每日简报设置 */
 export const BriefingSettingsSchema = z
   .object({

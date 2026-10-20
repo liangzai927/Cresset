@@ -531,6 +531,28 @@ export function createMethods(
       return { monitors: context.monitors?.status() ?? [] };
     },
 
+    "calendar.get": async () => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      const cal = loadConfig(configFile).config.calendar;
+      return { ...(cal.icsPath ? { icsPath: cal.icsPath } : {}) };
+    },
+
+    "calendar.set": async (params) => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      const p = z
+        .object({ icsPath: z.string().max(2_000).optional() })
+        .strict()
+        .parse(params);
+      const current = loadConfig(configFile);
+      saveConfig(configFile, {
+        ...current.config,
+        calendar: { ...(p.icsPath ? { icsPath: p.icsPath } : {}) },
+      });
+      return p;
+    },
+
     "notify.get": async () => {
       const configFile = context.backup?.paths.configFile;
       if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");

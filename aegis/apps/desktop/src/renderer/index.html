@@ -170,6 +170,17 @@
         </div>
 
         <div class="settings-group">
+          <h2>日历（ICS）</h2>
+          <p class="hint">导入系统日历/Google Calendar 导出的 .ics；只读取文件，不上传。</p>
+          <div class="settings-actions">
+            <input id="calendar-path" type="text" class="calendar-path" readonly placeholder="未选择" />
+            <button class="btn btn-ghost btn-small" id="btn-pick-calendar">选择 .ics</button>
+            <button class="btn btn-ghost btn-small" id="btn-clear-calendar">清除</button>
+            <span class="hint" id="calendar-hint"></span>
+          </div>
+        </div>
+
+        <div class="settings-group">
           <h2>知识库</h2>
           <div class="settings-actions">
             <button class="btn" id="btn-import-knowledge">导入文档</button>
