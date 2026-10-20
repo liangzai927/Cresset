@@ -25,7 +25,7 @@ import type { HealthView } from "@aegis/ipc-contract";
 import { createDesktopChannelSender, defaultNotifiers, type Notifier } from "@aegis/platform";
 import { type DataPaths, resolveDataPaths } from "@aegis/product";
 import { Scheduler, type TickResult } from "@aegis/scheduler";
-import { AuditRepo, type Db, migrate, OccurrenceDao, openDb } from "@aegis/storage";
+import { AuditRepo, type Db, migrate, OccurrenceDao, openDb, rowOf } from "@aegis/storage";
 import { createMethods } from "../ipc/methods.js";
 import type { HandshakeFile } from "../ipc/server.js";
 import { IpcServer } from "../ipc/server.js";
@@ -81,6 +81,15 @@ export class AlreadyRunningError extends Error {
     super(detail);
     this.name = "AlreadyRunningError";
   }
+}
+
+/** 把运行缺口长度变成人话（system_gap 通知正文用） */
+function formatGapDuration(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60_000));
+  if (minutes < 60) return `${minutes} 分钟`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours} 小时`;
+  return `${Math.round(hours / 24)} 天`;
 }
 
 /**
@@ -195,6 +204,52 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
     const due = scheduler.daos.notifications.listDue(Number.MAX_SAFE_INTEGER, 1);
     return due.length > 0 ? (due[0]?.scheduledFor ?? null) : null;
   };
+
+  // ── 8.5 运行缺口检测（NFR-R5）
+  //
+  // 用上一条 heartbeat 与新进程启动时刻比较。超过阈值（默认 15 分钟）就记录
+  // run_gap，并投递一条 system_gap 通知；dedupe_key 保证同一缺口只发一次。
+  // 必须放在写本次 heartbeat 之前，否则会拿自己刚写的行做比较。
+  const lastHeartbeat = rowOf<{ at: number }>(
+    db.prepare("SELECT at FROM heartbeat ORDER BY at DESC LIMIT 1"),
+  );
+  const gapThresholdMs = Math.max(
+    15 * 60_000,
+    cfg.config.heartbeat.intervalS * 1_000 * cfg.config.heartbeat.gapWarnMultiplier,
+  );
+  if (lastHeartbeat && wallStart - lastHeartbeat.at >= gapThresholdMs) {
+    const gapStart = lastHeartbeat.at;
+    const gapEnd = wallStart;
+    const cause = clockJump.kind === "wall_jumped" ? "clock_jump" : "sleep";
+    const existing = rowOf<{ id: string }>(
+      db.prepare("SELECT id FROM run_gap WHERE gap_start = ? AND gap_end = ?"),
+      gapStart,
+      gapEnd,
+    );
+    const gapId = existing?.id ?? randomUUID();
+    if (!existing) {
+      db.prepare(
+        "INSERT INTO run_gap (id, detected_at, gap_start, gap_end, cause, notified) VALUES (?, ?, ?, ?, ?, 0)",
+      ).run(gapId, gapEnd, gapStart, gapEnd, cause);
+    }
+    const note = scheduler.daos.notifications.createWithOutbox({
+      kind: "system_gap",
+      title: "我有一段时间没有运行",
+      body: `约 ${formatGapDuration(gapEnd - gapStart)} 未运行；期间可能错过提醒。`,
+      priority: "high",
+      scheduledFor: gapEnd,
+      dedupeKey: `system-gap:${gapStart}:${gapEnd}`,
+    });
+    if (note.created) {
+      db.prepare("UPDATE run_gap SET notified = 1 WHERE id = ?").run(gapId);
+    }
+    log("warn", "bootstrap.run_gap", {
+      gapStart,
+      gapEnd,
+      cause,
+      notified: note.created,
+    });
+  }
 
   // ── 9/10 tick 与心跳
   const counters: {

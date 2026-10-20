@@ -177,6 +177,36 @@ describe("时钟跳变检测（详细设计 §3 第 6 步）", () => {
   });
 });
 
+describe("运行缺口自监控（TC-M1-19 / NFR-R5）", () => {
+  it("★ 停机 5 小时后启动会记录 run_gap 并生成 system_gap 通知", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-gap-"));
+    const clock1 = new VirtualClock();
+    const first = await runDaemon({ dataDir, clock: clock1, ...FAST });
+    await first.stop("test");
+
+    const clock2 = new VirtualClock(clock1.wall() + 5 * 3_600_000);
+    const second = await runDaemon({ dataDir, clock: clock2, ...FAST });
+
+    const gaps = second.db
+      .prepare("SELECT gap_start, gap_end, cause, notified FROM run_gap ORDER BY detected_at DESC")
+      .all() as Array<{ gap_start: number; gap_end: number; cause: string; notified: number }>;
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0]?.cause).toBe("sleep");
+    expect(gaps[0]?.notified).toBe(1);
+    expect(gaps[0]?.gap_end).toBe(clock2.wall());
+
+    const note = second.db
+      .prepare("SELECT kind, title, state FROM notification WHERE kind = 'system_gap'")
+      .get() as { kind: string; title: string; state: string } | undefined;
+    expect(note).toBeDefined();
+    expect(note?.title).toContain("没有运行");
+    expect(note?.state).toBe("pending");
+
+    await second.stop("test");
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+});
+
 describe("IPC 端到端（详细设计 §7，含 R0 S6 的 C-4 约束）", () => {
   async function connect(): Promise<IpcClient> {
     const daemon = requireRunning();

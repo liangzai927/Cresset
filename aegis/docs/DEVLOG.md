@@ -22,7 +22,7 @@
 | --- | --- |
 | 阶段 | **R4 进行中**（自启/崩溃自恢复/ad-hoc 打包/备份导出已完成），剩余正式签名与公证 |
 | 版本 | daemon `0.2.0-r2` ／ 桌面 `0.3.0-r3` |
-| 校验 | `pnpm verify` 全绿（328 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
+| 校验 | `pnpm verify` 全绿（329 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
 | 启动 | `pnpm dev`（智能增量构建后启动；打包产物为 `dist/Aegis.app`） |
 | 数据目录 | `~/Library/Application Support/Aegis`（含 `desktop.log`） |
 | 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复/启动看门狗/打包（ad-hoc）/备份导出 |
@@ -59,6 +59,23 @@
 ---
 
 ## 记录（新的在最上面）
+
+### 2026-10-20 · R4/M1：运行缺口自监控（system_gap）
+**里程碑**：R4/M1
+**改了什么**：
+- 启动时在写本次 heartbeat 之前读取上一条 heartbeat；间隔超过
+  `max(15 分钟, heartbeat.intervalS × gapWarnMultiplier)` 就写入 `run_gap`；
+- 同时创建一条 `system_gap` 通知（high 优先级，可穿透 DND），
+  `dedupe_key = system-gap:<gapStart>:<gapEnd>`，同一缺口只发一次；
+- 根据启动时钟跳变判定 cause（wall_jumped → clock_jump，其余 → sleep）；
+- 新增集成测试：两次启动相隔 5 小时，断言 run_gap 与 system_gap 通知。
+**为什么**：NFR-R5 要求"中断超时后恢复即主动告知我在 X–Y 期间没运行"；
+此前 run_gap 表只有建表、从未写入，用户无法知道漏掉了什么。
+**验证**：
+- `pnpm verify`：329 通过 / 9 跳过
+- 缺口测试断言 run_gap.cause=sleep、notified=1、通知处于 pending
+**踩到的坑**：检测必须放在写本次 heartbeat 之前；否则比较对象会变成刚写的自己。
+**留给下次**：R4 正式签名/公证（需 Apple 账号）→ R5 14 天验收 → M2；M2 不能提前。
 
 ### 2026-10-20 · R4/M1：设置页补齐开机自启与通知权限引导
 **里程碑**：R4/M1
