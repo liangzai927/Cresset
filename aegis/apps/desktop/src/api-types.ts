@@ -203,7 +203,7 @@ export interface SystemHealthView {
 /** 监测器状态（设置页展示） */
 export interface MonitorStatusItem {
   id: string;
-  kind: "files" | "system";
+  kind: "files" | "system" | "web";
   intervalMs: number;
   skills: string[];
   lastScanAt: number | null;

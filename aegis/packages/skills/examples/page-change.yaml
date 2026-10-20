@@ -1,0 +1,15 @@
+name: page-change
+version: 1.0.0
+description: 网页内容变化时通知
+author: aegis
+permissions: [network.read]
+cooldown: 10m
+params: {}
+trigger:
+  type: change
+  monitor: web.example
+action:
+  notify:
+    priority: normal
+    title: "网页内容更新"
+    body: "{{monitor.title}}：{{monitor.excerpt}}"

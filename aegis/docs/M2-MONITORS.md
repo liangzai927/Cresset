@@ -29,6 +29,22 @@ cp packages/skills/examples/downloads-change.yaml "$DATA/skills/"
       "skills": ["skills/disk-space-guard.yaml"]
     },
     {
+      "id": "web.news",
+      "kind": "web",
+      "url": "https://example.com/news",
+      "mode": "page",
+      "intervalS": 120,
+      "skills": ["skills/page-change.yaml"]
+    },
+    {
+      "id": "rss.example",
+      "kind": "web",
+      "url": "https://example.com/feed.xml",
+      "mode": "rss",
+      "intervalS": 300,
+      "skills": ["skills/rss-change.yaml"]
+    },
+    {
       "id": "files.downloads",
       "kind": "files",
       "root": "~/Downloads",
@@ -71,7 +87,8 @@ aegis skill check ~/Library/Application\ Support/Aegis/skills/disk-space-guard.y
 
 ## 5. 当前限制
 
-- 还没有 Skill 管理/监测器状态界面；
-- 只有 FileMonitor 与 SystemMonitor；Web/RSS/Atom 待做；
+- 还没有 Skill 管理/导入界面；
+- Web 监测的 page 模式目前按"标题 + 可见文本"做变化检测，尚未支持 CSS 选择器/JSONPath；
+- RSS/Atom 使用轻量正则解析（标题/link/guid）；复杂命名空间/嵌套结构后续用 XML 解析器替换；
 - 文件重命名暂时表现为删除 + 新增；
 - 不做脚本执行、不调模型。

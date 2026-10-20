@@ -1,0 +1,15 @@
+name: rss-change
+version: 1.0.0
+description: RSS/Atom 出现新条目时通知
+author: aegis
+permissions: [network.read]
+cooldown: 5m
+params: {}
+trigger:
+  type: change
+  monitor: rss.example
+action:
+  notify:
+    priority: normal
+    title: "订阅更新"
+    body: "{{monitor.title}} {{monitor.link}}"

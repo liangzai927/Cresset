@@ -60,6 +60,27 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M2：Web / RSS 监测
+**里程碑**：M2（R5 并行观察）
+**改了什么**：
+- 新增 `WebMonitor`：
+  - page 模式：标题 + 可见文本规范化后 sha256，内容真正变化才产生事实；
+  - rss 模式：解析 RSS `<item>` / Atom `<entry>` 的 guid/id/title/link，仅新条目产生事实；
+  - HTTP 失败/读取失败进入 errors；首次扫描只建基线；
+  - 超时 10s、响应体上限 2MB，避免大页面拖垮 daemon；
+- config.monitors 新增 `kind:"web"`（url/mode/interval/skills），绑定 `network.read` 权限；
+- MonitorStatus kind 增加 web，设置页标记「网页」；
+- 新增 page-change / rss-change 两个 Skill 示例；
+- 新增 3 个 WebMonitor 测试（本机 HTTP server，不访问外网）。
+**为什么**：FR-B3 是 M2 的核心监测源；先做可靠的变化检测与失败可见，再考虑完整 CSS/JSONPath/XML。
+**验证**：
+- `pnpm verify`：352 通过 / 9 跳过
+- 页面内容变化、RSS 新条目、HTTP 500 三种路径均通过测试
+- 本机临时 HTTP server，测试可离线重复
+**踩到的坑**：RSS/Atom 不能假设 item 一定有 `<guid>`；按 guid → id → link → title 回退，避免漏条目。
+**留给下次**：完整 XML 解析、CSS 选择器/JSONPath、Skill 管理/导入界面；
+仍禁止 M3 的 LLM/知识库。
+
 ### 2026-10-20 · M2：监测器状态可见
 **里程碑**：M2（R5 并行观察）
 **改了什么**：

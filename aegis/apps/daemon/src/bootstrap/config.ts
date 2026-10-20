@@ -74,6 +74,19 @@ export const DaemonConfigSchema = z
               skills: z.array(z.string()).default([]),
             })
             .strict(),
+          z
+            .object({
+              id: z.string().min(1).max(120),
+              kind: z.literal("web"),
+              url: z
+                .string()
+                .url()
+                .refine((u) => /^https?:\/\//.test(u), "只支持 http/https"),
+              mode: z.enum(["page", "rss"]).default("page"),
+              intervalS: z.number().int().min(5).max(3_600).default(60),
+              skills: z.array(z.string()).default([]),
+            })
+            .strict(),
         ]),
       )
       .default([]),

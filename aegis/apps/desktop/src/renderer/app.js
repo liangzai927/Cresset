@@ -611,7 +611,8 @@ function renderMonitorStatus(monitors) {
     const row = el("div", "monitor-row");
     const head = el("div", "monitor-head");
     head.appendChild(el("strong", "", monitor.id));
-    head.appendChild(el("span", "monitor-badge", monitor.kind === "files" ? "文件" : "系统"));
+    const kindLabel = monitor.kind === "files" ? "文件" : monitor.kind === "web" ? "网页" : "系统";
+    head.appendChild(el("span", "monitor-badge", kindLabel));
     row.appendChild(head);
 
     const meta = el("div", "monitor-meta");

@@ -7,3 +7,4 @@
 export * from "./file-monitor.js";
 export * from "./system-monitor.js";
 export * from "./types.js";
+export * from "./web-monitor.js";

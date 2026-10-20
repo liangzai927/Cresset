@@ -9,7 +9,7 @@
 
 import { resolve } from "node:path";
 import type { Clock } from "@aegis/clock";
-import { FileMonitor, SystemMonitor } from "@aegis/monitors";
+import { FileMonitor, SystemMonitor, WebMonitor } from "@aegis/monitors";
 import { loadSkillFile, type Skill } from "@aegis/skills";
 import type { DaemonConfig } from "./config.js";
 import type { MonitorBinding, MonitorLog } from "./monitor-runtime.js";
@@ -59,7 +59,9 @@ export function buildMonitorBindings(
             stableMs: cfg.stableMs,
             clock,
           })
-        : new SystemMonitor({ id: cfg.id, clock });
+        : cfg.kind === "web"
+          ? new WebMonitor({ id: cfg.id, url: cfg.url, mode: cfg.mode, clock })
+          : new SystemMonitor({ id: cfg.id, clock });
 
     const permitted = skills.filter((skill) => {
       if (skill.permissions.includes(monitor.permission)) return true;

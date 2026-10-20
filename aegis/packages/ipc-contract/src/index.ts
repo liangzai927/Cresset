@@ -151,7 +151,7 @@ export const MonitorErrorSchema = z.object({ path: z.string(), message: z.string
 export const MonitorStatusViewSchema = z
   .object({
     id: z.string(),
-    kind: z.enum(["files", "system"]),
+    kind: z.enum(["files", "system", "web"]),
     intervalMs: z.number().int().positive(),
     skills: z.array(z.string()),
     lastScanAt: z.number().int().nullable(),

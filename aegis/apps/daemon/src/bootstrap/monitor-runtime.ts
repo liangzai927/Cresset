@@ -21,7 +21,7 @@ import { type Db, rowOf } from "@aegis/storage";
 export interface MonitorBinding {
   monitor: Monitor;
   /** 配置里的监测器类型，供状态页展示 */
-  kind: "files" | "system";
+  kind: "files" | "system" | "web";
   skills: Skill[];
   /** 扫描间隔（毫秒） */
   intervalMs: number;
@@ -30,7 +30,7 @@ export interface MonitorBinding {
 /** 单个监测器的运行状态 */
 export interface MonitorStatus {
   id: string;
-  kind: "files" | "system";
+  kind: "files" | "system" | "web";
   intervalMs: number;
   skills: string[];
   lastScanAt: number | null;
