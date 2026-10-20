@@ -36,6 +36,7 @@ import { AuditRepo, type Db, migrate, OccurrenceDao, openDb, rowOf } from "@aegi
 import { createMethods } from "../ipc/methods.js";
 import type { HandshakeFile } from "../ipc/server.js";
 import { IpcServer } from "../ipc/server.js";
+import { BriefingService } from "./briefing-service.js";
 import { type DaemonConfig, loadConfig, type MonitorConfig, saveConfig } from "./config.js";
 import { installDefaultSkills } from "./default-skills.js";
 import { LlmService } from "./llm-service.js";
@@ -283,6 +284,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
   // 用 async 而不是同步：投递要 await 渠道（osascript 是子进程调用）。
   // 通过 `ticking` 标志防止上一轮未结束时重入（否则同一批实例会被两个循环同时处理）。
   let ticking = false;
+  let briefing: BriefingService | null = null;
   const tickTimer = setInterval(() => {
     if (ticking) {
       log("warn", "scheduler.tick_skipped", { reason: "上一轮尚未结束" });
@@ -296,6 +298,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
       .then((result) => {
         counters.lastTickResult = result;
         for (const err of result.errors) log("error", "scheduler.tick_error", { error: err });
+        briefing?.maybeGenerate();
       })
       .catch((err: unknown) => {
         // 顶层兜底：调度器内部已做阶段隔离，走到这里说明是不可预期的错误
@@ -324,6 +327,15 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
     onLog: log,
   });
   monitorRuntime.start();
+
+  briefing = new BriefingService({
+    configFile: paths.configFile,
+    db,
+    clock,
+    scheduler,
+    monitorStatus: () => monitorRuntime.status(),
+  });
+  if (briefing.maybeGenerate()) log("info", "briefing.generated", { reason: "startup" });
 
   /**
    * 保存 monitors 并热重载。

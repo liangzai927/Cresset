@@ -218,6 +218,15 @@ export const LlmTestResultSchema = z.union([
     .strict(),
 ]);
 
+/** 每日简报设置 */
+export const BriefingSettingsSchema = z
+  .object({
+    enabled: z.boolean(),
+    time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式 HH:mm"),
+  })
+  .strict();
+export type BriefingSettingsView = z.infer<typeof BriefingSettingsSchema>;
+
 /** 知识库文档视图 */
 export const KnowledgeDocumentSchema = z
   .object({

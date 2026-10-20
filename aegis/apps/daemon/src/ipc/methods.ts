@@ -40,7 +40,7 @@ import { SkillLoadError } from "@aegis/skills";
 import type { AttemptSummary } from "@aegis/storage";
 import { z } from "zod";
 import { createBackup } from "../bootstrap/backup.js";
-import { type MonitorConfig, MonitorConfigSchema } from "../bootstrap/config.js";
+import { loadConfig, type MonitorConfig, MonitorConfigSchema, saveConfig } from "../bootstrap/config.js";
 import { installDefaultSkills } from "../bootstrap/default-skills.js";
 import type { LlmService } from "../bootstrap/llm-service.js";
 import type { MonitorStatus } from "../bootstrap/monitor-runtime.js";
@@ -525,6 +525,28 @@ export function createMethods(
 
     "monitor.status": async () => {
       return { monitors: context.monitors?.status() ?? [] };
+    },
+
+    "briefing.get": async () => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      const cfg = loadConfig(configFile).config;
+      return { enabled: cfg.briefing.enabled, time: cfg.briefing.time };
+    },
+
+    "briefing.set": async (params) => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      const p = z
+        .object({
+          enabled: z.boolean(),
+          time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+        })
+        .strict()
+        .parse(params);
+      const current = loadConfig(configFile);
+      saveConfig(configFile, { ...current.config, briefing: p });
+      return p;
     },
 
     "knowledge.list": async () => {

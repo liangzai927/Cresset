@@ -477,6 +477,15 @@ main {
   line-height: 1.5;
 }
 
+.briefing-time {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+}
+
 .checkbox-row {
   display: flex;
   align-items: center;

@@ -43,6 +43,7 @@ import { type DataPaths, resolveDataPaths } from "@aegis/product";
 import { app, BrowserWindow, dialog, ipcMain, Menu, Notification, nativeImage, shell, Tray } from "electron";
 import type {
   BackupExportResult,
+  BriefingSettings,
   ChannelStatus,
   CreateTaskPayload,
   DiagnosticInfo,
@@ -836,6 +837,16 @@ async function ipcOpenNotificationSettings(): Promise<{ ok: boolean; detail: str
   return { ok: false, detail: "无法打开系统通知设置，请手动打开系统设置 → 通知" };
 }
 
+async function ipcGetBriefing(): Promise<BriefingSettings> {
+  const client = await ensureClient();
+  return (await client.call("briefing.get", {})) as BriefingSettings;
+}
+
+async function ipcSetBriefing(settings: BriefingSettings): Promise<BriefingSettings> {
+  const client = await ensureClient();
+  return (await client.call("briefing.set", settings)) as BriefingSettings;
+}
+
 async function ipcPickKnowledgeFile(): Promise<{ sourcePath: string; content: string } | null> {
   const options = {
     title: "选择要入库的文档",
@@ -1267,6 +1278,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:llm:get",
     wrap(() => ipcGetLlm()),
+  );
+  ipcMain.handle(
+    "aegis:briefing:get",
+    wrap(() => ipcGetBriefing()),
+  );
+  ipcMain.handle(
+    "aegis:briefing:set",
+    wrap((settings: BriefingSettings) => ipcSetBriefing(settings)),
   );
   ipcMain.handle(
     "aegis:knowledge:pick",

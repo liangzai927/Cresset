@@ -222,6 +222,12 @@ export type LlmTestResult =
   | { ok: true; text: string; destination: string }
   | { ok: false; blocked: boolean; reason: string; errorKind?: string };
 
+/** 每日简报设置 */
+export interface BriefingSettings {
+  enabled: boolean;
+  time: string;
+}
+
 /** 知识库文档 */
 export interface KnowledgeDocument {
   id: string;
@@ -371,6 +377,10 @@ export interface DesktopApi {
   resumeAll(): Promise<{ ok: boolean }>;
 
   checkUpdate(): Promise<UpdateInfo>;
+  /** 读取每日简报设置 */
+  getBriefing(): Promise<BriefingSettings>;
+  /** 保存每日简报设置 */
+  setBriefing(settings: BriefingSettings): Promise<BriefingSettings>;
   /** 打开文件选择器并读取待入库文档（取消返回 null） */
   pickKnowledgeFile(): Promise<{ sourcePath: string; content: string } | null>;
   /** 导入/更新文档到本地知识库 */

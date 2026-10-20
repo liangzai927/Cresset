@@ -153,6 +153,23 @@
         </div>
 
         <div class="settings-group">
+          <h2>每日简报</h2>
+          <label class="dnd-toggle">
+            <input type="checkbox" id="briefing-enabled" />
+            每天自动生成一份本地简报
+          </label>
+          <label class="dnd-toggle">
+            时间
+            <input class="briefing-time" type="time" id="briefing-time" />
+          </label>
+          <div class="settings-actions">
+            <button class="btn" id="btn-save-briefing">保存</button>
+            <span class="hint" id="briefing-hint"></span>
+          </div>
+          <p class="hint">内容来自今天的提醒与监测器状态；天气/日历尚未接入。</p>
+        </div>
+
+        <div class="settings-group">
           <h2>知识库</h2>
           <div class="settings-actions">
             <button class="btn" id="btn-import-knowledge">导入文档</button>

@@ -123,6 +123,16 @@ export const DaemonConfigSchema = z
         dailyCallLimit: z.number().int().min(1).max(10_000).default(200),
       })
       .default({}),
+    /** 每日简报：本地任务/监测器摘要，到点只生成一次 */
+    briefing: z
+      .object({
+        enabled: z.boolean().default(false),
+        time: z
+          .string()
+          .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式 HH:mm")
+          .default("08:00"),
+      })
+      .default({}),
     /** 通知优先级规则：DND 期间哪些级别可穿透（FR-A7） */
     dnd: z
       .object({

@@ -147,6 +147,7 @@ async function refreshStatus() {
     "btn-refresh-knowledge",
     "btn-search-knowledge",
     "btn-ask-knowledge",
+    "btn-save-briefing",
     "btn-monitor-preset",
     "btn-import-skill",
     "btn-install-defaults",
@@ -602,6 +603,42 @@ $("btn-refresh-health").addEventListener("click", async (e) => {
   btn.disabled = true;
   try {
     await refreshSystemHealth();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── 每日简报 ───────────────────────────────────────────────────────────
+
+/** 读取简报设置；失败只提示，不影响其他设置 */
+async function loadBriefing() {
+  try {
+    const view = await window.aegis.getBriefing();
+    $("briefing-enabled").checked = view.enabled;
+    $("briefing-time").value = view.time;
+    $("briefing-hint").textContent = view.enabled ? `每天 ${view.time} 生成` : "未启用";
+  } catch (err) {
+    $("briefing-hint").textContent = `读取失败：${err.message}`;
+  }
+}
+
+$("btn-save-briefing").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  const settings = {
+    enabled: $("briefing-enabled").checked,
+    time: $("briefing-time").value,
+  };
+  if (!/^\d{2}:\d{2}$/.test(settings.time)) {
+    $("briefing-hint").textContent = "时间格式必须为 HH:mm";
+    btn.disabled = false;
+    return;
+  }
+  try {
+    await window.aegis.setBriefing(settings);
+    $("briefing-hint").textContent = settings.enabled ? `已保存，每天 ${settings.time} 生成` : "已停用";
+  } catch (err) {
+    $("briefing-hint").textContent = `保存失败：${err.message}`;
   } finally {
     btn.disabled = false;
   }

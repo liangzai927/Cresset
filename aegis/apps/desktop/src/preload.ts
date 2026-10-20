@@ -26,6 +26,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type {
   BackupExportResult,
+  BriefingSettings,
   CreateTaskPayload,
   DesktopApi,
   DiagnosticInfo,
@@ -85,6 +86,9 @@ function buildApi(): DesktopApi {
 
     exportBackup: () => ipcRenderer.invoke("aegis:backup:export") as Promise<BackupExportResult>,
 
+    getBriefing: () => ipcRenderer.invoke("aegis:briefing:get") as Promise<BriefingSettings>,
+    setBriefing: (settings: BriefingSettings) =>
+      ipcRenderer.invoke("aegis:briefing:set", settings) as Promise<BriefingSettings>,
     pickKnowledgeFile: () =>
       ipcRenderer.invoke("aegis:knowledge:pick") as Promise<{
         sourcePath: string;
