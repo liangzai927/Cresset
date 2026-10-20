@@ -60,6 +60,24 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · repo：移除嵌套 .git 并加单仓库门禁
+**里程碑**：R4（仓库/流程）
+**改了什么**：
+- 备份旧嵌套仓库：`/Users/liuwenliang/lwl/Cresset-aegis-nested-git-20261020.tar.gz`（799K）；
+- 移除 `/Users/liuwenliang/lwl/Cresset/aegis/.git`（旧仓库无 remote，最后一次提交 4537053）；
+- 新增 `tools/check-single-repo.mjs`：扫描根仓库，发现嵌套 `.git` 即失败；
+- `pnpm verify` 前置 `repo:check`；根 `pre-commit` 也先跑它；
+- `install-hooks.mjs` 改为通过 `git rev-parse --show-toplevel` 安装到根 `.git`，
+  不再假设 `aegis/.git` 存在。
+**为什么**：VS Code 把旧 `aegis/.git` 识别成第二个仓库，长期显示 42 个"未提交"；
+旧 daemon 还会从旧 checkout 占住同一 UDS。根仓库是唯一真相源，必须机械阻止嵌套仓库。
+**验证**：
+- `pnpm repo:check`：通过；
+- `pnpm hooks:install`：已安装到 `/Users/liuwenliang/lwl/Cresset/.git/hooks/`；
+- 根仓库 status clean，远端 `31958d3`。
+**踩到的坑**：嵌套仓库没有 remote，提交它只会生成孤岛历史；先备份、再删元数据，代码不动。
+**留给下次**：R4 正式签名/公证（需 Apple 账号）→ R5 14 天验收 → M2。
+
 ### 2026-10-19 · docs：校准工作区路径与技能教训
 **里程碑**：R4（文档/流程）
 **改了什么**：

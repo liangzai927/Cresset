@@ -9,11 +9,17 @@
  * 改了 tools/commit-msg-hook.mjs 却不生效是最常见的困惑来源。
  * 链接则始终指向仓库内的唯一真相源。
  */
+import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
-const GIT_DIR = join(ROOT, ".git");
+/** git 根目录（aegis 的父目录）；不要写死 aegis/.git，否则会重新造出嵌套仓库 */
+const REPO_ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+  cwd: ROOT,
+  encoding: "utf8",
+}).trim();
+const GIT_DIR = join(REPO_ROOT, ".git");
 const HOOKS_DIR = join(GIT_DIR, "hooks");
 /**
  * 要安装的 hook 清单。
@@ -22,6 +28,7 @@ const HOOKS_DIR = join(GIT_DIR, "hooks");
  * - `pre-commit`：强制"改代码必须更新开发流水账"（docs/DEVLOG.md）
  *
  * 两个都是"机械记忆"：靠人记得的规范，最终都会忘。
+ * pre-commit 还会先跑单仓库门禁，阻止嵌套 .git。
  */
 const HOOKS = [
   { name: "commit-msg", src: join(ROOT, "tools", "commit-msg-hook.mjs") },

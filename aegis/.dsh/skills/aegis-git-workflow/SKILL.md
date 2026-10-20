@@ -33,6 +33,10 @@ pnpm hooks:install      # 安装 commit-msg hook（克隆后必须执行一次�
 - 需要提交时先 `cd /Users/liuwenliang/lwl/Cresset`；
 - 看到 `git -C aegis status` 有大量修改时，不要慌：那只是旧仓库与新根仓库的差异。
 
+`pnpm hooks:install` 现在会把 hook 安装到**根仓库** `.git/hooks/`；
+根 pre-commit 会先跑 `aegis/tools/check-single-repo.mjs`，发现嵌套 `.git` 直接拒绝提交。
+`pnpm verify` 也会跑 `repo:check`，所以 `--no-verify` 之外没有静默通道。
+
 ## 2. 分支模型（单人项目，保持简单）
 
 | 分支 | 用途 |

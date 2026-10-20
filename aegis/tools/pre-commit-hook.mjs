@@ -24,9 +24,15 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { resolve } from "node:path";
+import { relative, resolve, sep } from "node:path";
 
 const ROOT = resolve(import.meta.dirname, "..");
+/** 根仓库；aegis 是它的子目录，staged 路径带有 `aegis/` 前缀 */
+const REPO_ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+  cwd: ROOT,
+  encoding: "utf8",
+}).trim();
+const AEGIS_PREFIX = relative(REPO_ROOT, ROOT).split(sep).join("/");
 
 /** 视为"代码"的路径前缀：改了这些就必须记录 */
 const CODE_PREFIXES = ["packages/", "apps/", "tools/"];
@@ -45,16 +51,18 @@ const CODE_FILES = [
 /** 流水账文件路径 */
 const DEVLOG_PATH = "docs/DEVLOG.md";
 
-/** 取本次暂存的变更文件列表（忽略删除：删代码也应当记录，但这里只做必要性判断） */
+/** 取本次暂存的变更文件列表（只保留 aegis/ 下的路径，并去掉前缀） */
 function stagedFiles() {
   const out = execFileSync("git", ["diff", "--cached", "--name-only", "--diff-filter=ACMR"], {
-    cwd: ROOT,
+    cwd: REPO_ROOT,
     encoding: "utf8",
   });
   return out
     .split("\n")
     .map((l) => l.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((f) => AEGIS_PREFIX === "" || f === AEGIS_PREFIX || f.startsWith(`${AEGIS_PREFIX}/`))
+    .map((f) => (AEGIS_PREFIX === "" ? f : f.slice(AEGIS_PREFIX.length + 1)));
 }
 
 function isCodeFile(file) {
@@ -63,6 +71,19 @@ function isCodeFile(file) {
 }
 
 // ── 主逻辑
+
+// 先把"嵌套 .git"挡住：它会让 VS Code 出现第二个 Source Control，
+// 也会让旧 daemon 继续占着同一个数据目录。这个检查不随 DEVLOG 跳过。
+try {
+  execFileSync(process.execPath, [resolve(ROOT, "tools", "check-single-repo.mjs")], {
+    cwd: ROOT,
+    stdio: "inherit",
+  });
+} catch {
+  console.error("");
+  console.error("✗ 提交被拒绝：工作区里存在嵌套 .git（请先移除旧仓库元数据）。");
+  process.exit(1);
+}
 
 if (process.env.AEGIS_SKIP_DEVLOG === "1") {
   console.log("⚠ 已跳过开发流水账检查（AEGIS_SKIP_DEVLOG=1）");
