@@ -43,6 +43,7 @@ import { createMethods } from "../ipc/methods.js";
 import type { HandshakeFile } from "../ipc/server.js";
 import { IpcServer } from "../ipc/server.js";
 import { BriefingService } from "./briefing-service.js";
+import { CalendarReminder } from "./calendar-reminder.js";
 import { type DaemonConfig, loadConfig, type MonitorConfig, saveConfig } from "./config.js";
 import { installDefaultSkills } from "./default-skills.js";
 import { EmailMonitor } from "./email-monitor.js";
@@ -294,6 +295,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
   let ticking = false;
   let briefing: BriefingService | null = null;
   let emailMonitor: EmailMonitor | null = null;
+  let calendarReminder: CalendarReminder | null = null;
   const tickTimer = setInterval(() => {
     if (ticking) {
       log("warn", "scheduler.tick_skipped", { reason: "上一轮尚未结束" });
@@ -308,6 +310,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
         counters.lastTickResult = result;
         for (const err of result.errors) log("error", "scheduler.tick_error", { error: err });
         briefing?.maybeGenerate();
+        calendarReminder?.maybeGenerate();
       })
       .catch((err: unknown) => {
         // 顶层兜底：调度器内部已做阶段隔离，走到这里说明是不可预期的错误
@@ -345,6 +348,13 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
     monitorStatus: () => monitorRuntime.status(),
   });
   if (briefing.maybeGenerate()) log("info", "briefing.generated", { reason: "startup" });
+
+  calendarReminder = new CalendarReminder({
+    configFile: paths.configFile,
+    clock,
+    scheduler,
+  });
+  calendarReminder.maybeGenerate();
 
   emailMonitor = new EmailMonitor({
     configFile: paths.configFile,

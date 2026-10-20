@@ -225,6 +225,8 @@ export type LlmTestResult =
 /** 本地日历设置 */
 export interface CalendarSettings {
   icsPath?: string;
+  remindersEnabled: boolean;
+  reminderMinutes: number;
 }
 
 /** 重要邮件监测设置 */

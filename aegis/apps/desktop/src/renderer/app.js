@@ -153,6 +153,7 @@ async function refreshStatus() {
     "btn-test-email-monitor",
     "btn-pick-calendar",
     "btn-clear-calendar",
+    "btn-save-calendar-reminders",
     "btn-save-webhook",
     "btn-test-webhook",
     "btn-set-telegram-token",
@@ -715,6 +716,8 @@ async function loadCalendar() {
   try {
     const view = await window.aegis.getCalendar();
     $("calendar-path").value = view.icsPath ?? "";
+    $("calendar-reminders-enabled").checked = view.remindersEnabled;
+    $("calendar-reminder-minutes").value = String(view.reminderMinutes);
     $("calendar-hint").textContent = view.icsPath ? "已配置；早报会读取此文件" : "未选择";
   } catch (err) {
     $("calendar-hint").textContent = `读取失败：${err.message}`;
@@ -727,9 +730,30 @@ $("btn-pick-calendar").addEventListener("click", async (e) => {
   try {
     const path = await window.aegis.pickCalendarFile();
     if (!path) return;
-    await window.aegis.setCalendar({ icsPath: path });
+    await window.aegis.setCalendar({
+      icsPath: path,
+      remindersEnabled: $("calendar-reminders-enabled").checked,
+      reminderMinutes: Number($("calendar-reminder-minutes").value),
+    });
     $("calendar-path").value = path;
     $("calendar-hint").textContent = "已保存；早报会读取此文件";
+  } catch (err) {
+    $("calendar-hint").textContent = `保存失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-save-calendar-reminders").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await window.aegis.setCalendar({
+      ...($("calendar-path").value ? { icsPath: $("calendar-path").value } : {}),
+      remindersEnabled: $("calendar-reminders-enabled").checked,
+      reminderMinutes: Number($("calendar-reminder-minutes").value),
+    });
+    $("calendar-hint").textContent = "提醒设置已保存";
   } catch (err) {
     $("calendar-hint").textContent = `保存失败：${err.message}`;
   } finally {
@@ -741,7 +765,10 @@ $("btn-clear-calendar").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
   try {
-    await window.aegis.setCalendar({});
+    await window.aegis.setCalendar({
+      remindersEnabled: $("calendar-reminders-enabled").checked,
+      reminderMinutes: Number($("calendar-reminder-minutes").value),
+    });
     $("calendar-path").value = "";
     $("calendar-hint").textContent = "已清除";
   } catch (err) {

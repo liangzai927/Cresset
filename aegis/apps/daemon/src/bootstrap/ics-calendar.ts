@@ -11,6 +11,7 @@ import { formatWallClock, resolveTimeZone, utcToWall } from "@aegis/recurrence";
 
 /** 一个日历事件；startWall 形如 `2026-10-20T09:00` */
 export interface CalendarEvent {
+  uid: string;
   summary: string;
   startWall: string;
   endWall: string | null;
@@ -71,6 +72,7 @@ export function parseIcs(text: string): CalendarEvent[] {
     if (line === "END:VEVENT") {
       if (current?.summary && current.startWall) {
         events.push({
+          uid: current.uid ?? `${current.summary}:${current.startWall}`,
           summary: current.summary,
           startWall: current.startWall,
           endWall: current.endWall ?? null,
@@ -86,6 +88,7 @@ export function parseIcs(text: string): CalendarEvent[] {
     const head = line.slice(0, colon);
     const value = line.slice(colon + 1);
     const name = head.split(";")[0];
+    if (name === "UID") current.uid = value.trim();
     if (name === "SUMMARY") current.summary = unescapeIcs(value).trim();
     if (name === "DTSTART") {
       const parsed = parseIcsDate(value, head);

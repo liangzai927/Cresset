@@ -178,6 +178,18 @@
             <button class="btn btn-ghost btn-small" id="btn-clear-calendar">清除</button>
             <span class="hint" id="calendar-hint"></span>
           </div>
+          <div class="settings-actions">
+            <label class="dnd-toggle">
+              <input type="checkbox" id="calendar-reminders-enabled" />
+              会前提醒
+            </label>
+            <label class="dnd-toggle">
+              提前
+              <input id="calendar-reminder-minutes" type="number" min="1" max="120" class="briefing-time" />
+              分钟
+            </label>
+            <button class="btn btn-ghost btn-small" id="btn-save-calendar-reminders">保存提醒设置</button>
+          </div>
         </div>
 
         <div class="settings-group">

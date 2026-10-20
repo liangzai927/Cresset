@@ -262,6 +262,8 @@ export type EmailMonitorSettingsView = z.infer<typeof EmailMonitorSettingsSchema
 export const CalendarSettingsSchema = z
   .object({
     icsPath: z.string().max(2_000).optional(),
+    remindersEnabled: z.boolean().default(true),
+    reminderMinutes: z.number().int().min(1).max(120).default(10),
   })
   .strict();
 export type CalendarSettingsView = z.infer<typeof CalendarSettingsSchema>;

@@ -183,6 +183,8 @@ export const DaemonConfigSchema = z
     calendar: z
       .object({
         icsPath: z.string().max(2_000).optional(),
+        remindersEnabled: z.boolean().default(true),
+        reminderMinutes: z.number().int().min(1).max(120).default(10),
       })
       .default({}),
     /** 每日简报：本地任务/监测器摘要，到点只生成一次 */

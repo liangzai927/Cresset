@@ -666,20 +666,32 @@ export function createMethods(
       const configFile = context.backup?.paths.configFile;
       if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
       const cal = loadConfig(configFile).config.calendar;
-      return { ...(cal.icsPath ? { icsPath: cal.icsPath } : {}) };
+      return {
+        ...(cal.icsPath ? { icsPath: cal.icsPath } : {}),
+        remindersEnabled: cal.remindersEnabled,
+        reminderMinutes: cal.reminderMinutes,
+      };
     },
 
     "calendar.set": async (params) => {
       const configFile = context.backup?.paths.configFile;
       if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
       const p = z
-        .object({ icsPath: z.string().max(2_000).optional() })
+        .object({
+          icsPath: z.string().max(2_000).optional(),
+          remindersEnabled: z.boolean().default(true),
+          reminderMinutes: z.number().int().min(1).max(120).default(10),
+        })
         .strict()
         .parse(params);
       const current = loadConfig(configFile);
       saveConfig(configFile, {
         ...current.config,
-        calendar: { ...(p.icsPath ? { icsPath: p.icsPath } : {}) },
+        calendar: {
+          ...(p.icsPath ? { icsPath: p.icsPath } : {}),
+          remindersEnabled: p.remindersEnabled,
+          reminderMinutes: p.reminderMinutes,
+        },
       });
       return p;
     },
