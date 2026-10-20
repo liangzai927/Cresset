@@ -854,6 +854,11 @@ async function ipcAddMonitor(config: MonitorConfigView): Promise<{ monitors: Mon
   return (await client.call("monitor.add", config)) as { monitors: MonitorConfigView[] };
 }
 
+async function ipcToggleMonitor(id: string, enabled: boolean): Promise<{ monitors: MonitorConfigView[] }> {
+  const client = await ensureClient();
+  return (await client.call("monitor.toggle", { id, enabled })) as { monitors: MonitorConfigView[] };
+}
+
 async function ipcRemoveMonitor(id: string): Promise<{ monitors: MonitorConfigView[] }> {
   const client = await ensureClient();
   return (await client.call("monitor.remove", { id })) as { monitors: MonitorConfigView[] };
@@ -1136,6 +1141,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:monitor:add",
     wrap((config: MonitorConfigView) => ipcAddMonitor(config)),
+  );
+  ipcMain.handle(
+    "aegis:monitor:toggle",
+    wrap((p: { id: string; enabled: boolean }) => ipcToggleMonitor(p.id, p.enabled)),
   );
   ipcMain.handle(
     "aegis:monitor:remove",

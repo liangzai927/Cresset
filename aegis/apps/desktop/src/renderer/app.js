@@ -598,60 +598,110 @@ $("btn-refresh-health").addEventListener("click", async (e) => {
 
 // ── 监测器状态 ──────────────────────────────────────────────────────────
 
-/** 渲染监测器列表；空列表时给出配置入口，而不是假装一切正常 */
-function renderMonitorStatus(monitors) {
+/** 监测器类型的中文标签 */
+function monitorKindLabel(kind) {
+  return kind === "files" ? "文件" : kind === "web" ? "网页" : "系统";
+}
+
+/** 删除监测器动作；所有行共用，避免重复逻辑 */
+function appendRemoveMonitorAction(actions, id) {
+  const remove = el("button", "btn btn-ghost btn-small", "删除");
+  remove.addEventListener("click", async () => {
+    if (!window.confirm(`删除监测器 ${id}？`)) return;
+    remove.disabled = true;
+    try {
+      await window.aegis.removeMonitor(id);
+      $("monitor-hint").textContent = `已删除 ${id}`;
+      await loadMonitorStatus();
+    } catch (err) {
+      $("monitor-hint").textContent = `删除失败：${err.message}`;
+    } finally {
+      remove.disabled = false;
+    }
+  });
+  actions.appendChild(remove);
+}
+
+/** 启用/停用动作；启用失败会保留原状态并显示原因 */
+function appendToggleMonitorAction(actions, id, enabled) {
+  const toggle = el("button", "btn btn-ghost btn-small", enabled ? "停用" : "启用");
+  toggle.addEventListener("click", async () => {
+    toggle.disabled = true;
+    $("monitor-hint").textContent = `${enabled ? "停用" : "启用"}中…`;
+    try {
+      await window.aegis.toggleMonitor(id, !enabled);
+      $("monitor-hint").textContent = enabled ? `已停用 ${id}` : `已启用 ${id}`;
+      await loadMonitorStatus();
+    } catch (err) {
+      $("monitor-hint").textContent = `${enabled ? "停用" : "启用"}失败：${err.message}`;
+    } finally {
+      toggle.disabled = false;
+    }
+  });
+  actions.appendChild(toggle);
+}
+
+/** 立即扫描动作（只有运行中的监测器才有意义） */
+function appendScanMonitorAction(actions, id) {
+  const scan = el("button", "btn btn-ghost btn-small", "立即扫描");
+  scan.addEventListener("click", async () => {
+    scan.disabled = true;
+    $("monitor-hint").textContent = `正在扫描 ${id}…`;
+    try {
+      const result = await window.aegis.scanMonitor(id);
+      $("monitor-hint").textContent = result.found
+        ? `扫描完成：通知 ${result.notified} 条，错误 ${result.errors} 个`
+        : `当前运行配置中没有 ${id}`;
+      await loadMonitorStatus();
+    } catch (err) {
+      $("monitor-hint").textContent = `扫描失败：${err.message}`;
+    } finally {
+      scan.disabled = false;
+    }
+  });
+  actions.appendChild(scan);
+}
+
+/**
+ * 渲染监测器列表。
+ *
+ * 状态来自运行时，配置来自 config.json —— 两者必须合并展示：
+ * 只有状态列表会漏掉"已停用"和"配置了但未运行"的项，用户就找不到它们。
+ */
+function renderMonitorStatus(monitors, configs) {
   const box = $("monitor-list");
   box.textContent = "";
+  const statusById = new Map(monitors.map((m) => [m.id, m]));
+  const configById = new Map(configs.map((m) => [m.id, m]));
+  const ids = [...new Set([...configs.map((m) => m.id), ...monitors.map((m) => m.id)])];
 
-  if (monitors.length === 0) {
+  if (ids.length === 0) {
     box.appendChild(
-      el("p", "hint", "还没有配置监测器。编辑 config.json 的 monitors，参考 docs/M2-MONITORS.md。"),
+      el("p", "hint", "还没有配置监测器。点击「添加监测器」，或参考 docs/M2-MONITORS.md。"),
     );
     return;
   }
 
-  for (const monitor of monitors) {
+  for (const id of ids) {
+    const status = statusById.get(id);
+    const config = configById.get(id);
+    const enabled = config ? config.enabled !== false : true;
+    const active = Boolean(status);
+    const kind = status?.kind ?? config?.kind ?? "system";
+    const intervalMs = status?.intervalMs ?? (config ? config.intervalS * 1_000 : 0);
+    const skills = status?.skills ?? config?.skills ?? [];
+
     const row = el("div", "monitor-row");
     const head = el("div", "monitor-head");
-    head.appendChild(el("strong", "", monitor.id));
-    const kindLabel = monitor.kind === "files" ? "文件" : monitor.kind === "web" ? "网页" : "系统";
-    head.appendChild(el("span", "monitor-badge", kindLabel));
+    head.appendChild(el("strong", "", id));
+    head.appendChild(el("span", "monitor-badge", monitorKindLabel(kind)));
+    if (!enabled) head.appendChild(el("span", "monitor-badge", "已停用"));
+    else if (!active) head.appendChild(el("span", "monitor-badge", "未运行"));
 
     const actions = el("div", "monitor-actions");
-
-    const scan = el("button", "btn btn-ghost btn-small", "立即扫描");
-    scan.addEventListener("click", async () => {
-      scan.disabled = true;
-      $("monitor-hint").textContent = `正在扫描 ${monitor.id}…`;
-      try {
-        const result = await window.aegis.scanMonitor(monitor.id);
-        $("monitor-hint").textContent = result.found
-          ? `扫描完成：通知 ${result.notified} 条，错误 ${result.errors} 个`
-          : `当前运行配置中没有 ${monitor.id}`;
-        await loadMonitorStatus();
-      } catch (err) {
-        $("monitor-hint").textContent = `扫描失败：${err.message}`;
-      } finally {
-        scan.disabled = false;
-      }
-    });
-    actions.appendChild(scan);
-
-    const remove = el("button", "btn btn-ghost btn-small", "删除");
-    remove.addEventListener("click", async () => {
-      if (!window.confirm(`删除监测器 ${monitor.id}？`)) return;
-      remove.disabled = true;
-      try {
-        await window.aegis.removeMonitor(monitor.id);
-        $("monitor-hint").textContent = `已删除 ${monitor.id}`;
-        await loadMonitorStatus();
-      } catch (err) {
-        $("monitor-hint").textContent = `删除失败：${err.message}`;
-      } finally {
-        remove.disabled = false;
-      }
-    });
-    actions.appendChild(remove);
+    if (active) appendScanMonitorAction(actions, id);
+    if (config) appendToggleMonitorAction(actions, id, enabled);
+    appendRemoveMonitorAction(actions, id);
     head.appendChild(actions);
     row.appendChild(head);
 
@@ -660,31 +710,44 @@ function renderMonitorStatus(monitors) {
       el(
         "div",
         "",
-        `每 ${Math.round(monitor.intervalMs / 1_000)} 秒 · Skills：${monitor.skills.join("、") || "无"}`,
+        `每 ${Math.round(intervalMs / 1_000)} 秒 · Skills：${
+          skills.map((s) => String(s).replace(/^skills\//, "")).join("、") || "无"
+        }`,
       ),
     );
-    const last = monitor.lastScanAt ? new Date(monitor.lastScanAt).toLocaleTimeString("zh-CN") : "尚未扫描";
-    meta.appendChild(
-      el(
-        "div",
-        "",
-        `上次：${last} · facts ${monitor.lastFacts} · 通知 ${monitor.lastNotified} · 错误 ${monitor.lastErrors}`,
-      ),
-    );
+    if (!enabled) {
+      meta.appendChild(el("div", "", "已停用，不会扫描"));
+    } else if (!status) {
+      meta.appendChild(el("div", "", "配置已保存，但运行时没有绑定成功；检查 Skill 路径/trigger/权限"));
+    } else {
+      const last = status.lastScanAt
+        ? new Date(status.lastScanAt).toLocaleTimeString("zh-CN")
+        : "尚未扫描";
+      meta.appendChild(
+        el(
+          "div",
+          "",
+          `上次：${last} · facts ${status.lastFacts} · 通知 ${status.lastNotified} · 错误 ${status.lastErrors}`,
+        ),
+      );
+    }
     row.appendChild(meta);
 
-    if (monitor.error) row.appendChild(el("div", "monitor-error", monitor.error));
+    if (status?.error) row.appendChild(el("div", "monitor-error", status.error));
     box.appendChild(row);
   }
 }
 
-/** 读取监测器状态；失败时只更新 hint，不打断设置页其他内容 */
+/** 读取监测器状态与配置并合并渲染；失败时只更新 hint，不打断设置页 */
 async function loadMonitorStatus() {
   try {
-    const result = await window.aegis.getMonitorStatus();
-    renderMonitorStatus(result.monitors);
+    const [status, config] = await Promise.all([
+      window.aegis.getMonitorStatus(),
+      window.aegis.getMonitorConfig(),
+    ]);
+    renderMonitorStatus(status.monitors, config.monitors);
     $("monitor-hint").textContent =
-      result.monitors.length > 0 ? "状态来自 daemon 最近一次扫描" : "";
+      config.monitors.length > 0 ? "状态来自 daemon 最近一次扫描" : "";
   } catch (err) {
     $("monitor-hint").textContent = `读取失败：${err.message}`;
   }

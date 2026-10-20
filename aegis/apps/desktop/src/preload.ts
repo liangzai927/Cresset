@@ -94,6 +94,10 @@ function buildApi(): DesktopApi {
       ipcRenderer.invoke("aegis:monitor:config") as Promise<{ monitors: MonitorConfigView[] }>,
     addMonitor: (config: MonitorConfigView) =>
       ipcRenderer.invoke("aegis:monitor:add", config) as Promise<{ monitors: MonitorConfigView[] }>,
+    toggleMonitor: (id: string, enabled: boolean) =>
+      ipcRenderer.invoke("aegis:monitor:toggle", { id, enabled }) as Promise<{
+        monitors: MonitorConfigView[];
+      }>,
     removeMonitor: (id: string) =>
       ipcRenderer.invoke("aegis:monitor:remove", { id }) as Promise<{ monitors: MonitorConfigView[] }>,
     getSkills: () => ipcRenderer.invoke("aegis:skill:list") as Promise<{ skills: SkillListEntry[] }>,

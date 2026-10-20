@@ -217,6 +217,7 @@ export type MonitorConfigView =
   | {
       id: string;
       kind: "files";
+      enabled?: boolean;
       root: string;
       patterns: string[];
       ignore: string[];
@@ -224,8 +225,16 @@ export type MonitorConfigView =
       stableMs: number;
       skills: string[];
     }
-  | { id: string; kind: "system"; intervalS: number; skills: string[] }
-  | { id: string; kind: "web"; url: string; mode: "page" | "rss"; intervalS: number; skills: string[] };
+  | { id: string; kind: "system"; enabled?: boolean; intervalS: number; skills: string[] }
+  | {
+      id: string;
+      kind: "web";
+      enabled?: boolean;
+      url: string;
+      mode: "page" | "rss";
+      intervalS: number;
+      skills: string[];
+    };
 
 /** 监测器状态（设置页展示） */
 export interface MonitorStatusItem {
@@ -282,6 +291,8 @@ export interface DesktopApi {
   getMonitorConfig(): Promise<{ monitors: MonitorConfigView[] }>;
   /** 新增监测器并热重载运行时 */
   addMonitor(config: MonitorConfigView): Promise<{ monitors: MonitorConfigView[] }>;
+  /** 启用/停用监测器并热重载运行时 */
+  toggleMonitor(id: string, enabled: boolean): Promise<{ monitors: MonitorConfigView[] }>;
   /** 删除监测器并热重载运行时 */
   removeMonitor(id: string): Promise<{ monitors: MonitorConfigView[] }>;
   /** 立即扫描一个监测器；found=false 表示 id 不在当前运行配置中 */

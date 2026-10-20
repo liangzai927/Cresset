@@ -16,6 +16,7 @@ export const MonitorConfigSchema = z.discriminatedUnion("kind", [
     .object({
       id: z.string().min(1).max(120),
       kind: z.literal("files"),
+      enabled: z.boolean().default(true),
       root: z.string().min(1),
       patterns: z.array(z.string()).default([]),
       ignore: z.array(z.string()).default([]),
@@ -28,6 +29,7 @@ export const MonitorConfigSchema = z.discriminatedUnion("kind", [
     .object({
       id: z.string().min(1).max(120),
       kind: z.literal("system"),
+      enabled: z.boolean().default(true),
       intervalS: z.number().int().min(5).max(3_600).default(60),
       skills: z.array(z.string()).default([]),
     })
@@ -36,6 +38,7 @@ export const MonitorConfigSchema = z.discriminatedUnion("kind", [
     .object({
       id: z.string().min(1).max(120),
       kind: z.literal("web"),
+      enabled: z.boolean().default(true),
       url: z
         .string()
         .url()

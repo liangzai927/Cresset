@@ -252,6 +252,7 @@ export interface MonitorMethodsContext {
   scan: (id: string) => Promise<{ notified: number; errors: number } | null>;
   config: () => MonitorConfig[];
   add: (input: MonitorConfig) => MonitorConfig[];
+  toggle: (id: string, enabled: boolean) => MonitorConfig[];
   remove: (id: string) => MonitorConfig[];
 }
 
@@ -520,6 +521,18 @@ export function createMethods(
         throw new MethodError(E_INVALID_PARAMS, `监测器 id 已存在：${input.id}`);
       }
       return { monitors: context.monitors.add(input) };
+    },
+
+    "monitor.toggle": async (params) => {
+      const p = z
+        .object({ id: z.string().min(1).max(120), enabled: z.boolean() })
+        .strict()
+        .parse(params);
+      if (!context.monitors) throw new MethodError(E_INTERNAL, "监测器运行时未初始化");
+      if (!context.monitors.config().some((m) => m.id === p.id)) {
+        throw new MethodError(E_INVALID_PARAMS, `监测器不存在：${p.id}`);
+      }
+      return { monitors: context.monitors.toggle(p.id, p.enabled) };
     },
 
     "monitor.remove": async (params) => {

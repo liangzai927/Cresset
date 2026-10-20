@@ -361,7 +361,17 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
           status: () => monitorRuntime.status(),
           scan: (id) => monitorRuntime.scanById(id),
           config: () => loadConfig(paths.configFile).config.monitors,
-          add: (input) => saveMonitors([...loadConfig(paths.configFile).config.monitors, input], input.id),
+          add: (input) =>
+            saveMonitors(
+              [...loadConfig(paths.configFile).config.monitors, input],
+              input.enabled ? input.id : undefined,
+            ),
+          toggle: (id, enabled) => {
+            const next = loadConfig(paths.configFile).config.monitors.map((m) =>
+              m.id === id ? { ...m, enabled } : m,
+            );
+            return saveMonitors(next, enabled ? id : undefined);
+          },
           remove: (id) =>
             saveMonitors(loadConfig(paths.configFile).config.monitors.filter((m) => m.id !== id)),
         },

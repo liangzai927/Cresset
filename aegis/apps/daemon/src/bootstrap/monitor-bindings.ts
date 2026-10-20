@@ -27,6 +27,10 @@ export function buildMonitorBindings(
   const bindings: MonitorBinding[] = [];
 
   for (const cfg of configs) {
+    if (!cfg.enabled) {
+      log("info", "monitor.disabled", { monitor: cfg.id });
+      continue;
+    }
     const skills: Skill[] = [];
     for (const path of cfg.skills) {
       try {

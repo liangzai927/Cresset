@@ -677,6 +677,18 @@ action:
     const status = (await client.call("monitor.status", {})) as { monitors: Array<{ id: string }> };
     expect(status.monitors.map((m) => m.id)).toEqual(["system.test"]);
 
+    await client.call("monitor.toggle", { id: "system.test", enabled: false });
+    const disabledStatus = (await client.call("monitor.status", {})) as { monitors: unknown[] };
+    expect(disabledStatus.monitors).toEqual([]);
+    const disabledConfig = (await client.call("monitor.config", {})) as {
+      monitors: Array<{ id: string; enabled: boolean }>;
+    };
+    expect(disabledConfig.monitors[0]).toMatchObject({ id: "system.test", enabled: false });
+
+    await client.call("monitor.toggle", { id: "system.test", enabled: true });
+    const enabledStatus = (await client.call("monitor.status", {})) as { monitors: Array<{ id: string }> };
+    expect(enabledStatus.monitors.map((m) => m.id)).toEqual(["system.test"]);
+
     const removed = (await client.call("monitor.remove", { id: "system.test" })) as {
       monitors: unknown[];
     };

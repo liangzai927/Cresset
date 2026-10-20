@@ -70,7 +70,7 @@ daemon 会拒绝保存并提示原因。
 - Skill 的 `trigger.monitor` 必须等于监测器 `id`；
 - Skill 必须声明对应权限：`system.read` / `files.read`；
 - `root` 里的 `~` 目前不会自动展开，建议写绝对路径；
-- 修改配置后重启 Aegis/daemon 生效。
+- 修改配置后重启 Aegis/daemon 生效（应用内添加/启停会热重载，无需重启）。
 
 ## 3. 会发生什么
 
@@ -93,7 +93,7 @@ aegis skill check ~/Library/Application\ Support/Aegis/skills/disk-space-guard.y
 
 - 应用「历史」页会多出 `monitor` 通知；
 - daemon 日志里的 `monitor.bound` / `monitor.notified` / `monitor.scan_error`；
-- 设置 → 监测器 →「立即扫描」可手动触发一次，不等待下一个 interval；
+- 设置 → 监测器 →「停用/启用」可暂停扫描；「立即扫描」可手动触发一次，不等待下一个 interval；
 - 连续 3 次扫描失败会生成一条 `failure` 通知（30 分钟窗口内去重），
   并在「历史」页可见；成功一次会清零连续失败计数。
 
