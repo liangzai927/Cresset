@@ -959,6 +959,10 @@ $("btn-test-llm").addEventListener("click", async (e) => {
   $("llm-hint").textContent = "正在保存设置并测试连接…";
   try {
     const settings = readLlmForm();
+    // 「连接并获取模型」本身表达启用意图：未勾选时自动启用，避免用户被一个
+    // 与当前动作无关的复选框挡住。
+    settings.enabled = true;
+    $("llm-enabled").checked = true;
     await window.aegis.setLlm(settings);
     const key = $("llm-api-key").value.trim();
     if (key) {
