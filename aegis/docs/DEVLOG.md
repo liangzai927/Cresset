@@ -22,7 +22,7 @@
 | --- | --- |
 | 阶段 | **R4 进行中**（自启/崩溃自恢复/ad-hoc 打包/备份导出已完成），剩余正式签名与公证 |
 | 版本 | daemon `0.2.0-r2` ／ 桌面 `0.3.0-r3` |
-| 校验 | `pnpm verify` 全绿（327 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
+| 校验 | `pnpm verify` 全绿（328 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
 | 启动 | `pnpm dev`（智能增量构建后启动；打包产物为 `dist/Aegis.app`） |
 | 数据目录 | `~/Library/Application Support/Aegis`（含 `desktop.log`） |
 | 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复/启动看门狗/打包（ad-hoc）/备份导出 |
@@ -59,6 +59,26 @@
 ---
 
 ## 记录（新的在最上面）
+
+### 2026-10-20 · R4/M1：提醒编辑（全字段）
+**里程碑**：R4/M1
+**改了什么**：
+- 契约新增 `task.get` / `task.update`；`TaskEditView` 回填完整输入（时间、repeat、catchup、DND 覆盖）；
+- 编辑时间/重复时，先抑制该任务仍在 pending 的通知、删除旧的未来 pending 实例，
+  再更新 recurrence —— 避免新旧两套计划同时物化；
+- 设置页/提醒列表新增「编辑」按钮；对话框改用日期 + 时间选择器，支持自定义 RRULE 和任务级 DND 覆盖；
+- 新增集成测试：更新时间后旧未来实例被删除，任务 id 与历史保留。
+**为什么**：PRD M1 的最小界面包含"新建/编辑"；此前只能删除重建，会丢任务 id 和已触发历史。
+**验证**：
+- `pnpm verify`：328 通过 / 9 跳过
+- RPC 测试覆盖 `task.get` 回填与 `task.update` 清理旧未来实例
+- 对话框字段与列表按钮已通过类型检查/语法检查
+**踩到的坑**：
+- 只改标题时不能清任务实例；只有 recurrence/首次时间变化才走清理路径；
+- 旧 future occurrence 删除前必须先把关联的 pending notification 置为 suppressed，
+  否则 outbox 仍会按旧时间投递；
+- 编辑不修改 until/count，保留原任务的截止条件。
+**留给下次**：R4 正式签名/公证（需 Apple 账号）→ R5 14 天验收 → M2；M2 不能提前。
 
 ### 2026-10-20 · R4/M1：免打扰设置（持久化 + 设置页 UI）
 **里程碑**：R4/M1

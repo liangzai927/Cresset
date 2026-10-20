@@ -184,6 +184,24 @@ export class NotificationDao {
   }
 
   /**
+   * 抑制某任务仍处于 pending 的提醒（编辑计划前调用）。
+   *
+   * 用 `suppressed` 而不是删除：outbox 里可能已有投递项，
+   * 下一轮 dispatch 会看到 suppressed 并直接标记完成，不会误发旧计划。
+   */
+  suppressPendingForTask(taskId: string): number {
+    const at = this.#now();
+    const res = this.#db
+      .prepare(
+        `UPDATE notification SET state = 'suppressed', updated_at = ?
+          WHERE state = 'pending'
+            AND occurrence_id IN (SELECT id FROM occurrence WHERE task_id = ?)`,
+      )
+      .run(at, taskId);
+    return Number(res.changes);
+  }
+
+  /**
    * 取"到点该投递"的通知。
    *
    * 判定条件是 `state='pending' AND scheduled_for <= now` ——

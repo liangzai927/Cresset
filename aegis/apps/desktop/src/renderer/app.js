@@ -267,6 +267,10 @@ function renderTaskItem(task) {
 
   const actions = el("div", "task-actions");
 
+  const edit = el("button", "btn btn-ghost", "编辑");
+  edit.addEventListener("click", () => void openEditDialog(task.id));
+  actions.appendChild(edit);
+
   const toggle = el("button", "btn btn-ghost", task.enabled ? "暂停" : "恢复");
   toggle.addEventListener("click", async () => {
     toggle.disabled = true;
@@ -606,13 +610,78 @@ for (const tab of document.querySelectorAll(".tab")) {
 
 const dialog = $("new-dialog");
 
+/** 当前正在编辑的任务 id；null 表示新建 */
+let editingTaskId = null;
+
+/** 新建对话框的默认时间：下一个 09:00 */
+function defaultFireDateTime() {
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(9, 0, 0, 0);
+  if (target.getTime() <= now.getTime()) target.setDate(target.getDate() + 1);
+  const p2 = (n) => String(n).padStart(2, "0");
+  return {
+    date: `${target.getFullYear()}-${p2(target.getMonth() + 1)}-${p2(target.getDate())}`,
+    time: "09:00",
+  };
+}
+
 function openNewDialog() {
+  editingTaskId = null;
   $("form-error").classList.add("hidden");
+  $("dialog-title").textContent = "新建提醒";
+  $("btn-submit").textContent = "创建";
+  $("f-title").value = "";
+  $("f-notes").value = "";
+  $("f-repeat").value = "once";
+  $("f-monthday").value = "1";
+  $("f-interval").value = "30";
+  $("f-rrule").value = "";
+  $("f-important").checked = false;
+  $("f-dnd-override").value = "inherit";
+  const d = defaultFireDateTime();
+  $("f-date").value = d.date;
+  $("f-time").value = d.time;
+  state.selectedWeekdays = new Set([1]);
+  for (const b of picker.querySelectorAll("button")) b.classList.toggle("on", b.dataset.day === "1");
+  syncRepeatFields();
   dialog.showModal();
+}
+
+/** 编辑：从 daemon 拉完整任务并回填对话框 */
+async function openEditDialog(id) {
+  try {
+    const task = await window.aegis.getTask(id);
+    editingTaskId = task.id;
+    $("form-error").classList.add("hidden");
+    $("dialog-title").textContent = "编辑提醒";
+    $("btn-submit").textContent = "保存";
+    $("f-title").value = task.title;
+    $("f-notes").value = task.notes ?? "";
+    $("f-date").value = task.firstFireAtWall.slice(0, 10);
+    $("f-time").value = task.firstFireAtWall.slice(11, 16);
+    $("f-repeat").value = task.repeat.mode;
+    $("f-rrule").value = task.repeat.rrule ?? "";
+    $("f-monthday").value = String(task.repeat.byMonthDay ?? 1);
+    $("f-interval").value = String(task.repeat.intervalMinutes ?? 30);
+    $("f-important").checked = task.priority === "important";
+    $("f-dnd-override").value = task.dndOverride;
+    state.selectedWeekdays = new Set(task.repeat.byWeekday ?? [1]);
+    for (const b of picker.querySelectorAll("button")) {
+      b.classList.toggle("on", state.selectedWeekdays.has(Number(b.dataset.day)));
+    }
+    syncRepeatFields();
+    dialog.showModal();
+  } catch (err) {
+    showBanner(`读取提醒失败：${err.message}`, "err");
+  }
 }
 
 $("btn-new").addEventListener("click", openNewDialog);
 $("btn-cancel").addEventListener("click", () => dialog.close());
+dialog.addEventListener("close", () => {
+  editingTaskId = null;
+});
 
 // 星期选择器（只在 weekly 模式下显示）
 const WEEKDAY_NAMES = ["一", "二", "三", "四", "五", "六", "日"];
@@ -630,13 +699,16 @@ for (let d = 1; d <= 7; d++) {
   picker.appendChild(b);
 }
 
-// 按重复模式显示/隐藏附加参数
-$("f-repeat").addEventListener("change", (e) => {
-  const mode = e.target.value;
+/** 按重复模式显示/隐藏附加参数 */
+function syncRepeatFields() {
+  const mode = $("f-repeat").value;
   $("sub-weekly").classList.toggle("hidden", mode !== "weekly");
   $("sub-monthly").classList.toggle("hidden", mode !== "monthly");
   $("sub-interval").classList.toggle("hidden", mode !== "every_minutes");
-});
+  $("sub-rrule").classList.toggle("hidden", mode !== "custom_rrule");
+}
+
+$("f-repeat").addEventListener("change", syncRepeatFields);
 
 /**
  * 根据表单构造墙上时间。
@@ -645,24 +717,11 @@ $("f-repeat").addEventListener("change", (e) => {
  * 与 daemon 侧的 `tzid: system` 语义一致。
  */
 function buildFireAtWall() {
-  const time = $("f-time").value; // HH:mm
+  const date = $("f-date").value;
+  const time = $("f-time").value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("请选择触发日期");
   if (!/^\d{2}:\d{2}$/.test(time)) throw new Error("请选择触发时间");
-
-  const dayChoice = $("f-day").value;
-  const now = new Date();
-  const target = new Date(now);
-  if (dayChoice === "tomorrow") target.setDate(target.getDate() + 1);
-
-  const [hh, mm] = time.split(":").map(Number);
-  target.setHours(hh, mm, 0, 0);
-
-  // 选"今天"但时刻已过 → 顺延到明天（符合直觉，避免创建一条立即过期的提醒）
-  if (dayChoice === "today" && target.getTime() <= now.getTime()) {
-    target.setDate(target.getDate() + 1);
-  }
-
-  const p2 = (n) => String(n).padStart(2, "0");
-  return `${target.getFullYear()}-${p2(target.getMonth() + 1)}-${p2(target.getDate())}T${p2(target.getHours())}:${p2(target.getMinutes())}`;
+  return `${date}T${time}`;
 }
 
 $("new-form").addEventListener("submit", async (event) => {
@@ -707,6 +766,15 @@ $("new-form").addEventListener("submit", async (event) => {
     }
     repeat.intervalMinutes = n;
   }
+  if (mode === "custom_rrule") {
+    const rrule = $("f-rrule").value.trim();
+    if (!rrule) {
+      errBox.textContent = "请输入 RRULE";
+      errBox.classList.remove("hidden");
+      return;
+    }
+    repeat.rrule = rrule;
+  }
 
   let firstFireAtWall;
   try {
@@ -718,22 +786,27 @@ $("new-form").addEventListener("submit", async (event) => {
   }
 
   const submit = $("btn-submit");
+  const wasEditing = editingTaskId !== null;
   submit.disabled = true;
-  submit.textContent = "创建中…";
+  submit.textContent = wasEditing ? "保存中…" : "创建中…";
+
+  const payload = {
+    title,
+    ...($("f-notes").value.trim() ? { notes: $("f-notes").value.trim() } : {}),
+    priority: $("f-important").checked ? "important" : "normal",
+    firstFireAtWall,
+    repeat,
+    dndOverride: $("f-dnd-override").value,
+  };
 
   try {
-    await window.aegis.createTask({
-      title,
-      ...($("f-notes").value.trim() ? { notes: $("f-notes").value.trim() } : {}),
-      priority: $("f-important").checked ? "important" : "normal",
-      firstFireAtWall,
-      repeat,
-    });
+    if (wasEditing && editingTaskId) {
+      await window.aegis.updateTask({ id: editingTaskId, ...payload });
+    } else {
+      await window.aegis.createTask(payload);
+    }
     dialog.close();
-    // 重置表单（保留时间/重复模式的默认值，减少重复输入）
-    $("f-title").value = "";
-    $("f-notes").value = "";
-    $("f-important").checked = false;
+    showToast(wasEditing ? "提醒已保存" : "提醒已创建");
     await refreshTasks();
     await refreshStatus();
   } catch (err) {
@@ -741,7 +814,7 @@ $("new-form").addEventListener("submit", async (event) => {
     errBox.classList.remove("hidden");
   } finally {
     submit.disabled = false;
-    submit.textContent = "创建";
+    submit.textContent = wasEditing ? "保存" : "创建";
   }
 });
 

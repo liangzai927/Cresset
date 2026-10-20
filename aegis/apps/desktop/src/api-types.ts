@@ -74,8 +74,27 @@ export interface CreateTaskPayload {
     byMonthDay?: number;
     /** every_minutes */
     intervalMinutes?: number;
+    /** custom_rrule：原样 RRULE */
+    rrule?: string;
   };
+  /** 对全局免打扰的覆盖 */
+  dndOverride?: "inherit" | "allow" | "block";
 }
+
+/** 编辑对话框回填的完整任务 */
+export interface TaskEditItem {
+  id: string;
+  title: string;
+  notes: string | null;
+  priority: "normal" | "important";
+  firstFireAtWall: string;
+  repeat: CreateTaskPayload["repeat"];
+  catchupWindowS: number;
+  dndOverride: "inherit" | "allow" | "block";
+}
+
+/** 更新任务 = 完整创建输入 + id */
+export type UpdateTaskPayload = CreateTaskPayload & { id: string };
 
 /** 渠道可用性（设置页展示"为什么走兜底"） */
 export interface ChannelStatus {
@@ -180,6 +199,8 @@ export interface DesktopApi {
 
   listTasks(): Promise<TasksPage>;
   createTask(payload: CreateTaskPayload): Promise<{ id: string }>;
+  getTask(id: string): Promise<TaskEditItem>;
+  updateTask(payload: UpdateTaskPayload): Promise<{ id: string }>;
   pauseTask(id: string): Promise<{ ok: boolean }>;
   resumeTask(id: string): Promise<{ ok: boolean }>;
   deleteTask(id: string): Promise<{ ok: boolean }>;

@@ -48,8 +48,10 @@ import type {
   DiagnosticInfo,
   DndSettingsView,
   NotificationItem,
+  TaskEditItem,
   TaskItem,
   UpdateInfo,
+  UpdateTaskPayload,
 } from "./api-types.js";
 import { deliverWithAttention, probeSystemNotification } from "./attention.js";
 import { type ChannelHostHandle, createElectronPresenter, startChannelHost } from "./channel-host.js";
@@ -672,6 +674,18 @@ async function ipcGetStatus(): Promise<DiagnosticInfo> {
   };
 }
 
+async function ipcGetTask(id: string): Promise<TaskEditItem> {
+  const client = await ensureClient();
+  return (await client.call("task.get", { id })) as TaskEditItem;
+}
+
+async function ipcUpdateTask(payload: UpdateTaskPayload): Promise<{ id: string }> {
+  const client = await ensureClient();
+  const r = (await client.call("task.update", payload)) as { id: string };
+  notifyRefresh();
+  return r;
+}
+
 async function ipcListTasks(): Promise<{ items: TaskItem[] }> {
   const client = await ensureClient();
   const r = (await client.call("task.list", { limit: 500 })) as { items: TaskView[] };
@@ -949,6 +963,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:tasks:create",
     wrap((p: CreateTaskPayload) => ipcCreateTask(p)),
+  );
+  ipcMain.handle(
+    "aegis:tasks:get",
+    wrap((id: string) => ipcGetTask(id)),
+  );
+  ipcMain.handle(
+    "aegis:tasks:update",
+    wrap((p: UpdateTaskPayload) => ipcUpdateTask(p)),
   );
   ipcMain.handle(
     "aegis:tasks:pause",

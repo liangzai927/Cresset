@@ -482,6 +482,79 @@ describe("R2：调度器接入与 RPC 方法", () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
+  it("★ task.update 修改时间并清掉旧的未来实例", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-update-"));
+    const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
+    const hs = readHandshakeFile(join(dataDir, "handshake.json"));
+    const client = new IpcClient({ endpoint: hs.endpoint, token: hs.token });
+    await client.connect();
+
+    const now = Date.now();
+    const p2 = (n: number): string => String(n).padStart(2, "0");
+    const wallAt = (offsetMs: number): string => {
+      const d = new Date(now + offsetMs);
+      return `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+    };
+    const firstWall = wallAt(3_600_000);
+    const secondWall = wallAt(7_200_000);
+
+    const created = (await client.call("task.create", {
+      title: "原标题",
+      notes: "原备注",
+      firstFireAtWall: firstWall,
+      repeat: { mode: "once" },
+      priority: "normal",
+    })) as { id: string };
+
+    const detail = (await client.call("task.get", { id: created.id })) as {
+      title: string;
+      firstFireAtWall: string;
+      repeat: { mode: string };
+    };
+    expect(detail.title).toBe("原标题");
+    expect(detail.firstFireAtWall).toBe(firstWall);
+    expect(detail.repeat.mode).toBe("once");
+
+    // 造一个旧的未来实例：更新后应被删除，避免两套计划并存
+    const oldOccurrence = randomUUID();
+    daemon.db
+      .prepare(
+        `INSERT INTO occurrence (id, task_id, scheduled_at, scheduled_wall, state, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+      )
+      .run(oldOccurrence, created.id, now + 3_600_000, firstWall, now, now);
+
+    const updated = (await client.call("task.update", {
+      id: created.id,
+      title: "新标题",
+      notes: "新备注",
+      priority: "important",
+      firstFireAtWall: secondWall,
+      repeat: { mode: "once" },
+    })) as { id: string };
+    expect(updated.id).toBe(created.id);
+
+    const after = (await client.call("task.get", { id: created.id })) as {
+      title: string;
+      firstFireAtWall: string;
+      priority: string;
+    };
+    expect(after.title).toBe("新标题");
+    expect(after.firstFireAtWall).toBe(secondWall);
+    expect(after.priority).toBe("important");
+
+    const gone = daemon.db
+      .prepare("SELECT COUNT(*) AS n FROM occurrence WHERE id = ?")
+      .get(oldOccurrence) as {
+      n: number;
+    };
+    expect(gone.n).toBe(0);
+
+    client.close();
+    await daemon.stop("test");
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
   it("★ dnd.set 持久化到 config.json 并立即影响 dnd.get", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-dnd-"));
     const daemon = await runDaemon({ dataDir, tickMs: 60_000 });

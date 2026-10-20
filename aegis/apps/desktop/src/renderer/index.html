@@ -189,7 +189,7 @@
     <!-- ── 新建提醒对话框 ───────────────────────────────────────── -->
     <dialog id="new-dialog">
       <form method="dialog" class="dialog-body" id="new-form">
-        <h2>新建提醒</h2>
+        <h2 id="dialog-title">新建提醒</h2>
 
         <label>
           <span>标题</span>
@@ -204,11 +204,8 @@
         <label>
           <span>触发时间</span>
           <div class="row">
+            <input id="f-date" type="date" required />
             <input id="f-time" type="time" value="09:00" required />
-            <select id="f-day">
-              <option value="today">今天</option>
-              <option value="tomorrow">明天</option>
-            </select>
           </div>
         </label>
 
@@ -221,6 +218,7 @@
             <option value="weekly">每周指定</option>
             <option value="monthly">每月指定日</option>
             <option value="every_minutes">每隔若干分钟</option>
+            <option value="custom_rrule">自定义 RRULE</option>
           </select>
         </label>
 
@@ -240,9 +238,23 @@
           <input id="f-interval" type="number" min="1" max="10080" value="30" />
         </label>
 
+        <label class="sub-field hidden" id="sub-rrule">
+          <span>RRULE</span>
+          <input id="f-rrule" type="text" placeholder="例如 FREQ=WEEKLY;BYDAY=MO,WE" />
+        </label>
+
         <label class="checkbox">
           <input id="f-important" type="checkbox" />
           <span>重要提醒（可穿透免打扰）</span>
+        </label>
+
+        <label>
+          <span>免打扰覆盖</span>
+          <select id="f-dnd-override">
+            <option value="inherit">继承全局设置</option>
+            <option value="allow">允许穿透</option>
+            <option value="block">阻止普通提醒</option>
+          </select>
         </label>
 
         <p class="form-error hidden" id="form-error"></p>

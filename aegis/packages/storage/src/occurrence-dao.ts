@@ -205,6 +205,21 @@ export class OccurrenceDao {
     return Number(res.changes) > 0;
   }
 
+  /**
+   * 删除某任务在 `at` 之后仍 pending 的实例。
+   *
+   * 用于编辑重复规则/首次触发时间：旧计划必须在 materialize 新计划前清掉，
+   * 否则同一条任务会同时存在两套未来实例。已 claimed/delivered 的实例保留。
+   *
+   * @returns 删除条数
+   */
+  deletePendingFuture(taskId: string, at: number = this.#now()): number {
+    const res = this.#db
+      .prepare("DELETE FROM occurrence WHERE task_id = ? AND state = 'pending' AND scheduled_at > ?")
+      .run(taskId, at);
+    return Number(res.changes);
+  }
+
   /** 该任务最近一次**成功投递**的时刻（供 UI 显示"上次提醒"） */
   lastDeliveredAt(taskId: string): number | null {
     const row = rowOf<{ t: number | null }>(

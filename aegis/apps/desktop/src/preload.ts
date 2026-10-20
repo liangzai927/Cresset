@@ -32,8 +32,10 @@ import type {
   DndSettingsView,
   NotificationsPage,
   OnboardingState,
+  TaskEditItem,
   TasksPage,
   UpdateInfo,
+  UpdateTaskPayload,
 } from "./api-types.js";
 
 /**
@@ -51,6 +53,9 @@ function buildApi(): DesktopApi {
     listTasks: () => ipcRenderer.invoke("aegis:tasks:list") as Promise<TasksPage>,
     createTask: (payload: CreateTaskPayload) =>
       ipcRenderer.invoke("aegis:tasks:create", payload) as Promise<{ id: string }>,
+    getTask: (id: string) => ipcRenderer.invoke("aegis:tasks:get", id) as Promise<TaskEditItem>,
+    updateTask: (payload: UpdateTaskPayload) =>
+      ipcRenderer.invoke("aegis:tasks:update", payload) as Promise<{ id: string }>,
     pauseTask: (id: string) => ipcRenderer.invoke("aegis:tasks:pause", id) as Promise<{ ok: boolean }>,
     resumeTask: (id: string) => ipcRenderer.invoke("aegis:tasks:resume", id) as Promise<{ ok: boolean }>,
     deleteTask: (id: string) => ipcRenderer.invoke("aegis:tasks:delete", id) as Promise<{ ok: boolean }>,

@@ -36,6 +36,24 @@ export const RepeatModeSchema = z.enum([
 ]);
 export type RepeatMode = z.infer<typeof RepeatModeSchema>;
 
+/** 重复方式的输入（UI 友好，服务端翻译成 RRULE） */
+export const RepeatInputSchema = z
+  .object({
+    mode: RepeatModeSchema,
+    /** weekly：1=周一 … 7=周日 */
+    byWeekday: z.array(z.number().int().min(1).max(7)).optional(),
+    /** monthly：1-31 */
+    byMonthDay: z.number().int().min(1).max(31).optional(),
+    /** every_minutes */
+    intervalMinutes: z.number().int().min(1).max(10_080).optional(),
+    /** custom_rrule：原样 RRULE */
+    rrule: z.string().optional(),
+  })
+  .strict();
+
+/** 任务对全局免打扰的覆盖策略 */
+export const DndOverrideSchema = z.enum(["inherit", "allow", "block"]);
+
 /** 创建任务的入参（UI 友好形态：repeat.mode 由服务端翻译成 RRULE） */
 export const CreateTaskInputSchema = z
   .object({
@@ -43,21 +61,9 @@ export const CreateTaskInputSchema = z
     notes: z.string().max(4_000).optional(),
     priority: PrioritySchema.optional(),
     firstFireAtWall: WallClockSchema,
-    repeat: z
-      .object({
-        mode: RepeatModeSchema,
-        /** weekly：1=周一 … 7=周日 */
-        byWeekday: z.array(z.number().int().min(1).max(7)).optional(),
-        /** monthly：1-31 */
-        byMonthDay: z.number().int().min(1).max(31).optional(),
-        /** every_minutes */
-        intervalMinutes: z.number().int().min(1).max(10_080).optional(),
-        /** custom_rrule：原样 RRULE */
-        rrule: z.string().optional(),
-      })
-      .strict(),
+    repeat: RepeatInputSchema,
     catchupWindowS: z.number().int().nonnegative().optional(),
-    dndOverride: z.enum(["inherit", "allow", "block"]).optional(),
+    dndOverride: DndOverrideSchema.optional(),
   })
   .strict();
 export type CreateTaskInput = z.infer<typeof CreateTaskInputSchema>;
@@ -85,6 +91,21 @@ export const TaskViewSchema = z
   })
   .strict();
 export type TaskView = z.infer<typeof TaskViewSchema>;
+
+/** 编辑任务时需要回填的完整输入（比列表视图多 repeat/时间） */
+export const TaskEditViewSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    notes: z.string().nullable(),
+    priority: PrioritySchema,
+    firstFireAtWall: WallClockSchema,
+    repeat: RepeatInputSchema,
+    catchupWindowS: z.number().int().nonnegative(),
+    dndOverride: DndOverrideSchema,
+  })
+  .strict();
+export type TaskEditView = z.infer<typeof TaskEditViewSchema>;
 
 /** 免打扰时段；days 为 ISO 星期（1=周一 … 7=周日），允许跨午夜 */
 export const DndWindowSchema = z
@@ -169,6 +190,14 @@ export const RPC_METHODS = {
     result: z.object({ items: z.array(TaskViewSchema), nextCursor: z.string().nullable() }).strict(),
   },
   "task.create": { params: CreateTaskInputSchema, result: z.object({ id: z.string() }).strict() },
+  "task.get": {
+    params: z.object({ id: z.string() }).strict(),
+    result: TaskEditViewSchema,
+  },
+  "task.update": {
+    params: CreateTaskInputSchema.extend({ id: z.string() }).strict(),
+    result: z.object({ id: z.string() }).strict(),
+  },
   "task.complete": {
     params: z.object({ occurrenceId: z.string() }).strict(),
     result: z.object({ ok: z.boolean() }).strict(),

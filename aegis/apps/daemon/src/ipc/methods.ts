@@ -21,6 +21,7 @@ import {
   DndSettingsSchema,
   type DndSettingsView,
   type NotificationView,
+  type TaskEditView,
   type TaskView,
 } from "@aegis/ipc-contract";
 import type { DataPaths } from "@aegis/product";
@@ -59,14 +60,17 @@ interface CreateTaskParams {
   firstFireAtWall: string;
   repeat: {
     mode: string;
-    byWeekday?: number[];
-    byMonthDay?: number;
-    intervalMinutes?: number;
-    rrule?: string;
+    byWeekday?: number[] | undefined;
+    byMonthDay?: number | undefined;
+    intervalMinutes?: number | undefined;
+    rrule?: string | undefined;
   };
   catchupWindowS?: number;
   dndOverride?: "inherit" | "allow" | "block";
 }
+
+/** 更新任务 = 完整创建输入 + id（契约层已做 Zod 校验） */
+type UpdateTaskParams = CreateTaskParams & { id: string };
 
 /**
  * 把 UI 的重复模式翻译为 RRULE。
@@ -173,6 +177,53 @@ export function toTaskView(task: Task, scheduler: Scheduler): TaskView {
   };
 }
 
+/** RRULE 的 BYDAY 代码 → ISO 星期 */
+const BYDAY_NUM: Record<string, number> = { MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6, SU: 7 };
+
+/**
+ * 把数据库中的 RRULE 反解为 UI 的 repeat 形态。
+ *
+ * 只覆盖 `translateRepeat` 产生的规范形式；未知/第三方 RRULE 走 `custom_rrule`，
+ * 由界面原样展示，避免编辑时静默改坏规则。
+ */
+function repeatOfTask(task: Task): TaskEditView["repeat"] {
+  const rrule = task.recurrence.rrule;
+  if (!rrule) return { mode: "once" };
+  if (rrule === "FREQ=DAILY") return { mode: "daily" };
+
+  const weekly = /^FREQ=WEEKLY;BYDAY=([A-Z,]+)$/.exec(rrule);
+  if (weekly) {
+    const codes = weekly[1]?.split(",") ?? [];
+    const days = codes.map((c) => BYDAY_NUM[c]).filter((d): d is number => d !== undefined);
+    if (days.length === 5 && [1, 2, 3, 4, 5].every((d) => days.includes(d))) {
+      return { mode: "weekdays" };
+    }
+    return { mode: "weekly", byWeekday: days };
+  }
+
+  const monthly = /^FREQ=MONTHLY;BYMONTHDAY=(\d+)$/.exec(rrule);
+  if (monthly) return { mode: "monthly", byMonthDay: Number(monthly[1]) };
+
+  const minutely = /^FREQ=MINUTELY;INTERVAL=(\d+)$/.exec(rrule);
+  if (minutely) return { mode: "every_minutes", intervalMinutes: Number(minutely[1]) };
+
+  return { mode: "custom_rrule", rrule };
+}
+
+/** 把任务转成编辑对话框要回填的完整结构 */
+function toTaskEditView(task: Task): TaskEditView {
+  return {
+    id: task.id,
+    title: task.title,
+    notes: task.notes,
+    priority: task.priority,
+    firstFireAtWall: task.recurrence.dtstartWall,
+    repeat: repeatOfTask(task),
+    catchupWindowS: task.catchupWindowS,
+    dndOverride: task.dndOverride,
+  };
+}
+
 function wallString(w: { year: number; month: number; day: number; hour: number; minute: number }): string {
   const p2 = (n: number): string => String(n).padStart(2, "0");
   return `${w.year}-${p2(w.month)}-${p2(w.day)}T${p2(w.hour)}:${p2(w.minute)}`;
@@ -254,7 +305,7 @@ export function createMethods(
         const task = scheduler.createTask({
           title: p.title,
           notes: p.notes ?? null,
-          priority: p.priority ?? "normal",
+          priority: p.priority === "important" ? "important" : "normal",
           recurrence: spec,
           ...(p.catchupWindowS !== undefined ? { catchupWindowS: p.catchupWindowS } : {}),
         });
@@ -303,6 +354,56 @@ export function createMethods(
         files: manifest.files.length,
         totalBytes: manifest.totalBytes,
       };
+    },
+
+    "task.get": async (params) => {
+      const p = z.object({ id: z.string() }).strict().parse(params);
+      const task = tasks.getById(p.id);
+      if (!task || task.deletedAt !== null) {
+        throw new MethodError(E_INVALID_PARAMS, `任务不存在：${p.id}`);
+      }
+      return toTaskEditView(task);
+    },
+
+    "task.update": async (params) => {
+      const p = params as UpdateTaskParams;
+      const task = tasks.getById(p.id);
+      if (!task || task.deletedAt !== null) {
+        throw new MethodError(E_INVALID_PARAMS, `任务不存在：${p.id}`);
+      }
+
+      const rrule = translateRepeat(p.repeat, p.firstFireAtWall);
+      const recurrenceChanged =
+        rrule !== task.recurrence.rrule || p.firstFireAtWall !== task.recurrence.dtstartWall;
+
+      if (recurrenceChanged) {
+        // 旧计划的未来实例必须先清掉，再更新 recurrence；否则两套计划会同时物化。
+        // 通知先置为 suppressed，让已入 outbox 的投递项在下一轮直接完成，不误发旧时间。
+        notifications.suppressPendingForTask(task.id);
+        scheduler.daos.occurrences.deletePendingFuture(task.id, scheduler.now());
+      }
+
+      const updated = tasks.update(task.id, {
+        title: p.title,
+        notes: p.notes ?? null,
+        priority: p.priority === "important" ? "important" : "normal",
+        ...(recurrenceChanged
+          ? {
+              recurrence: {
+                rrule,
+                dtstartWall: p.firstFireAtWall,
+                tzid: resolveTimeZone("system"),
+                // 编辑 UI 不修改截止条件，保留原任务的 until/count
+                untilWall: task.recurrence.untilWall,
+                countLimit: task.recurrence.countLimit,
+              },
+            }
+          : {}),
+        ...(p.catchupWindowS !== undefined ? { catchupWindowS: p.catchupWindowS } : {}),
+        ...(p.dndOverride !== undefined ? { dndOverride: p.dndOverride } : {}),
+      });
+      if (!updated) throw new MethodError(E_INTERNAL, `更新任务失败：${task.id}`);
+      return { id: updated.id };
     },
 
     "task.complete": async (params) => {
