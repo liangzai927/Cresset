@@ -217,6 +217,37 @@ export const LlmTestResultSchema = z.union([
     .strict(),
 ]);
 
+/** 知识库文档视图 */
+export const KnowledgeDocumentSchema = z
+  .object({
+    id: z.string(),
+    title: z.string(),
+    sourcePath: z.string(),
+    dataClass: z.enum(["L0", "L1", "L2", "L3"]),
+    contentHash: z.string(),
+    chunkCount: z.number().int().nonnegative(),
+    updatedAt: z.number().int(),
+  })
+  .strict();
+export type KnowledgeDocumentView = z.infer<typeof KnowledgeDocumentSchema>;
+
+/** 知识库检索命中；引用字段来自本地文档偏移 */
+export const KnowledgeHitSchema = z
+  .object({
+    chunkId: z.string(),
+    documentId: z.string(),
+    title: z.string(),
+    sourcePath: z.string(),
+    dataClass: z.enum(["L0", "L1", "L2", "L3"]),
+    ordinal: z.number().int().nonnegative(),
+    text: z.string(),
+    startOffset: z.number().int().nonnegative(),
+    endOffset: z.number().int().nonnegative(),
+    score: z.number(),
+  })
+  .strict();
+export type KnowledgeHitView = z.infer<typeof KnowledgeHitSchema>;
+
 /** 监测器配置视图；与 daemon config.monitors 的结构一致 */
 export const MonitorConfigViewSchema = z.discriminatedUnion("kind", [
   z

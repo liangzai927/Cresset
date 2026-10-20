@@ -221,6 +221,31 @@ export type LlmTestResult =
   | { ok: true; text: string; destination: string }
   | { ok: false; blocked: boolean; reason: string; errorKind?: string };
 
+/** 知识库文档 */
+export interface KnowledgeDocument {
+  id: string;
+  title: string;
+  sourcePath: string;
+  dataClass: "L0" | "L1" | "L2" | "L3";
+  contentHash: string;
+  chunkCount: number;
+  updatedAt: number;
+}
+
+/** 知识库检索命中 */
+export interface KnowledgeHit {
+  chunkId: string;
+  documentId: string;
+  title: string;
+  sourcePath: string;
+  dataClass: "L0" | "L1" | "L2" | "L3";
+  ordinal: number;
+  text: string;
+  startOffset: number;
+  endOffset: number;
+  score: number;
+}
+
 /** 系统健康视图（单位已由 daemon 转好） */
 export interface SystemHealthView {
   at: number;
@@ -326,6 +351,22 @@ export interface DesktopApi {
   resumeAll(): Promise<{ ok: boolean }>;
 
   checkUpdate(): Promise<UpdateInfo>;
+  /** 打开文件选择器并读取待入库文档（取消返回 null） */
+  pickKnowledgeFile(): Promise<{ sourcePath: string; content: string } | null>;
+  /** 导入/更新文档到本地知识库 */
+  importKnowledge(
+    sourcePath: string,
+    content: string,
+    dataClass: "L0" | "L1" | "L2" | "L3",
+  ): Promise<{ document: KnowledgeDocument }>;
+  /** 列出知识库文档 */
+  listKnowledge(): Promise<{ documents: KnowledgeDocument[] }>;
+  /** 检索本地知识库 */
+  searchKnowledge(query: string): Promise<{ hits: KnowledgeHit[] }>;
+  /** 删除文档 */
+  removeKnowledge(id: string): Promise<{ ok: boolean }>;
+  /** 用系统默认程序打开引用来源 */
+  openKnowledgeSource(sourcePath: string): Promise<{ ok: boolean; error?: string }>;
   /** 读取 LLM 设置（API Key 只返回是否已配置） */
   getLlm(): Promise<LlmView>;
   /** 最近外发审计（无原文） */

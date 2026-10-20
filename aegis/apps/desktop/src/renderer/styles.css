@@ -485,6 +485,87 @@ main {
   margin-bottom: 8px;
 }
 
+.inline-select {
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+}
+
+.knowledge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 8px 0;
+}
+
+.knowledge-doc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11.5px;
+}
+
+.knowledge-doc .path {
+  color: var(--text-dim);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.knowledge-search {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.knowledge-search input {
+  flex: 1;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.knowledge-results {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.knowledge-hit {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 11.5px;
+}
+
+.knowledge-hit .snippet {
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 3px 0;
+  white-space: pre-wrap;
+}
+
+.citation {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .audit-head {
   display: flex;
   align-items: center;

@@ -22,6 +22,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { type Clock, detectSkew, SystemClock } from "@aegis/clock";
 import type { HealthView } from "@aegis/ipc-contract";
+import { KnowledgeBase } from "@aegis/knowledge";
 import { createDesktopChannelSender, defaultNotifiers, type Notifier } from "@aegis/platform";
 import { type DataPaths, KEYCHAIN_SERVICE, resolveDataPaths } from "@aegis/product";
 import { Scheduler, type TickResult } from "@aegis/scheduler";
@@ -160,6 +161,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
 
   // ── 7 启动审计（M0 骨架：写一条"启动"记录，验证审计链路可用）
   const audit = new AuditRepo(db);
+  const knowledge = new KnowledgeBase({ db, now: () => clock.wall() });
   const llmService = new LlmService({
     configFile: paths.configFile,
     db,
@@ -408,6 +410,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
           },
         },
         llm: llmService,
+        knowledge,
         monitors: {
           status: () => monitorRuntime.status(),
           scan: (id) => monitorRuntime.scanById(id),

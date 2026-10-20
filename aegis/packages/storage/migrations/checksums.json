@@ -24,6 +24,12 @@
       "name": "llm_usage",
       "file": "0004_llm_usage.sql",
       "checksum": "34200d5ab6fb50de0bb11d94a084fdde037b1faa7bf34f2a8684296935967683"
+    },
+    {
+      "id": 5,
+      "name": "knowledge_base",
+      "file": "0005_knowledge_base.sql",
+      "checksum": "d51182311fa01db79365a4988dcb20d4ddf4a33d348e67bf198339e1db76e08d"
     }
   ]
 }

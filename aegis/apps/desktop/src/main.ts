@@ -47,6 +47,8 @@ import type {
   CreateTaskPayload,
   DiagnosticInfo,
   DndSettingsView,
+  KnowledgeDocument,
+  KnowledgeHit,
   LlmAuditEntry,
   LlmSettingsView,
   LlmTestResult,
@@ -833,6 +835,55 @@ async function ipcOpenNotificationSettings(): Promise<{ ok: boolean; detail: str
   return { ok: false, detail: "无法打开系统通知设置，请手动打开系统设置 → 通知" };
 }
 
+async function ipcPickKnowledgeFile(): Promise<{ sourcePath: string; content: string } | null> {
+  const options = {
+    title: "选择要入库的文档",
+    buttonLabel: "导入",
+    filters: [{ name: "文档", extensions: ["md", "markdown", "txt"] }],
+    properties: ["openFile"] as Array<"openFile">,
+  };
+  const picked =
+    ctx.window && !ctx.window.isDestroyed()
+      ? await dialog.showOpenDialog(ctx.window, options)
+      : await dialog.showOpenDialog(options);
+  if (picked.canceled || !picked.filePaths[0]) return null;
+  const sourcePath = picked.filePaths[0];
+  const content = readFileSync(sourcePath, "utf8");
+  if (Buffer.byteLength(content, "utf8") > 2_000_000) throw new Error("文档超过 2MB 限制");
+  return { sourcePath, content };
+}
+
+async function ipcImportKnowledge(
+  sourcePath: string,
+  content: string,
+  dataClass: "L0" | "L1" | "L2" | "L3",
+): Promise<{ document: KnowledgeDocument }> {
+  const client = await ensureClient();
+  return (await client.call("knowledge.import", { sourcePath, content, dataClass })) as {
+    document: KnowledgeDocument;
+  };
+}
+
+async function ipcListKnowledge(): Promise<{ documents: KnowledgeDocument[] }> {
+  const client = await ensureClient();
+  return (await client.call("knowledge.list", {})) as { documents: KnowledgeDocument[] };
+}
+
+async function ipcSearchKnowledge(query: string): Promise<{ hits: KnowledgeHit[] }> {
+  const client = await ensureClient();
+  return (await client.call("knowledge.search", { query, limit: 10 })) as { hits: KnowledgeHit[] };
+}
+
+async function ipcRemoveKnowledge(id: string): Promise<{ ok: boolean }> {
+  const client = await ensureClient();
+  return (await client.call("knowledge.remove", { id })) as { ok: boolean };
+}
+
+async function ipcOpenKnowledgeSource(sourcePath: string): Promise<{ ok: boolean; error?: string }> {
+  const error = await shell.openPath(sourcePath);
+  return error ? { ok: false, error } : { ok: true };
+}
+
 async function ipcGetLlm(): Promise<LlmView> {
   const client = await ensureClient();
   return (await client.call("llm.get", {})) as LlmView;
@@ -1205,6 +1256,32 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:llm:get",
     wrap(() => ipcGetLlm()),
+  );
+  ipcMain.handle(
+    "aegis:knowledge:pick",
+    wrap(() => ipcPickKnowledgeFile()),
+  );
+  ipcMain.handle(
+    "aegis:knowledge:import",
+    wrap((p: { sourcePath: string; content: string; dataClass: "L0" | "L1" | "L2" | "L3" }) =>
+      ipcImportKnowledge(p.sourcePath, p.content, p.dataClass),
+    ),
+  );
+  ipcMain.handle(
+    "aegis:knowledge:list",
+    wrap(() => ipcListKnowledge()),
+  );
+  ipcMain.handle(
+    "aegis:knowledge:search",
+    wrap((p: { query: string }) => ipcSearchKnowledge(p.query)),
+  );
+  ipcMain.handle(
+    "aegis:knowledge:remove",
+    wrap((p: { id: string }) => ipcRemoveKnowledge(p.id)),
+  );
+  ipcMain.handle(
+    "aegis:knowledge:open",
+    wrap((p: { sourcePath: string }) => ipcOpenKnowledgeSource(p.sourcePath)),
   );
   ipcMain.handle(
     "aegis:llm:audit",

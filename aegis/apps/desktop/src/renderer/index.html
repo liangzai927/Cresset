@@ -143,6 +143,25 @@
         </div>
 
         <div class="settings-group">
+          <h2>知识库</h2>
+          <div class="settings-actions">
+            <button class="btn" id="btn-import-knowledge">导入文档</button>
+            <button class="btn btn-ghost" id="btn-refresh-knowledge">刷新</button>
+            <select id="knowledge-class" class="inline-select">
+              <option value="L1">分级 L1</option>
+              <option value="L2" selected>分级 L2</option>
+            </select>
+            <span class="hint" id="knowledge-hint"></span>
+          </div>
+          <div class="knowledge-list" id="knowledge-docs"></div>
+          <div class="knowledge-search">
+            <input id="knowledge-query" type="text" placeholder="检索知识库（支持中文子串）…" />
+            <button class="btn btn-ghost btn-small" id="btn-search-knowledge">检索</button>
+          </div>
+          <div class="knowledge-results" id="knowledge-results"></div>
+        </div>
+
+        <div class="settings-group">
           <h2>监测器</h2>
           <div class="monitor-list" id="monitor-list"></div>
           <div class="settings-actions">

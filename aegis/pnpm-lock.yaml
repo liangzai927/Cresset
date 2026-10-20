@@ -41,6 +41,9 @@ importers:
       '@aegis/ipc-contract':
         specifier: workspace:*
         version: link:../../packages/ipc-contract
+      '@aegis/knowledge':
+        specifier: workspace:*
+        version: link:../../packages/knowledge
       '@aegis/monitors':
         specifier: workspace:*
         version: link:../../packages/monitors
@@ -109,6 +112,15 @@ importers:
       zod:
         specifier: ^4.0.0
         version: 4.6.7
+
+  packages/knowledge:
+    dependencies:
+      '@aegis/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@aegis/storage':
+        specifier: workspace:*
+        version: link:../storage
 
   packages/model-provider: {}
 

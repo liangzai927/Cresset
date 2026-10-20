@@ -44,4 +44,10 @@ export const MIGRATIONS: readonly Migration[] = [
     checksum: "34200d5ab6fb50de0bb11d94a084fdde037b1faa7bf34f2a8684296935967683",
     sql: "-- 0004_llm_usage.sql\n-- M3 模型调用预算：按 UTC 天记录调用次数，防止失控\n--\n-- 只记录计数，不记录请求内容、模型输出或凭据。\n\nCREATE TABLE llm_usage (\n  day_key           INTEGER NOT NULL,\n  purpose           TEXT NOT NULL,\n  calls             INTEGER NOT NULL DEFAULT 0,\n  updated_at        INTEGER NOT NULL,\n  PRIMARY KEY (day_key, purpose)\n);\n",
   },
+  {
+    id: 5,
+    name: "knowledge_base",
+    checksum: "d51182311fa01db79365a4988dcb20d4ddf4a33d348e67bf198339e1db76e08d",
+    sql: "-- 0005_knowledge_base.sql\n-- M3 知识库地基：文档、分块、CJK 可检索的 FTS5 索引\n--\n-- FTS5 的 unicode61 不会把中文词切出来（README F3），因此写入前会把\n-- 汉字逐字切分、拉丁词按词切分；查询时同样切分并用 AND 连接。\n\nCREATE TABLE knowledge_document (\n  id                TEXT PRIMARY KEY,\n  title             TEXT NOT NULL,\n  source_path       TEXT NOT NULL UNIQUE,\n  source_kind       TEXT NOT NULL DEFAULT 'file'\n                    CHECK (source_kind IN ('file','note','external')),\n  data_class        TEXT NOT NULL DEFAULT 'L2'\n                    CHECK (data_class IN ('L0','L1','L2','L3')),\n  content_hash      TEXT NOT NULL,\n  created_at        INTEGER NOT NULL,\n  updated_at        INTEGER NOT NULL\n);\n\nCREATE TABLE knowledge_chunk (\n  id                TEXT PRIMARY KEY,\n  document_id       TEXT NOT NULL REFERENCES knowledge_document(id) ON DELETE CASCADE,\n  ordinal           INTEGER NOT NULL,\n  text              TEXT NOT NULL,\n  start_offset      INTEGER NOT NULL,\n  end_offset        INTEGER NOT NULL,\n  UNIQUE(document_id, ordinal)\n);\nCREATE INDEX idx_knowledge_chunk_doc ON knowledge_chunk(document_id, ordinal);\n\n-- chunk_id 只用于回表；真正检索的是 tokens\nCREATE VIRTUAL TABLE knowledge_fts USING fts5(\n  chunk_id UNINDEXED,\n  tokens,\n  tokenize = 'unicode61'\n);\n",
+  },
 ];

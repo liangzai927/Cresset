@@ -44,7 +44,7 @@ describe("启动序列（详细设计 §3）", () => {
     expect(existsSync(running.paths.dbFile)).toBe(true);
     expect(existsSync(running.paths.handshakeFile)).toBe(true);
     expect(existsSync(running.paths.readyFile)).toBe(true);
-    expect(running.startup.appliedMigrations).toEqual([1, 2, 3, 4]);
+    expect(running.startup.appliedMigrations).toEqual([1, 2, 3, 4, 5]);
   });
 
   it("握手文件权限为 0600（token 不可被其他用户读取）", async () => {
@@ -332,7 +332,7 @@ describe("数据库状态（R1 交付面）", () => {
     const rows = running.db
       .prepare("SELECT id, name, checksum FROM schema_migration ORDER BY id")
       .all() as Array<{ id: number; name: string; checksum: string }>;
-    expect(rows.map((r) => r.id)).toEqual([1, 2, 3, 4]);
+    expect(rows.map((r) => r.id)).toEqual([1, 2, 3, 4, 5]);
     expect(rows.every((r) => r.checksum.length === 64)).toBe(true);
   });
 
@@ -777,6 +777,38 @@ action:
     };
     expect(defaults.installed).toHaveLength(5);
     expect(defaults.skipped).toEqual([]);
+
+    client.close();
+    await daemon.stop("test");
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("★ knowledge.import/search/list/remove 闭环", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-knowledge-"));
+    const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
+    const hs = readHandshakeFile(join(dataDir, "handshake.json"));
+    const client = new IpcClient({ endpoint: hs.endpoint, token: hs.token });
+    await client.connect();
+
+    const imported = (await client.call("knowledge.import", {
+      sourcePath: "/tmp/project.md",
+      title: "项目文档",
+      content: "Aegis 的项目知识库说明文档。",
+      dataClass: "L1",
+    })) as { document: { id: string; chunkCount: number } };
+    expect(imported.document.chunkCount).toBeGreaterThan(0);
+
+    const hits = (await client.call("knowledge.search", { query: "知识库", limit: 10 })) as {
+      hits: Array<{ title: string; sourcePath: string }>;
+    };
+    expect(hits.hits[0]).toMatchObject({ title: "项目文档", sourcePath: "/tmp/project.md" });
+
+    const listed = (await client.call("knowledge.list", {})) as { documents: unknown[] };
+    expect(listed.documents).toHaveLength(1);
+
+    await client.call("knowledge.remove", { id: imported.document.id });
+    const empty = (await client.call("knowledge.list", {})) as { documents: unknown[] };
+    expect(empty.documents).toEqual([]);
 
     client.close();
     await daemon.stop("test");

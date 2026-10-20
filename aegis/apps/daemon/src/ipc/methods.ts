@@ -25,6 +25,7 @@ import {
   type TaskEditView,
   type TaskView,
 } from "@aegis/ipc-contract";
+import type { KnowledgeBase } from "@aegis/knowledge";
 import { SystemMonitor } from "@aegis/monitors";
 import type { DataPaths } from "@aegis/product";
 import {
@@ -282,6 +283,7 @@ export interface MethodsContext {
   monitors?: MonitorMethodsContext;
   skills?: SkillsMethodsContext;
   llm?: LlmService;
+  knowledge?: KnowledgeBase;
 }
 
 /** 构造全部 RPC handler。返回对象直接交给 IpcServer 的 `methods` 选项 */
@@ -523,6 +525,59 @@ export function createMethods(
 
     "monitor.status": async () => {
       return { monitors: context.monitors?.status() ?? [] };
+    },
+
+    "knowledge.list": async () => {
+      if (!context.knowledge) throw new MethodError(E_INTERNAL, "知识库未初始化");
+      return { documents: context.knowledge.list() };
+    },
+
+    "knowledge.import": async (params) => {
+      const p = z
+        .object({
+          sourcePath: z.string().min(1).max(2_000),
+          title: z.string().min(1).max(300).optional(),
+          content: z.string().min(1).max(2_000_000),
+          dataClass: z.enum(["L0", "L1", "L2", "L3"]).default("L2"),
+        })
+        .strict()
+        .parse(params);
+      if (!context.knowledge) throw new MethodError(E_INTERNAL, "知识库未初始化");
+      try {
+        return {
+          document: context.knowledge.ingest({
+            sourcePath: p.sourcePath,
+            content: p.content,
+            dataClass: p.dataClass,
+            ...(p.title ? { title: p.title } : {}),
+          }),
+        };
+      } catch (err) {
+        throw new MethodError(E_INVALID_PARAMS, `入库失败：${(err as Error).message}`);
+      }
+    },
+
+    "knowledge.search": async (params) => {
+      const p = z
+        .object({ query: z.string().min(1).max(2_000), limit: z.number().int().min(1).max(50).default(10) })
+        .strict()
+        .parse(params);
+      if (!context.knowledge) throw new MethodError(E_INTERNAL, "知识库未初始化");
+      return { hits: context.knowledge.search(p.query, p.limit) };
+    },
+
+    "knowledge.remove": async (params) => {
+      const p = z
+        .object({ id: z.string().min(1) })
+        .strict()
+        .parse(params);
+      if (!context.knowledge) throw new MethodError(E_INTERNAL, "知识库未初始化");
+      try {
+        context.knowledge.remove(p.id);
+        return { ok: true };
+      } catch (err) {
+        throw new MethodError(E_INVALID_PARAMS, (err as Error).message);
+      }
     },
 
     "llm.get": async () => {

@@ -47,6 +47,7 @@ const TARGETS = [
   { name: "ipc-contract", dir: "packages/ipc-contract", entry: "src/index.ts", deps: ["contracts"] },
   { name: "recurrence", dir: "packages/recurrence", entry: "src/index.ts", deps: ["clock", "contracts"] },
   { name: "skills", dir: "packages/skills", entry: "src/index.ts", deps: ["contracts"] },
+  { name: "knowledge", dir: "packages/knowledge", entry: "src/index.ts", deps: ["contracts", "storage"] },
   { name: "monitors", dir: "packages/monitors", entry: "src/index.ts", deps: ["clock"] },
   {
     name: "scheduler",
@@ -104,6 +105,7 @@ const TARGETS = [
       "ipc-contract",
       "platform",
       "product",
+      "knowledge",
       "monitors",
       "redaction-gateway",
       "secrets",

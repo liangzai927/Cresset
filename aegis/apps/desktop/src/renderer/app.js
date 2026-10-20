@@ -143,6 +143,9 @@ async function refreshStatus() {
     "btn-clear-llm-key",
     "btn-test-llm",
     "btn-refresh-llm-audit",
+    "btn-import-knowledge",
+    "btn-refresh-knowledge",
+    "btn-search-knowledge",
     "btn-monitor-preset",
     "btn-import-skill",
     "btn-install-defaults",
@@ -601,6 +604,122 @@ $("btn-refresh-health").addEventListener("click", async (e) => {
   } finally {
     btn.disabled = false;
   }
+});
+
+// ── 知识库 ─────────────────────────────────────────────────────────────
+
+/** 渲染已入库文档；坏/空状态都要给出下一步提示 */
+function renderKnowledgeDocs(documents) {
+  const box = $("knowledge-docs");
+  box.textContent = "";
+  if (documents.length === 0) {
+    box.appendChild(el("p", "hint", "还没有文档。导入 Markdown/TXT 后，可用中文子串检索。"));
+    return;
+  }
+  for (const doc of documents) {
+    const row = el("div", "knowledge-doc");
+    row.appendChild(el("strong", "", doc.title));
+    row.appendChild(el("span", "hint", `${doc.chunkCount} 块 · ${doc.dataClass}`));
+    row.appendChild(el("span", "path", doc.sourcePath));
+    const remove = el("button", "btn btn-ghost btn-small", "删除");
+    remove.addEventListener("click", async () => {
+      if (!window.confirm(`删除知识文档「${doc.title}」？`)) return;
+      try {
+        await window.aegis.removeKnowledge(doc.id);
+        $("knowledge-hint").textContent = "已删除";
+        await loadKnowledge();
+        $("knowledge-results").textContent = "";
+      } catch (err) {
+        $("knowledge-hint").textContent = `删除失败：${err.message}`;
+      }
+    });
+    row.appendChild(remove);
+    box.appendChild(row);
+  }
+}
+
+/** 列出知识库文档 */
+async function loadKnowledge() {
+  try {
+    const result = await window.aegis.listKnowledge();
+    renderKnowledgeDocs(result.documents);
+    $("knowledge-hint").textContent = `已入库 ${result.documents.length} 个文档`;
+  } catch (err) {
+    $("knowledge-hint").textContent = `读取知识库失败：${err.message}`;
+  }
+}
+
+/** 渲染检索结果；引用可点击打开原文件 */
+function renderKnowledgeHits(hits) {
+  const box = $("knowledge-results");
+  box.textContent = "";
+  if (hits.length === 0) {
+    box.appendChild(el("p", "hint", "知识库里没有找到依据。"));
+    return;
+  }
+  for (const hit of hits) {
+    const row = el("div", "knowledge-hit");
+    const head = el("div", "knowledge-hit-head");
+    head.appendChild(el("strong", "", hit.title));
+    head.appendChild(el("span", "hint", ` · ${hit.dataClass} · ${hit.sourcePath}#${hit.ordinal}`));
+    row.appendChild(head);
+    row.appendChild(el("div", "snippet", hit.text.slice(0, 240)));
+    const cite = el("button", "citation", `打开引用：${hit.sourcePath}`);
+    cite.title = "用系统默认程序打开来源文件";
+    cite.addEventListener("click", async () => {
+      try {
+        const r = await window.aegis.openKnowledgeSource(hit.sourcePath);
+        if (!r.ok) $("knowledge-hint").textContent = `打开失败：${r.error ?? "未知错误"}`;
+      } catch (err) {
+        $("knowledge-hint").textContent = `打开失败：${err.message}`;
+      }
+    });
+    row.appendChild(cite);
+    box.appendChild(row);
+  }
+}
+
+/** 检索知识库 */
+async function searchKnowledge() {
+  const query = $("knowledge-query").value.trim();
+  if (!query) {
+    $("knowledge-hint").textContent = "请输入检索词";
+    return;
+  }
+  try {
+    const result = await window.aegis.searchKnowledge(query);
+    renderKnowledgeHits(result.hits);
+    $("knowledge-hint").textContent = result.hits.length > 0 ? `找到 ${result.hits.length} 条` : "没有找到依据";
+  } catch (err) {
+    $("knowledge-hint").textContent = `检索失败：${err.message}`;
+  }
+}
+
+$("btn-import-knowledge").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $("knowledge-hint").textContent = "选择文档…";
+  try {
+    const picked = await window.aegis.pickKnowledgeFile();
+    if (!picked) {
+      $("knowledge-hint").textContent = "已取消";
+      return;
+    }
+    const dataClass = $("knowledge-class").value;
+    const result = await window.aegis.importKnowledge(picked.sourcePath, picked.content, dataClass);
+    $("knowledge-hint").textContent = `已入库 ${result.document.title}（${result.document.chunkCount} 块）`;
+    await loadKnowledge();
+  } catch (err) {
+    $("knowledge-hint").textContent = `入库失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-refresh-knowledge").addEventListener("click", () => void loadKnowledge());
+$("btn-search-knowledge").addEventListener("click", () => void searchKnowledge());
+$("knowledge-query").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") void searchKnowledge();
 });
 
 // ── 模型（LLM）设置 ─────────────────────────────────────────────────────

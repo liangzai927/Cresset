@@ -26,6 +26,7 @@
       "@aegis/recurrence": ["packages/recurrence/src/index.ts"],
       "@aegis/skills": ["packages/skills/src/index.ts"],
       "@aegis/monitors": ["packages/monitors/src/index.ts"],
+      "@aegis/knowledge": ["packages/knowledge/src/index.ts"],
       "@aegis/scheduler": ["packages/scheduler/src/index.ts"],
       "@aegis/daemon/ipc-client": ["apps/daemon/src/ipc/client.ts"]
     }

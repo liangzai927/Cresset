@@ -30,6 +30,8 @@ import type {
   DesktopApi,
   DiagnosticInfo,
   DndSettingsView,
+  KnowledgeDocument,
+  KnowledgeHit,
   LlmAuditEntry,
   LlmSettingsView,
   LlmTestResult,
@@ -82,6 +84,28 @@ function buildApi(): DesktopApi {
 
     exportBackup: () => ipcRenderer.invoke("aegis:backup:export") as Promise<BackupExportResult>,
 
+    pickKnowledgeFile: () =>
+      ipcRenderer.invoke("aegis:knowledge:pick") as Promise<{
+        sourcePath: string;
+        content: string;
+      } | null>,
+    importKnowledge: (sourcePath: string, content: string, dataClass: "L0" | "L1" | "L2" | "L3") =>
+      ipcRenderer.invoke("aegis:knowledge:import", { sourcePath, content, dataClass }) as Promise<{
+        document: KnowledgeDocument;
+      }>,
+    listKnowledge: () =>
+      ipcRenderer.invoke("aegis:knowledge:list") as Promise<{ documents: KnowledgeDocument[] }>,
+    searchKnowledge: (query: string) =>
+      ipcRenderer.invoke("aegis:knowledge:search", { query, limit: 10 }) as Promise<{
+        hits: KnowledgeHit[];
+      }>,
+    removeKnowledge: (id: string) =>
+      ipcRenderer.invoke("aegis:knowledge:remove", { id }) as Promise<{ ok: boolean }>,
+    openKnowledgeSource: (sourcePath: string) =>
+      ipcRenderer.invoke("aegis:knowledge:open", { sourcePath }) as Promise<{
+        ok: boolean;
+        error?: string;
+      }>,
     getLlm: () => ipcRenderer.invoke("aegis:llm:get") as Promise<LlmView>,
     getLlmAudit: (limit = 20) =>
       ipcRenderer.invoke("aegis:llm:audit", { limit }) as Promise<{ entries: LlmAuditEntry[] }>,

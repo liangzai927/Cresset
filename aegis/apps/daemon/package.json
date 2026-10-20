@@ -23,7 +23,8 @@
     "@aegis/scheduler": "workspace:*",
     "@aegis/recurrence": "workspace:*",
     "@aegis/skills": "workspace:*",
-    "@aegis/monitors": "workspace:*"
+    "@aegis/monitors": "workspace:*",
+    "@aegis/knowledge": "workspace:*"
   },
   "exports": {
     ".": {
