@@ -519,6 +519,42 @@ main {
   flex: 1;
 }
 
+.knowledge-ask {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.knowledge-ask input {
+  flex: 1;
+  padding: 5px 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.knowledge-answer {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.knowledge-answer .answer-text {
+  padding: 7px 9px;
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  white-space: pre-wrap;
+}
+
+.knowledge-answer .citation-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
 .knowledge-search {
   display: flex;
   gap: 6px;

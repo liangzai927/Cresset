@@ -246,6 +246,25 @@ export interface KnowledgeHit {
   score: number;
 }
 
+/** 知识库问答引用 */
+export interface KnowledgeCitation {
+  chunkId: string;
+  title: string;
+  sourcePath: string;
+  ordinal: number;
+  startOffset: number;
+  endOffset: number;
+}
+
+/** 知识库问答结果 */
+export type KnowledgeAnswerResult =
+  | { ok: true; answer: string; citations: KnowledgeCitation[] }
+  | {
+      ok: false;
+      reason: "no_evidence" | "sensitive" | "blocked" | "budget" | "llm_unavailable" | "invalid_answer";
+      message: string;
+    };
+
 /** 系统健康视图（单位已由 daemon 转好） */
 export interface SystemHealthView {
   at: number;
@@ -363,6 +382,8 @@ export interface DesktopApi {
   listKnowledge(): Promise<{ documents: KnowledgeDocument[] }>;
   /** 检索本地知识库 */
   searchKnowledge(query: string): Promise<{ hits: KnowledgeHit[] }>;
+  /** 基于检索片段 + 模型回答问题；无依据时拒答 */
+  answerKnowledge(question: string): Promise<KnowledgeAnswerResult>;
   /** 删除文档 */
   removeKnowledge(id: string): Promise<{ ok: boolean }>;
   /** 用系统默认程序打开引用来源 */

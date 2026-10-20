@@ -44,6 +44,41 @@ export interface KnowledgeHit {
   score: number;
 }
 
+/** 自然语言问题里的高频停用词；问答检索先剔除它们，避免"是什么"导致零命中 */
+const QUESTION_STOPWORDS = new Set([
+  "的",
+  "了",
+  "是",
+  "吗",
+  "呢",
+  "什",
+  "么",
+  "怎",
+  "样",
+  "如",
+  "何",
+  "为",
+  "请",
+  "介",
+  "绍",
+  "一",
+  "下",
+  "what",
+  "is",
+  "the",
+  "a",
+  "an",
+  "how",
+  "why",
+  "please",
+  "tell",
+  "me",
+  "about",
+  "of",
+  "to",
+  "and",
+]);
+
 /** 分块大小与重叠（字符数） */
 const CHUNK_SIZE = 800;
 const CHUNK_OVERLAP = 100;
@@ -199,7 +234,20 @@ export class KnowledgeBase {
 
   /** 检索；无命中返回空数组（调用方必须走"没找到"路径，不能编） */
   search(query: string, limit = 10): KnowledgeHit[] {
-    const tokens = tokenizeForFts(query);
+    return this.#searchTokens(tokenizeForFts(query), limit);
+  }
+
+  /**
+   * 问答检索：先去掉问题停用词（"是什么/怎么/请"），再按剩余词做 AND。
+   * 这样 "Aegis 是什么" 不会被拆成必须同时出现的 5 个字符。
+   */
+  searchForQuestion(question: string, limit = 10): KnowledgeHit[] {
+    const tokens = tokenizeForFts(question).filter((t) => !QUESTION_STOPWORDS.has(t));
+    return this.#searchTokens(tokens, limit);
+  }
+
+  /** 共用 FTS 查询；空 token 直接返回空，避免 MATCH 空串报错 */
+  #searchTokens(tokens: string[], limit: number): KnowledgeHit[] {
     if (tokens.length === 0) return [];
     const ftsQuery = tokens.map((t) => `"${t.replaceAll('"', '""')}"`).join(" AND ");
     const rows = rowsOf<{

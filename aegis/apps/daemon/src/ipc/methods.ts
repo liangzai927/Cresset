@@ -566,6 +566,15 @@ export function createMethods(
       return { hits: context.knowledge.search(p.query, p.limit) };
     },
 
+    "knowledge.answer": async (params) => {
+      const p = z
+        .object({ question: z.string().min(1).max(2_000) })
+        .strict()
+        .parse(params);
+      if (!context.llm) throw new MethodError(E_INTERNAL, "LLM 服务未初始化");
+      return context.llm.answer(p.question);
+    },
+
     "knowledge.remove": async (params) => {
       const p = z
         .object({ id: z.string().min(1) })

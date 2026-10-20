@@ -146,6 +146,7 @@ async function refreshStatus() {
     "btn-import-knowledge",
     "btn-refresh-knowledge",
     "btn-search-knowledge",
+    "btn-ask-knowledge",
     "btn-monitor-preset",
     "btn-import-skill",
     "btn-install-defaults",
@@ -694,6 +695,55 @@ async function searchKnowledge() {
     $("knowledge-hint").textContent = `检索失败：${err.message}`;
   }
 }
+
+/** 渲染问答结果；拒答必须显示清楚原因，不能给一个看似可信的答案 */
+function renderKnowledgeAnswer(result) {
+  const box = $("knowledge-answer");
+  box.textContent = "";
+  if (!result.ok) {
+    const label =
+      result.reason === "no_evidence"
+        ? "知识库里没有找到依据，无法回答。"
+        : result.reason === "sensitive" || result.reason === "blocked"
+          ? "依据涉及不适合外发的内容，已拒答。"
+          : result.message;
+    box.appendChild(el("div", "hint", label));
+    return;
+  }
+  box.appendChild(el("div", "answer-text", result.answer));
+  const list = el("div", "citation-list");
+  for (const citation of result.citations) {
+    const btn = el("button", "citation", `[${citation.ordinal + 1}] ${citation.title}`);
+    btn.title = citation.sourcePath;
+    btn.addEventListener("click", async () => {
+      const r = await window.aegis.openKnowledgeSource(citation.sourcePath);
+      if (!r.ok) $("knowledge-hint").textContent = `打开失败：${r.error ?? "未知错误"}`;
+    });
+    list.appendChild(btn);
+  }
+  box.appendChild(list);
+}
+
+/** 提问；无证据/模型不可用/被网关拒绝都走明确拒答 */
+async function askKnowledge() {
+  const question = $("knowledge-question").value.trim();
+  if (!question) {
+    $("knowledge-hint").textContent = "请输入问题";
+    return;
+  }
+  $("knowledge-answer").textContent = "思考中…";
+  try {
+    const result = await window.aegis.answerKnowledge(question);
+    renderKnowledgeAnswer(result);
+  } catch (err) {
+    $("knowledge-answer").textContent = `问答失败：${err.message}`;
+  }
+}
+
+$("btn-ask-knowledge").addEventListener("click", () => void askKnowledge());
+$("knowledge-question").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") void askKnowledge();
+});
 
 $("btn-import-knowledge").addEventListener("click", async (e) => {
   const btn = e.currentTarget;

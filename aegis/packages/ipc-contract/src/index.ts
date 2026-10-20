@@ -248,6 +248,37 @@ export const KnowledgeHitSchema = z
   .strict();
 export type KnowledgeHitView = z.infer<typeof KnowledgeHitSchema>;
 
+/** 知识库问答引用 */
+export const KnowledgeCitationSchema = z
+  .object({
+    chunkId: z.string(),
+    title: z.string(),
+    sourcePath: z.string(),
+    ordinal: z.number().int().nonnegative(),
+    startOffset: z.number().int().nonnegative(),
+    endOffset: z.number().int().nonnegative(),
+  })
+  .strict();
+
+/** 知识库问答结果；失败也必须说明原因 */
+export const KnowledgeAnswerResultSchema = z.union([
+  z
+    .object({
+      ok: z.literal(true),
+      answer: z.string(),
+      citations: z.array(KnowledgeCitationSchema),
+    })
+    .strict(),
+  z
+    .object({
+      ok: z.literal(false),
+      reason: z.enum(["no_evidence", "sensitive", "blocked", "budget", "llm_unavailable", "invalid_answer"]),
+      message: z.string(),
+    })
+    .strict(),
+]);
+export type KnowledgeAnswerResultView = z.infer<typeof KnowledgeAnswerResultSchema>;
+
 /** 监测器配置视图；与 daemon config.monitors 的结构一致 */
 export const MonitorConfigViewSchema = z.discriminatedUnion("kind", [
   z

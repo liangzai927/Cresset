@@ -10,6 +10,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { VirtualClock } from "@aegis/clock";
+import { KnowledgeBase } from "@aegis/knowledge";
 import type { SecretAvailability, SecretStore } from "@aegis/secrets";
 import { parseSkill, type SkillDecision } from "@aegis/skills";
 import { AuditRepo, migrate, openDb } from "@aegis/storage";
@@ -41,13 +42,16 @@ let db: ReturnType<typeof openDb>;
 let server: Server;
 let baseUrl: string;
 let chatReply = "OK";
+let chatCalls = 0;
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "aegis-llm-"));
   db = openDb({ file: join(dir, "test.db") });
   migrate(db);
   chatReply = "OK";
+  chatCalls = 0;
   server = createServer((_req, res) => {
+    chatCalls += 1;
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ choices: [{ message: { content: chatReply } }], model: "test-model" }));
   });
@@ -216,6 +220,64 @@ action:
 
     chatReply = "not-json";
     expect(await service.judge(skill, decision, { path: "x" })).toEqual(decision);
+  });
+
+  it("知识库问答只引用检索到的片段", async () => {
+    const knowledge = new KnowledgeBase({ db, now: () => 1_000 });
+    knowledge.ingest({
+      sourcePath: "/tmp/kb.md",
+      title: "项目说明",
+      content: "Aegis 是一个 24 小时常驻的桌面 Agent。",
+      dataClass: "L1",
+    });
+    const service = new LlmService({
+      configFile: join(dir, "config.json"),
+      db,
+      clock: new VirtualClock(1_000),
+      secrets: new MemorySecrets(),
+    });
+    await service.setApiKey("sk-test");
+    chatReply = JSON.stringify({ found: true, answer: "Aegis 是常驻桌面 Agent [1]。", citations: [1] });
+
+    const result = await service.answer("Aegis 是什么");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.answer).toContain("常驻");
+      expect(result.citations[0]).toMatchObject({ title: "项目说明", sourcePath: "/tmp/kb.md" });
+    }
+  });
+
+  it("无检索结果时直接拒答，不调用 Provider", async () => {
+    const service = new LlmService({
+      configFile: join(dir, "config.json"),
+      db,
+      clock: new VirtualClock(1_000),
+      secrets: new MemorySecrets(),
+    });
+    await service.setApiKey("sk-test");
+    const result = await service.answer("完全不存在的问题");
+    expect(result).toMatchObject({ ok: false, reason: "no_evidence" });
+    expect(chatCalls).toBe(0);
+  });
+
+  it("L2 命中在 L1 上限下被网关拒绝，不调用 Provider", async () => {
+    const knowledge = new KnowledgeBase({ db, now: () => 1_000 });
+    knowledge.ingest({
+      sourcePath: "/tmp/secret.md",
+      title: "敏感说明",
+      content: "客户的内部敏感资料。",
+      dataClass: "L2",
+    });
+    const service = new LlmService({
+      configFile: join(dir, "config.json"),
+      db,
+      clock: new VirtualClock(1_000),
+      secrets: new MemorySecrets(),
+    });
+    await service.setApiKey("sk-test");
+    const result = await service.answer("敏感资料");
+    expect(result).toMatchObject({ ok: false, reason: "blocked" });
+    expect(chatCalls).toBe(0);
   });
 
   it("钥匙串读取失败会显示在视图里，而不是假装无 Key", async () => {

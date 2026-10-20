@@ -30,6 +30,7 @@ import type {
   DesktopApi,
   DiagnosticInfo,
   DndSettingsView,
+  KnowledgeAnswerResult,
   KnowledgeDocument,
   KnowledgeHit,
   LlmAuditEntry,
@@ -99,6 +100,8 @@ function buildApi(): DesktopApi {
       ipcRenderer.invoke("aegis:knowledge:search", { query, limit: 10 }) as Promise<{
         hits: KnowledgeHit[];
       }>,
+    answerKnowledge: (question: string) =>
+      ipcRenderer.invoke("aegis:knowledge:answer", { question }) as Promise<KnowledgeAnswerResult>,
     removeKnowledge: (id: string) =>
       ipcRenderer.invoke("aegis:knowledge:remove", { id }) as Promise<{ ok: boolean }>,
     openKnowledgeSource: (sourcePath: string) =>

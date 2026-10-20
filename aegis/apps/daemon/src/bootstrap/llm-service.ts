@@ -9,6 +9,7 @@
  */
 
 import type { Clock } from "@aegis/clock";
+import { KnowledgeBase, type KnowledgeHit } from "@aegis/knowledge";
 import {
   OpenAICompatibleProvider,
   type OutboundAuditRecord,
@@ -42,6 +43,25 @@ export interface LlmView extends LlmSettings {
   remainingCalls: number;
 }
 
+/** 知识库问答的引用 */
+export interface KnowledgeCitation {
+  chunkId: string;
+  title: string;
+  sourcePath: string;
+  ordinal: number;
+  startOffset: number;
+  endOffset: number;
+}
+
+/** 知识库问答结果 */
+export type KnowledgeAnswerResult =
+  | { ok: true; answer: string; citations: KnowledgeCitation[] }
+  | {
+      ok: false;
+      reason: "no_evidence" | "sensitive" | "blocked" | "budget" | "llm_unavailable" | "invalid_answer";
+      message: string;
+    };
+
 /** 测试结果；不返回任何请求细节，只返回安全摘要 */
 export type LlmTestResult =
   | { ok: true; text: string; destination: string }
@@ -68,6 +88,7 @@ export class LlmService {
   readonly #secrets: SecretStore;
   readonly #db: Db;
   readonly #audit: AuditRepo;
+  readonly #knowledge: KnowledgeBase;
 
   constructor(options: LlmServiceOptions) {
     this.#configFile = options.configFile;
@@ -75,6 +96,7 @@ export class LlmService {
     this.#secrets = options.secrets;
     this.#db = options.db;
     this.#audit = new AuditRepo(options.db);
+    this.#knowledge = new KnowledgeBase({ db: options.db, now: () => options.clock.wall() });
   }
 
   /** 读取设置；钥匙串不可用时把错误带到视图里，而不是静默假装没有 key */
@@ -101,6 +123,110 @@ export class LlmService {
   save(settings: LlmSettings): void {
     const current = loadConfig(this.#configFile);
     saveConfig(this.#configFile, { ...current.config, llm: settings });
+  }
+
+  /**
+   * 知识库问答：先本地检索；无依据直接拒答；有依据才经网关让模型回答。
+   *
+   * 所有引用都必须来自检索结果；模型返回的引用编号必须能在本地命中列表中找到，
+   * 否则视为无效回答并拒答（不允许"看起来像引用的伪引用"）。
+   */
+  async answer(question: string): Promise<KnowledgeAnswerResult> {
+    const hits = this.#knowledge.searchForQuestion(question, 6);
+    if (hits.length === 0) {
+      return { ok: false, reason: "no_evidence", message: "知识库里没有找到依据" };
+    }
+    if (hits.some((h) => h.dataClass === "L3")) {
+      return { ok: false, reason: "sensitive", message: "命中的知识包含 L3 内容，不允许外发" };
+    }
+
+    const cfg = loadConfig(this.#configFile).config;
+    if (hits.some((h) => h.dataClass === "L2") && cfg.llm.maxOutboundClass === "L1") {
+      return { ok: false, reason: "blocked", message: "检索结果包含 L2 内容，超过当前外发上限" };
+    }
+    if (!cfg.llm.enabled) {
+      return { ok: false, reason: "llm_unavailable", message: "模型未启用；可以先用检索查看片段" };
+    }
+    const apiKey = await this.#secrets.get(LLM_API_KEY);
+    if (!apiKey) {
+      return { ok: false, reason: "llm_unavailable", message: "未配置 API Key；可以先用检索查看片段" };
+    }
+    let destination: string;
+    try {
+      destination = new URL(cfg.llm.baseUrl).host;
+    } catch {
+      return { ok: false, reason: "llm_unavailable", message: "Base URL 非法" };
+    }
+    if (!this.#consumeCall(cfg.llm.dailyCallLimit, "knowledge.answer")) {
+      return { ok: false, reason: "budget", message: "已达到今日调用上限" };
+    }
+
+    const source = hits.some((h) => h.dataClass === "L2") ? "unknown" : "team-doc";
+    const excerpts = hits
+      .map(
+        (h, i) => `[${i + 1}] id=${h.chunkId}\n来源：${h.sourcePath}#${h.ordinal}\n${h.text.slice(0, 1_200)}`,
+      )
+      .join("\n\n---\n\n");
+    const prompt = [
+      "你是 Aegis 的本地知识库问答助手。",
+      "只能依据下面的片段回答，不得使用外部知识或猜测。",
+      "每个事实必须用 [编号] 标注来源。找不到依据时 found=false。",
+      "只返回 JSON：",
+      '{"found":true|false,"answer":"...","citations":[1,2]}',
+      "",
+      `问题：${question}`,
+      "",
+      "片段：",
+      excerpts,
+    ].join("\n");
+
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: cfg.llm.baseUrl,
+      apiKey,
+      model: cfg.llm.model,
+      timeoutMs: cfg.llm.timeoutMs,
+    });
+    const gateway = new RedactingModelGateway({
+      provider,
+      policy: { maxOutboundClass: cfg.llm.maxOutboundClass },
+      now: () => this.#clock.wall(),
+      audit: (audit) => this.#recordAudit(audit),
+    });
+
+    try {
+      const result = await gateway.complete({
+        actor: "daemon",
+        purpose: "knowledge-answer",
+        destination: `${destination}/${cfg.llm.model}`,
+        payload: prompt,
+        source,
+        model: cfg.llm.model,
+      });
+      const parsed = parseAnswerResponse(result.text);
+      if (!parsed || !parsed.found) {
+        return { ok: false, reason: "no_evidence", message: "知识库里没有找到足够依据" };
+      }
+      const citations = parsed.citations
+        .map((n) => hits[n - 1])
+        .filter((h): h is KnowledgeHit => Boolean(h))
+        .map((h) => ({
+          chunkId: h.chunkId,
+          title: h.title,
+          sourcePath: h.sourcePath,
+          ordinal: h.ordinal,
+          startOffset: h.startOffset,
+          endOffset: h.endOffset,
+        }));
+      if (!parsed.answer.trim() || citations.length === 0) {
+        return { ok: false, reason: "invalid_answer", message: "模型没有给出可验证的引用，已拒答" };
+      }
+      return { ok: true, answer: parsed.answer, citations };
+    } catch (err) {
+      if (err instanceof OutboundBlockedError) {
+        return { ok: false, reason: "blocked", message: err.message };
+      }
+      return { ok: false, reason: "llm_unavailable", message: "模型调用失败，请查看审计" };
+    }
   }
 
   /** 最近外发审计；只返回安全摘要 */
@@ -332,4 +458,26 @@ function parseJudgeResponse(
     body: typeof r.body === "string" ? r.body : "",
     priority,
   };
+}
+
+/** 解析知识库回答 JSON；任何字段不合法都返回 null */
+function parseAnswerResponse(text: string): { found: boolean; answer: string; citations: number[] } | null {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  let raw: unknown;
+  try {
+    raw = JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.found !== "boolean" || typeof r.answer !== "string" || !Array.isArray(r.citations))
+    return null;
+  const citations = r.citations.filter(
+    (n): n is number => typeof n === "number" && Number.isInteger(n) && n > 0,
+  );
+  return { found: r.found, answer: r.answer, citations };
 }

@@ -47,6 +47,7 @@ import type {
   CreateTaskPayload,
   DiagnosticInfo,
   DndSettingsView,
+  KnowledgeAnswerResult,
   KnowledgeDocument,
   KnowledgeHit,
   LlmAuditEntry,
@@ -874,6 +875,11 @@ async function ipcSearchKnowledge(query: string): Promise<{ hits: KnowledgeHit[]
   return (await client.call("knowledge.search", { query, limit: 10 })) as { hits: KnowledgeHit[] };
 }
 
+async function ipcAnswerKnowledge(question: string): Promise<KnowledgeAnswerResult> {
+  const client = await ensureClient();
+  return (await client.call("knowledge.answer", { question })) as KnowledgeAnswerResult;
+}
+
 async function ipcRemoveKnowledge(id: string): Promise<{ ok: boolean }> {
   const client = await ensureClient();
   return (await client.call("knowledge.remove", { id })) as { ok: boolean };
@@ -1278,6 +1284,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:knowledge:remove",
     wrap((p: { id: string }) => ipcRemoveKnowledge(p.id)),
+  );
+  ipcMain.handle(
+    "aegis:knowledge:answer",
+    wrap((p: { question: string }) => ipcAnswerKnowledge(p.question)),
   );
   ipcMain.handle(
     "aegis:knowledge:open",
