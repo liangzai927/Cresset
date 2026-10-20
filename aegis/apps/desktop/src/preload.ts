@@ -95,6 +95,14 @@ function buildApi(): DesktopApi {
         outcome: string;
         error?: string;
       }>,
+    setTelegramToken: (token: string) =>
+      ipcRenderer.invoke("aegis:notify:set-telegram-token", { token }) as Promise<{
+        hasToken: boolean;
+      }>,
+    clearTelegramToken: () =>
+      ipcRenderer.invoke("aegis:notify:clear-telegram-token") as Promise<{ hasToken: boolean }>,
+    testTelegram: () =>
+      ipcRenderer.invoke("aegis:notify:test-telegram") as Promise<{ outcome: string; error?: string }>,
     getBriefing: () => ipcRenderer.invoke("aegis:briefing:get") as Promise<BriefingSettings>,
     setBriefing: (settings: BriefingSettings) =>
       ipcRenderer.invoke("aegis:briefing:set", settings) as Promise<BriefingSettings>,

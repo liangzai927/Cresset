@@ -848,6 +848,21 @@ async function ipcSetNotify(settings: NotifySettings): Promise<NotifySettings> {
   return (await client.call("notify.set", settings)) as NotifySettings;
 }
 
+async function ipcSetTelegramToken(token: string): Promise<{ hasToken: boolean }> {
+  const client = await ensureClient();
+  return (await client.call("notify.setTelegramToken", { token })) as { hasToken: boolean };
+}
+
+async function ipcClearTelegramToken(): Promise<{ hasToken: boolean }> {
+  const client = await ensureClient();
+  return (await client.call("notify.clearTelegramToken", {})) as { hasToken: boolean };
+}
+
+async function ipcTestTelegram(): Promise<{ outcome: string; error?: string }> {
+  const client = await ensureClient();
+  return (await client.call("notify.testTelegram", {})) as { outcome: string; error?: string };
+}
+
 async function ipcTestWebhook(url: string): Promise<{ outcome: string; error?: string }> {
   const client = await ensureClient();
   return (await client.call("notify.testWebhook", { url })) as {
@@ -1309,6 +1324,18 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:notify:test-webhook",
     wrap((p: { url: string }) => ipcTestWebhook(p.url)),
+  );
+  ipcMain.handle(
+    "aegis:notify:set-telegram-token",
+    wrap((p: { token: string }) => ipcSetTelegramToken(p.token)),
+  );
+  ipcMain.handle(
+    "aegis:notify:clear-telegram-token",
+    wrap(() => ipcClearTelegramToken()),
+  );
+  ipcMain.handle(
+    "aegis:notify:test-telegram",
+    wrap(() => ipcTestTelegram()),
   );
   ipcMain.handle(
     "aegis:briefing:get",

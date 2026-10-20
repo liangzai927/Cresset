@@ -150,6 +150,8 @@ async function refreshStatus() {
     "btn-save-briefing",
     "btn-save-webhook",
     "btn-test-webhook",
+    "btn-set-telegram-token",
+    "btn-test-telegram",
     "btn-monitor-preset",
     "btn-import-skill",
     "btn-install-defaults",
@@ -621,6 +623,9 @@ async function loadNotify() {
     notifyChannels = view.channels;
     $("webhook-enabled").checked = view.webhookEnabled;
     $("webhook-url").value = view.webhookUrl ?? "";
+    $("telegram-enabled").checked = view.telegramEnabled === true;
+    $("telegram-chat-id").value = view.telegramChatId ?? "";
+    $("telegram-hint").textContent = view.telegramHasToken ? "已配置 Bot Token" : "未配置 Bot Token";
     $("webhook-hint").textContent = view.webhookEnabled
       ? "已启用；保存后需重启 daemon 生效"
       : "未启用";
@@ -629,28 +634,74 @@ async function loadNotify() {
   }
 }
 
-$("btn-save-webhook").addEventListener("click", async (e) => {
-  const btn = e.currentTarget;
-  const enabled = $("webhook-enabled").checked;
-  const url = $("webhook-url").value.trim();
-  if (enabled && !/^https?:\/\//.test(url)) {
-    $("webhook-hint").textContent = "启用时必须填写 http/https URL";
-    return;
-  }
+/** 构造完整的通知设置；两个保存按钮共用，避免互相覆盖 */
+function readNotifySettings() {
+  const webhookEnabled = $("webhook-enabled").checked;
+  const webhookUrl = $("webhook-url").value.trim();
+  const telegramEnabled = $("telegram-enabled").checked;
+  const telegramChatId = $("telegram-chat-id").value.trim();
+  if (webhookEnabled && !/^https?:\/\//.test(webhookUrl)) throw new Error("启用 Webhook 时必须填写 http/https URL");
+  if (telegramEnabled && !telegramChatId) throw new Error("启用 Telegram 时必须填写 chat_id");
   const channels = new Set(notifyChannels);
-  if (enabled) channels.add("webhook");
+  if (webhookEnabled) channels.add("webhook");
   else channels.delete("webhook");
+  if (telegramEnabled) channels.add("telegram");
+  else channels.delete("telegram");
+  return {
+    channels: [...channels],
+    webhookEnabled,
+    ...(webhookUrl ? { webhookUrl } : {}),
+    telegramEnabled,
+    ...(telegramChatId ? { telegramChatId } : {}),
+  };
+}
+
+/** 保存 Webhook/Telegram 设置；notifier 链需要重启 daemon 重建 */
+async function saveNotifySettings(btn) {
   btn.disabled = true;
   try {
-    const saved = await window.aegis.setNotify({
-      channels: [...channels],
-      webhookEnabled: enabled,
-      ...(url ? { webhookUrl: url } : {}),
-    });
+    const saved = await window.aegis.setNotify(readNotifySettings());
     notifyChannels = saved.channels;
     $("webhook-hint").textContent = "已保存；重启 daemon 后生效";
   } catch (err) {
     $("webhook-hint").textContent = `保存失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$("btn-save-webhook").addEventListener("click", (e) => void saveNotifySettings(e.currentTarget));
+
+$("btn-set-telegram-token").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const input = $("telegram-token");
+  const token = input.value.trim();
+  if (!token) {
+    $("telegram-hint").textContent = "Bot Token 不能为空";
+    return;
+  }
+  btn.disabled = true;
+  try {
+    await window.aegis.setTelegramToken(token);
+    input.value = "";
+    $("telegram-hint").textContent = "Token 已写入钥匙串";
+  } catch (err) {
+    $("telegram-hint").textContent = `保存失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-test-telegram").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $("telegram-hint").textContent = "测试中…";
+  try {
+    const r = await window.aegis.testTelegram();
+    $("telegram-hint").textContent =
+      r.outcome === "success" ? "Telegram 测试成功" : `测试失败：${r.error ?? r.outcome}`;
+  } catch (err) {
+    $("telegram-hint").textContent = `测试失败：${err.message}`;
   } finally {
     btn.disabled = false;
   }

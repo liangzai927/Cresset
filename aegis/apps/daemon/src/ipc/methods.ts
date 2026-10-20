@@ -27,7 +27,7 @@ import {
 } from "@aegis/ipc-contract";
 import type { KnowledgeBase } from "@aegis/knowledge";
 import { SystemMonitor } from "@aegis/monitors";
-import { WebhookNotifier } from "@aegis/platform";
+import { TelegramNotifier, WebhookNotifier } from "@aegis/platform";
 import type { DataPaths } from "@aegis/product";
 import {
   describeRecurrence,
@@ -37,6 +37,7 @@ import {
   validateRecurrenceSpec,
 } from "@aegis/recurrence";
 import type { Scheduler } from "@aegis/scheduler";
+import type { SecretStore } from "@aegis/secrets";
 import { SkillLoadError } from "@aegis/skills";
 import type { AttemptSummary } from "@aegis/storage";
 import { z } from "zod";
@@ -45,6 +46,7 @@ import { loadConfig, type MonitorConfig, MonitorConfigSchema, saveConfig } from 
 import { installDefaultSkills } from "../bootstrap/default-skills.js";
 import type { LlmService } from "../bootstrap/llm-service.js";
 import type { MonitorStatus } from "../bootstrap/monitor-runtime.js";
+import { TELEGRAM_BOT_TOKEN_KEY } from "../bootstrap/notify-secrets.js";
 import {
   deleteSkill,
   importSkill,
@@ -285,6 +287,7 @@ export interface MethodsContext {
   skills?: SkillsMethodsContext;
   llm?: LlmService;
   knowledge?: KnowledgeBase;
+  secrets?: SecretStore;
 }
 
 /** 构造全部 RPC handler。返回对象直接交给 IpcServer 的 `methods` 选项 */
@@ -532,13 +535,22 @@ export function createMethods(
       const configFile = context.backup?.paths.configFile;
       if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
       const notify = loadConfig(configFile).config.notify;
+      let telegramHasToken = false;
+      try {
+        telegramHasToken = Boolean(await context.secrets?.get(TELEGRAM_BOT_TOKEN_KEY));
+      } catch {
+        telegramHasToken = false;
+      }
       return {
         channels: notify.channels.filter(
-          (c): c is "os_notification" | "cli_fallback" | "webhook" =>
-            c === "os_notification" || c === "cli_fallback" || c === "webhook",
+          (c): c is "os_notification" | "cli_fallback" | "webhook" | "telegram" =>
+            c === "os_notification" || c === "cli_fallback" || c === "webhook" || c === "telegram",
         ),
         webhookEnabled: notify.webhook.enabled,
         ...(notify.webhook.url ? { webhookUrl: notify.webhook.url } : {}),
+        telegramEnabled: notify.telegram.enabled,
+        ...(notify.telegram.chatId ? { telegramChatId: notify.telegram.chatId } : {}),
+        telegramHasToken,
       };
     },
 
@@ -547,14 +559,20 @@ export function createMethods(
       if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
       const p = z
         .object({
-          channels: z.array(z.enum(["os_notification", "cli_fallback", "webhook"])),
+          channels: z.array(z.enum(["os_notification", "cli_fallback", "webhook", "telegram"])),
           webhookEnabled: z.boolean(),
           webhookUrl: z.string().max(2_000).optional(),
+          telegramEnabled: z.boolean().default(false),
+          telegramChatId: z.string().max(100).optional(),
+          telegramHasToken: z.boolean().optional(),
         })
         .strict()
         .parse(params);
       if (p.webhookEnabled && !p.webhookUrl) {
         throw new MethodError(E_INVALID_PARAMS, "启用 Webhook 必须填写 URL");
+      }
+      if (p.telegramEnabled && !p.telegramChatId) {
+        throw new MethodError(E_INVALID_PARAMS, "启用 Telegram 必须填写 chatId");
       }
       if (p.webhookUrl) {
         try {
@@ -574,9 +592,52 @@ export function createMethods(
             enabled: p.webhookEnabled,
             ...(p.webhookUrl ? { url: p.webhookUrl } : {}),
           },
+          telegram: {
+            enabled: p.telegramEnabled,
+            ...(p.telegramChatId ? { chatId: p.telegramChatId } : {}),
+          },
         },
       });
       return p;
+    },
+
+    "notify.setTelegramToken": async (params) => {
+      const p = z
+        .object({ token: z.string().min(1).max(500) })
+        .strict()
+        .parse(params);
+      if (!context.secrets) throw new MethodError(E_INTERNAL, "钥匙串未初始化");
+      try {
+        await context.secrets.set(TELEGRAM_BOT_TOKEN_KEY, p.token.trim());
+        return { hasToken: true };
+      } catch (err) {
+        throw new MethodError(E_INTERNAL, `保存 Telegram Token 失败：${(err as Error).message}`);
+      }
+    },
+
+    "notify.clearTelegramToken": async () => {
+      if (!context.secrets) throw new MethodError(E_INTERNAL, "钥匙串未初始化");
+      try {
+        await context.secrets.delete(TELEGRAM_BOT_TOKEN_KEY);
+        return { hasToken: false };
+      } catch (err) {
+        throw new MethodError(E_INTERNAL, `清除 Telegram Token 失败：${(err as Error).message}`);
+      }
+    },
+
+    "notify.testTelegram": async () => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      const cfg = loadConfig(configFile).config;
+      const chatId = cfg.notify.telegram.chatId;
+      if (!chatId) throw new MethodError(E_INVALID_PARAMS, "Telegram chatId 未配置");
+      if (!context.secrets) throw new MethodError(E_INTERNAL, "钥匙串未初始化");
+      const n = new TelegramNotifier({
+        chatId,
+        token: () => context.secrets?.get(TELEGRAM_BOT_TOKEN_KEY) ?? Promise.resolve(null),
+      });
+      const r = await n.send({ title: "Aegis 测试", body: "Telegram 连通性测试" });
+      return { outcome: r.outcome, ...(r.error ? { error: r.error } : {}) };
     },
 
     "notify.testWebhook": async (params) => {

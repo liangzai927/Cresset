@@ -289,9 +289,22 @@
             </label>
             <input id="webhook-url" type="text" placeholder="https://example.com/aegis-hook" />
             <div class="settings-actions">
-              <button class="btn btn-ghost btn-small" id="btn-save-webhook">保存 Webhook</button>
-              <button class="btn btn-ghost btn-small" id="btn-test-webhook">测试</button>
+              <button class="btn btn-ghost btn-small" id="btn-save-webhook">保存通知渠道</button>
+              <button class="btn btn-ghost btn-small" id="btn-test-webhook">测试 Webhook</button>
               <span class="hint" id="webhook-hint"></span>
+            </div>
+          </div>
+          <div class="webhook-config">
+            <label class="dnd-toggle">
+              <input type="checkbox" id="telegram-enabled" />
+              启用 Telegram
+            </label>
+            <input id="telegram-chat-id" type="text" placeholder="Telegram chat_id" />
+            <input id="telegram-token" type="password" placeholder="Bot Token（只写入钥匙串）" autocomplete="off" />
+            <div class="settings-actions">
+              <button class="btn btn-ghost btn-small" id="btn-set-telegram-token">保存 Token</button>
+              <button class="btn btn-ghost btn-small" id="btn-test-telegram">测试 Telegram</button>
+              <span class="hint" id="telegram-hint"></span>
             </div>
           </div>
           <div class="settings-actions">

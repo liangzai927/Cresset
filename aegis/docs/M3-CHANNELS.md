@@ -1,7 +1,7 @@
 # M3：Webhook 通知渠道
 
-> M3 的第一个“离开电脑也能收到”渠道。启用 Webhook 后，桌面与 Webhook
-> 会并行扇出；只有两者都失败才落到 CLI 兜底。
+> M3 的远程渠道：Webhook 与 Telegram。启用后与桌面通知并行扇出；
+> 只有全部失败才落到 CLI 兜底。
 
 ## 配置（UI）
 
@@ -34,17 +34,30 @@
 
 ## 投递语义
 
-当桌面 + Webhook 同时启用时：
+当桌面 + Webhook + Telegram 同时启用时：
 
 ```text
-fanout(os_notification + webhook) → cli_fallback
+fanout(os_notification + webhook + telegram) → cli_fallback
 ```
 
-- 桌面与 Webhook **并行发送**，任一个成功就算投递成功；
-- 两者都失败才使用 CLI 兜底；
+- 所有远程/桌面渠道**并行发送**，任一个成功就算投递成功；
+- 全部失败才使用 CLI 兜底；
 - 如果只启用其中一个，则按普通渠道顺序执行；
 - 2xx = success；5xx/网络/超时 = transient；4xx = permanent；
-- fanout 全失败时，error 里会列出每个子渠道的结果（不含敏感 URL）。
+- fanout 全失败时，error 里会列出每个子渠道的结果（不含敏感 URL/Token）。
+
+## Telegram
+
+设置 → 通知渠道 → Telegram：
+
+- 填 chat_id
+- 填 Bot Token（只写入系统钥匙串）
+- 保存 Token
+- 测试 Telegram（使用已保存的 chat_id + Token）
+- 保存通知渠道
+
+Bot Token 存钥匙串 `com.aegis.credentials / notify.telegram.token`，
+配置、日志、审计里都没有明文。
 
 ## Payload
 

@@ -224,6 +224,9 @@ export const NotifySettingsSchema = z
     channels: z.array(z.enum(["os_notification", "cli_fallback", "webhook"])),
     webhookEnabled: z.boolean(),
     webhookUrl: z.string().max(2_000).optional(),
+    telegramEnabled: z.boolean().default(false),
+    telegramChatId: z.string().max(100).optional(),
+    telegramHasToken: z.boolean().optional(),
   })
   .strict();
 export type NotifySettingsView = z.infer<typeof NotifySettingsSchema>;

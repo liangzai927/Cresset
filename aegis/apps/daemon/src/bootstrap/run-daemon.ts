@@ -28,6 +28,7 @@ import {
   createDesktopChannelSender,
   defaultNotifiers,
   type Notifier,
+  TelegramNotifier,
   WebhookNotifier,
 } from "@aegis/platform";
 import { type DataPaths, KEYCHAIN_SERVICE, resolveDataPaths } from "@aegis/product";
@@ -44,6 +45,7 @@ import { LlmService } from "./llm-service.js";
 import { DaemonLock } from "./lock.js";
 import { buildMonitorBindings } from "./monitor-bindings.js";
 import { MonitorRuntime } from "./monitor-runtime.js";
+import { TELEGRAM_BOT_TOKEN_KEY } from "./notify-secrets.js";
 
 /** daemon 版本；与里程碑对应（发 tag 时同步更新） */
 export const DAEMON_VERSION = "0.2.0-r2";
@@ -449,6 +451,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
             saveMonitors(loadConfig(paths.configFile).config.monitors.filter((m) => m.id !== id)),
         },
         skills: { dataDir: paths.dataDir },
+        secrets: new MacOsKeychain({ service: KEYCHAIN_SERVICE }),
       }),
       /**
        * 关停 daemon。
@@ -615,6 +618,15 @@ function buildNotifiers(cfg: DaemonConfig, paths: DataPaths): Notifier[] {
   if (native) primary.push(native);
   if (enabled.has("webhook") && cfg.notify.webhook.enabled && cfg.notify.webhook.url) {
     primary.push(new WebhookNotifier({ url: cfg.notify.webhook.url }));
+  }
+  if (enabled.has("telegram") && cfg.notify.telegram.enabled && cfg.notify.telegram.chatId) {
+    const keychain = new MacOsKeychain({ service: KEYCHAIN_SERVICE });
+    primary.push(
+      new TelegramNotifier({
+        chatId: cfg.notify.telegram.chatId,
+        token: () => keychain.get(TELEGRAM_BOT_TOKEN_KEY),
+      }),
+    );
   }
 
   // 同时启用桌面 + Webhook 时并行扇出；只有全部失败才落到 CLI。

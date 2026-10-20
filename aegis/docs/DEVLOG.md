@@ -60,6 +60,25 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M3：Telegram 渠道
+**里程碑**：M3
+**改了什么**：
+- 新增 TelegramNotifier：Bot Token 从钥匙串异步读取，不持久化/不写日志；
+- config 增加 notify.telegram（enabled/chatId）；
+- 桌面+Webhook+Telegram 同时启用时组成 fanout，CLI 最后兜底；
+- 设置页增加 Telegram chat_id/Token/测试；
+- Token 存钥匙串 key `notify.telegram.token`；
+- 新增 3 个 Telegram 测试。
+**为什么**：Webhook 需要自建端点；Telegram 给普通用户一个立即可用的远程渠道。
+**验证**：
+- `pnpm verify`：405 通过 / 9 跳过
+- 本机 HTTP server 测试：成功、无 Token、429/400 分类
+- 错误信息不含 Token
+- 打包产物真实启动通过
+**踩到的坑**：Telegram API 把 Bot Token 放在 URL 里；notifier 的错误信息绝不能回显请求 URL。
+**留给下次**：Bark/邮件/TTS、按优先级分流、邮件/日历；
+仍禁止 M4。
+
 ### 2026-10-20 · M3：Webhook 配置界面
 **里程碑**：M3
 **改了什么**：

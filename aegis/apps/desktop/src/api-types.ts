@@ -224,9 +224,12 @@ export type LlmTestResult =
 
 /** 通知渠道设置 */
 export interface NotifySettings {
-  channels: Array<"os_notification" | "cli_fallback" | "webhook">;
+  channels: Array<"os_notification" | "cli_fallback" | "webhook" | "telegram">;
   webhookEnabled: boolean;
   webhookUrl?: string;
+  telegramEnabled?: boolean;
+  telegramChatId?: string;
+  telegramHasToken?: boolean;
 }
 
 /** 每日简报设置 */
@@ -390,6 +393,12 @@ export interface DesktopApi {
   setNotify(settings: NotifySettings): Promise<NotifySettings>;
   /** 发送一次 Webhook 测试 */
   testWebhook(url: string): Promise<{ outcome: string; error?: string }>;
+  /** 保存 Telegram Bot Token 到钥匙串 */
+  setTelegramToken(token: string): Promise<{ hasToken: boolean }>;
+  /** 清除 Telegram Token */
+  clearTelegramToken(): Promise<{ hasToken: boolean }>;
+  /** 发送一次 Telegram 测试消息 */
+  testTelegram(): Promise<{ outcome: string; error?: string }>;
   /** 读取每日简报设置 */
   getBriefing(): Promise<BriefingSettings>;
   /** 保存每日简报设置 */
