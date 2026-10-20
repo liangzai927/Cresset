@@ -192,9 +192,11 @@ pnpm verify                  # 依赖方向门禁 + typecheck + lint + 测试
 | `pnpm verify` | **全量校验（提交前跑这个）**：门禁 → 解析 → 类型 → lint → 测试 → 构建 |
 | `pnpm repo:check` | 单仓库门禁：发现嵌套 `.git` 就失败 |
 | `pnpm acceptance` | R5 自动化门禁；`--full` 额外跑桌面与打包验证 |
+| `pnpm m2:report` | 汇总 M2 7 天验收证据（监测器/Skill/通知/错误） |
 | `aegis monitor scan <目录>` | M2 文件监测 dry-run（glob/ignore，不发通知） |
 | `aegis monitor system` | 打印 CPU/内存/磁盘/uptime 指标（M2 dry-run） |
 | [M2 监测器配置](docs/M2-MONITORS.md) | 文件/系统监测 + Skill 告警的配置方式 |
+| [M2 验收](docs/acceptance/M2.md) | 3 个自建 Skill、7 天稳定性窗口与自动证据 |
 | 设置 → 监测器 | 添加/删除/启停监测器、立即扫描；查看间隔、Skills、通知数与错误 |
 | 设置 → Skills | 导入/导出/删除 YAML Skill，安装示例包；坏文件会显示校验错误 |
 | 顶栏 / 设置 → 系统健康 | 每 5 秒自动刷新 CPU/内存/磁盘；也可手动刷新 |

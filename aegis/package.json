@@ -33,7 +33,8 @@
     "hooks:install": "node tools/install-hooks.mjs",
     "devlog": "node tools/devlog.mjs",
     "devlog:add": "node tools/devlog.mjs add",
-    "devlog:check": "node tools/devlog.mjs check"
+    "devlog:check": "node tools/devlog.mjs check",
+    "m2:report": "node tools/m2-report.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",

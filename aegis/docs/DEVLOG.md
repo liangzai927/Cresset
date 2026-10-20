@@ -60,6 +60,22 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M2：验收证据汇总工具
+**里程碑**：M2（R5 并行观察）
+**改了什么**：
+- 新增 `docs/acceptance/M2.md`：3 个替代任务、7 天窗口与人工判据；
+- 新增 `tools/m2-report.mjs` / `pnpm m2:report`：
+  - 读取 config.monitors 与 skills/ 文件；
+  - 统计 monitor_cooldown 中实际触发过的 Skill；
+  - 统计 monitor/failure 通知、monitor 错误日志、heartbeat 覆盖与运行缺口；
+  - 输出 docs/acceptance/m2-report.md（本机证据，已忽略）。
+**为什么**：用户没有时间手工记 7 天；M2 验收必须能像 R5 一样用自动证据降低负担。
+**验证**：
+- `pnpm verify`：366 通过 / 9 跳过
+- 当前真实数据目录运行 `pnpm m2:report`，正确报告 0 个监测器/0 个触发 Skill，并提示窗口还剩 6 天
+**踩到的坑**：报告必须区分"配置了"与"实际触发过"；只看 config 会把从未运行的 Skill 当成已验收。
+**留给下次**：用户配置 3 个 Skill 并运行满 7 天后，按 M2.md 人工确认；仍禁止 M3。
+
 ### 2026-10-20 · M2：Skill 导出与默认技能包
 **里程碑**：M2（R5 并行观察）
 **改了什么**：
