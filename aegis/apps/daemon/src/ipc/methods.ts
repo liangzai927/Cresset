@@ -27,7 +27,7 @@ import {
 } from "@aegis/ipc-contract";
 import type { KnowledgeBase } from "@aegis/knowledge";
 import { SystemMonitor } from "@aegis/monitors";
-import { BarkNotifier, TelegramNotifier, TtsNotifier, WebhookNotifier } from "@aegis/platform";
+import { BarkNotifier, EmailNotifier, TelegramNotifier, TtsNotifier, WebhookNotifier } from "@aegis/platform";
 import type { DataPaths } from "@aegis/product";
 import {
   describeRecurrence,
@@ -46,7 +46,7 @@ import { loadConfig, type MonitorConfig, MonitorConfigSchema, saveConfig } from 
 import { installDefaultSkills } from "../bootstrap/default-skills.js";
 import type { LlmService } from "../bootstrap/llm-service.js";
 import type { MonitorStatus } from "../bootstrap/monitor-runtime.js";
-import { BARK_DEVICE_KEY, TELEGRAM_BOT_TOKEN_KEY } from "../bootstrap/notify-secrets.js";
+import { BARK_DEVICE_KEY, EMAIL_PASSWORD_KEY, TELEGRAM_BOT_TOKEN_KEY } from "../bootstrap/notify-secrets.js";
 import {
   deleteSkill,
   importSkill,
@@ -559,12 +559,15 @@ export function createMethods(
       const notify = loadConfig(configFile).config.notify;
       let telegramHasToken = false;
       let barkHasToken = false;
+      let emailHasPassword = false;
       try {
         telegramHasToken = Boolean(await context.secrets?.get(TELEGRAM_BOT_TOKEN_KEY));
         barkHasToken = Boolean(await context.secrets?.get(BARK_DEVICE_KEY));
+        emailHasPassword = Boolean(await context.secrets?.get(EMAIL_PASSWORD_KEY));
       } catch {
         telegramHasToken = false;
         barkHasToken = false;
+        emailHasPassword = false;
       }
       return {
         channels: notify.channels.filter(
@@ -590,6 +593,14 @@ export function createMethods(
         routingLow: notify.routing.low ?? [],
         routingNormal: notify.routing.normal ?? [],
         routingHigh: notify.routing.high ?? [],
+        emailEnabled: notify.email.enabled,
+        ...(notify.email.host ? { emailHost: notify.email.host } : {}),
+        emailPort: notify.email.port,
+        emailSecure: notify.email.secure,
+        ...(notify.email.from ? { emailFrom: notify.email.from } : {}),
+        ...(notify.email.to ? { emailTo: notify.email.to } : {}),
+        ...(notify.email.user ? { emailUser: notify.email.user } : {}),
+        emailHasPassword,
       };
     },
 
@@ -599,7 +610,7 @@ export function createMethods(
       const p = z
         .object({
           channels: z.array(
-            z.enum(["os_notification", "cli_fallback", "webhook", "telegram", "bark", "tts"]),
+            z.enum(["os_notification", "cli_fallback", "webhook", "telegram", "bark", "tts", "email"]),
           ),
           webhookEnabled: z.boolean(),
           webhookUrl: z.string().max(2_000).optional(),
@@ -612,16 +623,31 @@ export function createMethods(
           ttsEnabled: z.boolean().default(false),
           ttsVoice: z.string().max(100).optional(),
           routingEnabled: z.boolean().default(false),
-          routingLow: z.array(z.enum(["os_notification", "webhook", "telegram", "bark", "tts"])).default([]),
-          routingNormal: z
-            .array(z.enum(["os_notification", "webhook", "telegram", "bark", "tts"]))
+          routingLow: z
+            .array(z.enum(["os_notification", "webhook", "telegram", "bark", "tts", "email"]))
             .default([]),
-          routingHigh: z.array(z.enum(["os_notification", "webhook", "telegram", "bark", "tts"])).default([]),
+          routingNormal: z
+            .array(z.enum(["os_notification", "webhook", "telegram", "bark", "tts", "email"]))
+            .default([]),
+          routingHigh: z
+            .array(z.enum(["os_notification", "webhook", "telegram", "bark", "tts", "email"]))
+            .default([]),
+          emailEnabled: z.boolean().default(false),
+          emailHost: z.string().max(255).optional(),
+          emailPort: z.number().int().min(1).max(65_535).default(465),
+          emailSecure: z.boolean().default(true),
+          emailFrom: z.string().max(320).optional(),
+          emailTo: z.string().max(320).optional(),
+          emailUser: z.string().max(255).optional(),
+          emailHasPassword: z.boolean().optional(),
         })
         .strict()
         .parse(params);
       if (p.webhookEnabled && !p.webhookUrl) {
         throw new MethodError(E_INVALID_PARAMS, "启用 Webhook 必须填写 URL");
+      }
+      if (p.emailEnabled && (!p.emailHost || !p.emailFrom || !p.emailTo)) {
+        throw new MethodError(E_INVALID_PARAMS, "启用邮件时必须填写 SMTP host/from/to");
       }
       if (p.telegramEnabled && !p.telegramChatId) {
         throw new MethodError(E_INVALID_PARAMS, "启用 Telegram 必须填写 chatId");
@@ -655,6 +681,15 @@ export function createMethods(
           tts: {
             enabled: p.ttsEnabled,
             ...(p.ttsVoice ? { voice: p.ttsVoice } : {}),
+          },
+          email: {
+            enabled: p.emailEnabled,
+            ...(p.emailHost ? { host: p.emailHost } : {}),
+            port: p.emailPort,
+            secure: p.emailSecure,
+            ...(p.emailFrom ? { from: p.emailFrom } : {}),
+            ...(p.emailTo ? { to: p.emailTo } : {}),
+            ...(p.emailUser ? { user: p.emailUser } : {}),
           },
           routing: {
             enabled: p.routingEnabled,
@@ -728,6 +763,51 @@ export function createMethods(
       } catch (err) {
         throw new MethodError(E_INTERNAL, `清除 Bark Key 失败：${(err as Error).message}`);
       }
+    },
+
+    "notify.setEmailPassword": async (params) => {
+      const p = z
+        .object({ password: z.string().min(1).max(500) })
+        .strict()
+        .parse(params);
+      if (!context.secrets) throw new MethodError(E_INTERNAL, "钥匙串未初始化");
+      try {
+        await context.secrets.set(EMAIL_PASSWORD_KEY, p.password);
+        return { hasPassword: true };
+      } catch (err) {
+        throw new MethodError(E_INTERNAL, `保存 SMTP 密码失败：${(err as Error).message}`);
+      }
+    },
+
+    "notify.clearEmailPassword": async () => {
+      if (!context.secrets) throw new MethodError(E_INTERNAL, "钥匙串未初始化");
+      try {
+        await context.secrets.delete(EMAIL_PASSWORD_KEY);
+        return { hasPassword: false };
+      } catch (err) {
+        throw new MethodError(E_INTERNAL, `清除 SMTP 密码失败：${(err as Error).message}`);
+      }
+    },
+
+    "notify.testEmail": async () => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      if (!context.secrets) throw new MethodError(E_INTERNAL, "钥匙串未初始化");
+      const email = loadConfig(configFile).config.notify.email;
+      if (!email.host || !email.from || !email.to) {
+        throw new MethodError(E_INVALID_PARAMS, "SMTP host/from/to 未配置");
+      }
+      const n = new EmailNotifier({
+        host: email.host,
+        port: email.port,
+        secure: email.secure,
+        from: email.from,
+        to: email.to,
+        ...(email.user ? { user: email.user } : {}),
+        password: () => context.secrets?.get(EMAIL_PASSWORD_KEY) ?? Promise.resolve(null),
+      });
+      const r = await n.send({ title: "Aegis 测试", body: "邮件连通性测试" });
+      return { outcome: r.outcome, ...(r.error ? { error: r.error } : {}) };
     },
 
     "notify.testTts": async () => {

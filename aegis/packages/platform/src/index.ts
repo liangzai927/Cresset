@@ -40,7 +40,8 @@ export interface Notifier {
     | "bark"
     | "tts"
     | "fanout"
-    | "routing";
+    | "routing"
+    | "email";
   /** 是否可用（权限、依赖是否存在） */
   probe(): Promise<{ ok: boolean; detail: string }>;
   send(payload: NotifyPayload): Promise<{ outcome: ChannelOutcome; error?: string }>;
@@ -61,6 +62,7 @@ export * from "./autostart.js";
 export * from "./bark-notifier.js";
 export * from "./composite-notifier.js";
 export * from "./desktop-channel.js";
+export * from "./email-notifier.js";
 export * from "./macos-notifier.js";
 export * from "./routing-notifier.js";
 export * from "./telegram-notifier.js";

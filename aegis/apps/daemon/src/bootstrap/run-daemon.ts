@@ -28,6 +28,7 @@ import {
   CompositeNotifier,
   createDesktopChannelSender,
   defaultNotifiers,
+  EmailNotifier,
   type Notifier,
   RoutingNotifier,
   TelegramNotifier,
@@ -48,7 +49,7 @@ import { LlmService } from "./llm-service.js";
 import { DaemonLock } from "./lock.js";
 import { buildMonitorBindings } from "./monitor-bindings.js";
 import { MonitorRuntime } from "./monitor-runtime.js";
-import { BARK_DEVICE_KEY, TELEGRAM_BOT_TOKEN_KEY } from "./notify-secrets.js";
+import { BARK_DEVICE_KEY, EMAIL_PASSWORD_KEY, TELEGRAM_BOT_TOKEN_KEY } from "./notify-secrets.js";
 
 /** daemon 版本；与里程碑对应（发 tag 时同步更新） */
 export const DAEMON_VERSION = "0.2.0-r2";
@@ -634,6 +635,26 @@ function buildNotifiers(cfg: DaemonConfig, paths: DataPaths): Notifier[] {
   if (enabled.has("tts") && cfg.notify.tts.enabled) {
     primary.push(new TtsNotifier({ ...(cfg.notify.tts.voice ? { voice: cfg.notify.tts.voice } : {}) }));
   }
+  if (
+    enabled.has("email") &&
+    cfg.notify.email.enabled &&
+    cfg.notify.email.host &&
+    cfg.notify.email.from &&
+    cfg.notify.email.to
+  ) {
+    const keychain = new MacOsKeychain({ service: KEYCHAIN_SERVICE });
+    primary.push(
+      new EmailNotifier({
+        host: cfg.notify.email.host,
+        port: cfg.notify.email.port,
+        secure: cfg.notify.email.secure,
+        from: cfg.notify.email.from,
+        to: cfg.notify.email.to,
+        ...(cfg.notify.email.user ? { user: cfg.notify.email.user } : {}),
+        password: () => keychain.get(EMAIL_PASSWORD_KEY),
+      }),
+    );
+  }
   if (enabled.has("telegram") && cfg.notify.telegram.enabled && cfg.notify.telegram.chatId) {
     const keychain = new MacOsKeychain({ service: KEYCHAIN_SERVICE });
     primary.push(
@@ -668,6 +689,24 @@ function buildNotifiers(cfg: DaemonConfig, paths: DataPaths): Notifier[] {
     if (enabled.has("tts") && cfg.notify.tts.enabled) {
       map.tts = new TtsNotifier({
         ...(cfg.notify.tts.voice ? { voice: cfg.notify.tts.voice } : {}),
+      });
+    }
+    if (
+      enabled.has("email") &&
+      cfg.notify.email.enabled &&
+      cfg.notify.email.host &&
+      cfg.notify.email.from &&
+      cfg.notify.email.to
+    ) {
+      const keychain = new MacOsKeychain({ service: KEYCHAIN_SERVICE });
+      map.email = new EmailNotifier({
+        host: cfg.notify.email.host,
+        port: cfg.notify.email.port,
+        secure: cfg.notify.email.secure,
+        from: cfg.notify.email.from,
+        to: cfg.notify.email.to,
+        ...(cfg.notify.email.user ? { user: cfg.notify.email.user } : {}),
+        password: () => keychain.get(EMAIL_PASSWORD_KEY),
       });
     }
     const choose = (names: string[] | undefined): Notifier[] => {

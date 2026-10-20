@@ -12,7 +12,11 @@
     }
   },
   "dependencies": {
+    "@aegis/clock": "workspace:*",
     "@aegis/contracts": "workspace:*",
-    "@aegis/clock": "workspace:*"
+    "nodemailer": "^10.1.7"
+  },
+  "devDependencies": {
+    "@types/nodemailer": "^8.0.2"
   }
 }

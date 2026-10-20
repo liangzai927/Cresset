@@ -144,6 +144,13 @@ importers:
       '@aegis/contracts':
         specifier: workspace:*
         version: link:../contracts
+      nodemailer:
+        specifier: ^10.1.7
+        version: 10.1.7
+    devDependencies:
+      '@types/nodemailer':
+        specifier: ^8.0.2
+        version: 8.0.2
 
   packages/product: {}
 
@@ -608,6 +615,9 @@ packages:
   '@types/node@24.19.2':
     resolution: {integrity: sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ==}
 
+  '@types/nodemailer@8.0.2':
+    resolution: {integrity: sha512-c7M5ox8p0nEOfbJ2E9Qcmt8/QCu/VzsiAhzBiZbvky2PhKZDHpKB3sQHBM5MEZNkCfBOaS6S9//AGPRTNB7IaA==}
+
   '@vitest/expect@3.2.7':
     resolution: {integrity: sha512-E8eBXaKibuvH2pSZErOjdVb5vF4PbKYcrnluBTYxEk1l/VhhwZg1kZQsdtjq+CsF5CFydf2Rdkz7jDHKSisi3w==}
 
@@ -773,6 +783,10 @@ packages:
 
   node-html-parser@9.0.4:
     resolution: {integrity: sha512-reUSrZkF1rO7hEYe5mJwtbVcQ6mB5QrViCZH6Wv+iz3er/PA9Q50gol15dMLQRDfdli4VzqPMPR24HNRFgVKFw==}
+
+  nodemailer@10.1.7:
+    resolution: {integrity: sha512-OQa6FDln5fLttmqSbjDiRYvFDOFNrBqfiOwHPlEbURil3b+vPB1v8xpi+Sp46drzNDlsTnNsS502vthmz56r4w==}
+    engines: {node: '>=20.0.0'}
 
   nth-check@2.0.1:
     resolution: {integrity: sha512-it1vE95zF6dTT9lBsYbxvqh0Soy4SPowchj0UBGj/V6cTPnXXtQOPUbhZ6CmGzAD/rW22LQK6E96pcdJXk4A4w==}
@@ -1206,6 +1220,10 @@ snapshots:
     dependencies:
       undici-types: 7.24.6
 
+  '@types/nodemailer@8.0.2':
+    dependencies:
+      '@types/node': 24.19.2
+
   '@vitest/expect@3.2.7':
     dependencies:
       '@types/chai': 5.2.3
@@ -1394,6 +1412,8 @@ snapshots:
     dependencies:
       css-select: 5.1.0
       entities: 8.1.0
+
+  nodemailer@10.1.7: {}
 
   nth-check@2.0.1:
     dependencies:

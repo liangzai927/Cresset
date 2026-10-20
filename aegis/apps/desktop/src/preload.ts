@@ -116,6 +116,14 @@ function buildApi(): DesktopApi {
       ipcRenderer.invoke("aegis:notify:test-bark") as Promise<{ outcome: string; error?: string }>,
     testTts: () =>
       ipcRenderer.invoke("aegis:notify:test-tts") as Promise<{ outcome: string; error?: string }>,
+    setEmailPassword: (password: string) =>
+      ipcRenderer.invoke("aegis:notify:set-email-password", { password }) as Promise<{
+        hasPassword: boolean;
+      }>,
+    clearEmailPassword: () =>
+      ipcRenderer.invoke("aegis:notify:clear-email-password") as Promise<{ hasPassword: boolean }>,
+    testEmail: () =>
+      ipcRenderer.invoke("aegis:notify:test-email") as Promise<{ outcome: string; error?: string }>,
     getBriefing: () => ipcRenderer.invoke("aegis:briefing:get") as Promise<BriefingSettings>,
     setBriefing: (settings: BriefingSettings) =>
       ipcRenderer.invoke("aegis:briefing:set", settings) as Promise<BriefingSettings>,

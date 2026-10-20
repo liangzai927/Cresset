@@ -157,6 +157,8 @@ async function refreshStatus() {
     "btn-set-bark-token",
     "btn-test-bark",
     "btn-test-tts",
+    "btn-set-email-password",
+    "btn-test-email",
     "routing-enabled",
     "btn-monitor-preset",
     "btn-import-skill",
@@ -672,6 +674,7 @@ const ROUTING_CHANNELS = [
   { id: "telegram", label: "Telegram" },
   { id: "bark", label: "Bark" },
   { id: "tts", label: "语音" },
+  { id: "email", label: "邮件" },
 ];
 const ROUTING_LEVELS = [
   { id: "low", label: "低" },
@@ -719,6 +722,14 @@ async function loadNotify() {
     $("bark-enabled").checked = view.barkEnabled === true;
     $("bark-server-url").value = view.barkServerUrl ?? "https://api.day.app";
     $("bark-hint").textContent = view.barkHasToken ? "已配置 Device Key" : "未配置 Device Key";
+    $("email-enabled").checked = view.emailEnabled === true;
+    $("email-host").value = view.emailHost ?? "";
+    $("email-port").value = String(view.emailPort ?? 465);
+    $("email-secure").checked = view.emailSecure !== false;
+    $("email-from").value = view.emailFrom ?? "";
+    $("email-to").value = view.emailTo ?? "";
+    $("email-user").value = view.emailUser ?? "";
+    $("email-hint").textContent = view.emailHasPassword ? "已配置 SMTP 密码" : "未配置 SMTP 密码";
     $("tts-enabled").checked = view.ttsEnabled === true;
     $("tts-voice").value = view.ttsVoice ?? "";
     $("tts-hint").textContent = view.ttsEnabled ? "已启用" : "未启用";
@@ -752,10 +763,23 @@ function readNotifySettings() {
   const barkServerUrl = $("bark-server-url").value.trim() || "https://api.day.app";
   const ttsEnabled = $("tts-enabled").checked;
   const ttsVoice = $("tts-voice").value.trim();
+  const emailEnabled = $("email-enabled").checked;
+  const emailHost = $("email-host").value.trim();
+  const emailPort = Number($("email-port").value);
+  const emailSecure = $("email-secure").checked;
+  const emailFrom = $("email-from").value.trim();
+  const emailTo = $("email-to").value.trim();
+  const emailUser = $("email-user").value.trim();
   const routingEnabled = $("routing-enabled").checked;
   if (webhookEnabled && !/^https?:\/\//.test(webhookUrl)) throw new Error("启用 Webhook 时必须填写 http/https URL");
   if (telegramEnabled && !telegramChatId) throw new Error("启用 Telegram 时必须填写 chat_id");
   if (barkEnabled && !/^https?:\/\//.test(barkServerUrl)) throw new Error("Bark 服务地址必须是 http/https");
+  if (emailEnabled && (!emailHost || !emailFrom || !emailTo)) {
+    throw new Error("启用邮件时必须填写 SMTP host/from/to");
+  }
+  if (!Number.isInteger(emailPort) || emailPort < 1 || emailPort > 65535) {
+    throw new Error("SMTP 端口必须是 1-65535");
+  }
   const channels = new Set(notifyChannels);
   if (webhookEnabled) channels.add("webhook");
   else channels.delete("webhook");
@@ -765,6 +789,8 @@ function readNotifySettings() {
   else channels.delete("bark");
   if (ttsEnabled) channels.add("tts");
   else channels.delete("tts");
+  if (emailEnabled) channels.add("email");
+  else channels.delete("email");
   return {
     channels: [...channels],
     webhookEnabled,
@@ -775,6 +801,13 @@ function readNotifySettings() {
     barkServerUrl,
     ttsEnabled,
     ...(ttsVoice ? { ttsVoice } : {}),
+    emailEnabled,
+    ...(emailHost ? { emailHost } : {}),
+    emailPort,
+    emailSecure,
+    ...(emailFrom ? { emailFrom } : {}),
+    ...(emailTo ? { emailTo } : {}),
+    ...(emailUser ? { emailUser } : {}),
     routingEnabled,
     routingLow: routingChecked("low"),
     routingNormal: routingChecked("normal"),
@@ -814,6 +847,43 @@ $("btn-test-tts").addEventListener("click", async (e) => {
       r.outcome === "success" ? "播报成功" : `测试失败：${r.error ?? r.outcome}`;
   } catch (err) {
     $("tts-hint").textContent = `测试失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-set-email-password").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const input = $("email-password");
+  const password = input.value.trim();
+  if (!password) {
+    $("email-hint").textContent = "SMTP 密码不能为空";
+    return;
+  }
+  btn.disabled = true;
+  try {
+    await window.aegis.setEmailPassword(password);
+    input.value = "";
+    $("email-hint").textContent = "SMTP 密码已写入钥匙串";
+  } catch (err) {
+    $("email-hint").textContent = `保存失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-test-email").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $("email-hint").textContent = "发送测试邮件中…";
+  try {
+    const saved = await window.aegis.setNotify(readNotifySettings());
+    notifyChannels = saved.channels;
+    const r = await window.aegis.testEmail();
+    $("email-hint").textContent =
+      r.outcome === "success" ? "测试邮件已发送" : `测试失败：${r.error ?? r.outcome}`;
+  } catch (err) {
+    $("email-hint").textContent = `测试失败：${err.message}`;
   } finally {
     btn.disabled = false;
   }

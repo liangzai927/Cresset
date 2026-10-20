@@ -893,6 +893,21 @@ async function ipcClearBarkToken(): Promise<{ hasToken: boolean }> {
   return (await client.call("notify.clearBarkToken", {})) as { hasToken: boolean };
 }
 
+async function ipcSetEmailPassword(password: string): Promise<{ hasPassword: boolean }> {
+  const client = await ensureClient();
+  return (await client.call("notify.setEmailPassword", { password })) as { hasPassword: boolean };
+}
+
+async function ipcClearEmailPassword(): Promise<{ hasPassword: boolean }> {
+  const client = await ensureClient();
+  return (await client.call("notify.clearEmailPassword", {})) as { hasPassword: boolean };
+}
+
+async function ipcTestEmail(): Promise<{ outcome: string; error?: string }> {
+  const client = await ensureClient();
+  return (await client.call("notify.testEmail", {})) as { outcome: string; error?: string };
+}
+
 async function ipcTestTts(): Promise<{ outcome: string; error?: string }> {
   const client = await ensureClient();
   return (await client.call("notify.testTts", {})) as { outcome: string; error?: string };
@@ -1409,6 +1424,18 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:notify:test-tts",
     wrap(() => ipcTestTts()),
+  );
+  ipcMain.handle(
+    "aegis:notify:set-email-password",
+    wrap((p: { password: string }) => ipcSetEmailPassword(p.password)),
+  );
+  ipcMain.handle(
+    "aegis:notify:clear-email-password",
+    wrap(() => ipcClearEmailPassword()),
+  );
+  ipcMain.handle(
+    "aegis:notify:test-email",
+    wrap(() => ipcTestEmail()),
   );
   ipcMain.handle(
     "aegis:briefing:get",

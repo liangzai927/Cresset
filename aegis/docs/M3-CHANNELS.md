@@ -37,7 +37,7 @@
 当桌面 + Webhook + Telegram 同时启用时：
 
 ```text
-fanout(os_notification + webhook + telegram + bark + tts) → cli_fallback
+fanout(os_notification + webhook + telegram + bark + tts + email) → cli_fallback
 ```
 
 - 所有远程/桌面渠道**并行发送**，任一个成功就算投递成功；
@@ -70,6 +70,18 @@ Bot Token 存钥匙串 `com.aegis.credentials / notify.telegram.token`，
 - 保存通知渠道
 
 Device Key 存钥匙串 `com.aegis.credentials / notify.bark.deviceKey`。
+
+## SMTP 邮件
+
+设置 → 通知渠道 → 邮件：
+
+- SMTP host / port / TLS
+- 发件人 / 收件人 / 用户名
+- SMTP 密码（只写入系统钥匙串）
+- 保存密码 → 测试邮件
+
+密码存钥匙串 `com.aegis.credentials / notify.email.password`。
+SMTP 只用于**发通知**，不读取收件箱。
 
 ## 按优先级分流
 

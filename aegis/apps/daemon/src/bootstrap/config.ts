@@ -102,6 +102,17 @@ export const DaemonConfigSchema = z
             voice: z.string().max(100).optional(),
           })
           .default({}),
+        email: z
+          .object({
+            enabled: z.boolean().default(false),
+            host: z.string().max(255).optional(),
+            port: z.number().int().min(1).max(65_535).default(465),
+            secure: z.boolean().default(true),
+            from: z.string().max(320).optional(),
+            to: z.string().max(320).optional(),
+            user: z.string().max(255).optional(),
+          })
+          .default({}),
         /** 按优先级分流；未启用时保持 fanout */
         routing: z
           .object({

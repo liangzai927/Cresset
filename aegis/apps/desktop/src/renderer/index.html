@@ -320,6 +320,27 @@
           </div>
           <div class="webhook-config">
             <label class="dnd-toggle">
+              <input type="checkbox" id="email-enabled" />
+              启用邮件（SMTP）
+            </label>
+            <input id="email-host" type="text" placeholder="SMTP host，例如 smtp.example.com" />
+            <input id="email-port" type="number" placeholder="465" min="1" max="65535" />
+            <label class="dnd-toggle">
+              <input type="checkbox" id="email-secure" />
+              使用 TLS（465 通常勾选）
+            </label>
+            <input id="email-from" type="text" placeholder="发件人 aegis@example.com" />
+            <input id="email-to" type="text" placeholder="收件人 me@example.com" />
+            <input id="email-user" type="text" placeholder="SMTP 用户名（可选）" />
+            <input id="email-password" type="password" placeholder="SMTP 密码（只写入钥匙串）" autocomplete="off" />
+            <div class="settings-actions">
+              <button class="btn btn-ghost btn-small" id="btn-set-email-password">保存密码</button>
+              <button class="btn btn-ghost btn-small" id="btn-test-email">测试邮件</button>
+              <span class="hint" id="email-hint"></span>
+            </div>
+          </div>
+          <div class="webhook-config">
+            <label class="dnd-toggle">
               <input type="checkbox" id="tts-enabled" />
               启用语音播报（macOS say）
             </label>

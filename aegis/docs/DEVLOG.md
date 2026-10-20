@@ -60,6 +60,25 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M3：SMTP 邮件渠道
+**里程碑**：M3
+**改了什么**：
+- 新增 EmailNotifier：nodemailer、纯文本邮件、密码从钥匙串异步读取；
+- config 增加 notify.email（SMTP host/port/TLS/from/to/user）；
+- 桌面/远程/邮件/TTS 同时启用时组成 fanout；
+- 设置页增加 SMTP 配置、密码、测试邮件；
+- 新增 3 个 EmailNotifier 测试（注入 transport，不发真实邮件）。
+**为什么**：M3 要求“离开电脑也能收到”，邮件是最后一种通用远程渠道。
+**验证**：
+- `pnpm verify`：420 通过 / 9 跳过
+- 成功发送、无密码、EAUTH、ETIMEDOUT 分类
+- 错误信息不含密码
+- 打包产物真实启动通过
+**依赖**：新增 nodemailer；构建时打包进 daemon，包体积 431MB。
+**注意**：只发通知，不读取收件箱；“重要邮件监测”仍待做。
+**留给下次**：IMAP 邮件读取、PDF/Word、M3 验收报告；
+仍禁止 M4。
+
 ### 2026-10-20 · M3：本地 ICS 日历
 **里程碑**：M3
 **改了什么**：
