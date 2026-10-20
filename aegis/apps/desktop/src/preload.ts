@@ -76,6 +76,11 @@ function buildApi(): DesktopApi {
     getDnd: () => ipcRenderer.invoke("aegis:dnd:get") as Promise<DndSettingsView>,
     setDnd: (settings: DndSettingsView) =>
       ipcRenderer.invoke("aegis:dnd:set", settings) as Promise<{ ok: boolean }>,
+    openNotificationSettings: () =>
+      ipcRenderer.invoke("aegis:notifications:open-settings") as Promise<{
+        ok: boolean;
+        detail: string;
+      }>,
 
     // ── 全局控制 ──────────────────────────────────────────────────────
     pauseAll: () => ipcRenderer.invoke("aegis:ctrl:pauseAll") as Promise<{ ok: boolean }>,

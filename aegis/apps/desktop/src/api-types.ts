@@ -220,6 +220,8 @@ export interface DesktopApi {
   getDnd(): Promise<DndSettingsView>;
   /** 保存免打扰设置；daemon 会持久化到 config.json 并立即影响后续派发 */
   setDnd(settings: DndSettingsView): Promise<{ ok: boolean }>;
+  /** 打开 macOS 系统通知设置（权限引导） */
+  openNotificationSettings(): Promise<{ ok: boolean; detail: string }>;
   /** 选择目录并导出备份；路径由主进程对话框决定，renderer 不能传任意路径 */
   exportBackup(): Promise<BackupExportResult>;
 

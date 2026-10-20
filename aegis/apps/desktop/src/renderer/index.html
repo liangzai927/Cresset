@@ -92,6 +92,19 @@
             按顺序尝试；上面的失败时自动用下面的兜底。
           </p>
           <ul class="channel-list" id="channel-list"></ul>
+          <div class="settings-actions">
+            <button class="btn btn-ghost" id="btn-open-notification-settings">打开系统通知设置</button>
+            <span class="hint">若被系统拒绝，先在通知设置里允许 Aegis；未签名版本仍可能被拒绝。</span>
+          </div>
+        </div>
+
+        <div class="settings-group">
+          <h2>启动</h2>
+          <label class="dnd-toggle">
+            <input type="checkbox" id="autostart-enabled" />
+            开机自启后台服务
+          </label>
+          <p class="hint" id="autostart-hint">读取中…</p>
         </div>
 
         <div class="settings-group">

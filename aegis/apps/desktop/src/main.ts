@@ -805,6 +805,25 @@ async function ipcControl(pause: boolean): Promise<{ ok: boolean }> {
  * 这里刻意返回 `available: false` 并在 message 里说明，
  * 而不是假装"已是最新" —— 诚实的空实现比错误的实现好。
  */
+async function ipcOpenNotificationSettings(): Promise<{ ok: boolean; detail: string }> {
+  if (process.platform !== "darwin") return { ok: false, detail: "仅 macOS 支持系统通知设置跳转" };
+  // Ventura+ 使用 Notifications-Settings.extension；旧系统回退到 preference pane。
+  const urls = [
+    "x-apple.systempreferences:com.apple.Notifications-Settings.extension",
+    "x-apple.systempreferences:com.apple.preference.notifications",
+  ];
+  for (const url of urls) {
+    try {
+      await shell.openExternal(url);
+      log("info", "main.open_notification_settings", { url });
+      return { ok: true, detail: "已打开系统通知设置" };
+    } catch {
+      /* 尝试下一个入口 */
+    }
+  }
+  return { ok: false, detail: "无法打开系统通知设置，请手动打开系统设置 → 通知" };
+}
+
 async function ipcGetDnd(): Promise<DndSettingsView> {
   const client = await ensureClient();
   return (await client.call("dnd.get", {})) as DndSettingsView;
@@ -1011,6 +1030,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:backup:export",
     wrap(() => ipcExportBackup()),
+  );
+  ipcMain.handle(
+    "aegis:notifications:open-settings",
+    wrap(() => ipcOpenNotificationSettings()),
   );
   ipcMain.handle(
     "aegis:dnd:get",

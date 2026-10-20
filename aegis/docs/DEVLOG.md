@@ -60,6 +60,23 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · R4/M1：设置页补齐开机自启与通知权限引导
+**里程碑**：R4/M1
+**改了什么**：
+- 设置页新增「启动」卡片：读取 `getOnboarding().autostartEnabled`，开关调用已有
+  `setAutostart`（安装/卸载 LaunchAgent），失败时回滚并展示原因；
+- 通知渠道卡片新增「打开系统通知设置」：主进程按 macOS 版本依次尝试
+  `Notifications-Settings.extension` 与旧 preference pane；
+- API/preload 增加 `openNotificationSettings`（固定 URL，不接受 renderer 输入）。
+**为什么**：M1 设置页要求开机自启开关与通知权限引导；此前只能在首次向导里设置自启，
+系统通知被拒时也没有可操作的入口。
+**验证**：
+- `pnpm verify`：328 通过 / 9 跳过
+- 设置页截图/DOM 检查确认启动卡片与通知设置按钮渲染
+- 自启仍走原 `packages/platform/autostart` 的已有测试
+**踩到的坑**：macOS 通知设置的 URL 在新旧系统不同，不能只写一个入口；两个都失败时要回退到文字指引。
+**留给下次**：R4 正式签名/公证（需 Apple 账号）→ R5 14 天验收 → M2；M2 不能提前。
+
 ### 2026-10-20 · R4/M1：提醒编辑（全字段）
 **里程碑**：R4/M1
 **改了什么**：

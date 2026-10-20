@@ -521,6 +521,64 @@ async function saveDnd(btn) {
 $("btn-dnd-add").addEventListener("click", addDndWindow);
 $("btn-dnd-save").addEventListener("click", (e) => void saveDnd(e.currentTarget));
 
+// ── 启动与通知权限 ──────────────────────────────────────────────────────
+
+/** 读取开机自启状态（复用向导的 getOnboarding） */
+async function loadAutostart() {
+  try {
+    const info = await window.aegis.getOnboarding();
+    $("autostart-enabled").checked = info.autostartEnabled;
+    $("autostart-hint").textContent = info.autostartEnabled
+      ? "已开启：开机后 daemon 会自动启动"
+      : "未开启：开机后不会自动启动后台服务";
+  } catch (err) {
+    $("autostart-hint").textContent = `读取失败：${err.message}`;
+  }
+}
+
+$("autostart-enabled").addEventListener("change", async (e) => {
+  const box = e.currentTarget;
+  const desired = box.checked;
+  box.disabled = true;
+  $("autostart-hint").textContent = "正在设置…";
+  try {
+    const r = await window.aegis.setAutostart(desired);
+    if (!r.ok) {
+      box.checked = !desired;
+      $("autostart-hint").textContent = `设置失败：${r.detail}`;
+      showBanner(`开机自启设置失败：${r.detail}`, "err");
+      return;
+    }
+    $("autostart-hint").textContent = desired
+      ? "已开启：开机后 daemon 会自动启动"
+      : "已关闭：开机后不会自动启动后台服务";
+    showToast(desired ? "已开启开机自启" : "已关闭开机自启");
+  } catch (err) {
+    box.checked = !desired;
+    $("autostart-hint").textContent = `设置失败：${err.message}`;
+    showBanner(`开机自启设置失败：${err.message}`, "err");
+  } finally {
+    box.disabled = false;
+  }
+});
+
+$("btn-open-notification-settings").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    const r = await window.aegis.openNotificationSettings();
+    if (!r.ok) {
+      showBanner(r.detail, "err");
+      return;
+    }
+    showToast(r.detail);
+  } catch (err) {
+    showBanner(`打开系统通知设置失败：${err.message}`, "err");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 function renderSettings(status) {
   // 运行状态
   const basic = $("diag-basic");
@@ -599,7 +657,10 @@ function switchTab(name) {
   }
   // 切到某个页时按需拉数据（避免启动时全部请求）
   if (name === "history") void refreshHistory();
-  if (name === "settings") void refreshStatus();
+  if (name === "settings") {
+    void refreshStatus();
+    void loadAutostart();
+  }
 }
 
 for (const tab of document.querySelectorAll(".tab")) {
@@ -1167,6 +1228,7 @@ async function init() {
 
   await refreshStatus();
   void loadDnd();
+  void loadAutostart();
   await refreshTasks();
 
   // 首次配置向导：只在没配过时弹。
