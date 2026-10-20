@@ -162,6 +162,44 @@ export const SkillListEntrySchema = z
   .strict();
 export type SkillListEntryView = z.infer<typeof SkillListEntrySchema>;
 
+/** 监测器配置视图；与 daemon config.monitors 的结构一致 */
+export const MonitorConfigViewSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      id: z.string().min(1).max(120),
+      kind: z.literal("files"),
+      root: z.string().min(1),
+      patterns: z.array(z.string()),
+      ignore: z.array(z.string()),
+      intervalS: z.number().int().min(5).max(3_600),
+      stableMs: z.number().int().nonnegative(),
+      skills: z.array(z.string()),
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string().min(1).max(120),
+      kind: z.literal("system"),
+      intervalS: z.number().int().min(5).max(3_600),
+      skills: z.array(z.string()),
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string().min(1).max(120),
+      kind: z.literal("web"),
+      url: z
+        .string()
+        .url()
+        .refine((u) => /^https?:\/\//.test(u), "只支持 http/https"),
+      mode: z.enum(["page", "rss"]),
+      intervalS: z.number().int().min(5).max(3_600),
+      skills: z.array(z.string()),
+    })
+    .strict(),
+]);
+export type MonitorConfigView = z.infer<typeof MonitorConfigViewSchema>;
+
 /** 监测器运行状态（设置页展示；不含 Skill 内容） */
 export const MonitorStatusViewSchema = z
   .object({

@@ -29,7 +29,7 @@ import { AuditRepo, type Db, migrate, OccurrenceDao, openDb, rowOf } from "@aegi
 import { createMethods } from "../ipc/methods.js";
 import type { HandshakeFile } from "../ipc/server.js";
 import { IpcServer } from "../ipc/server.js";
-import { type DaemonConfig, loadConfig, saveConfig } from "./config.js";
+import { type DaemonConfig, loadConfig, type MonitorConfig, saveConfig } from "./config.js";
 import { DaemonLock } from "./lock.js";
 import { buildMonitorBindings } from "./monitor-bindings.js";
 import { MonitorRuntime } from "./monitor-runtime.js";
@@ -308,6 +308,23 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
   });
   monitorRuntime.start();
 
+  /**
+   * 保存 monitors 并热重载。
+   *
+   * `requireId` 用于新增：若该监测器没有成功绑定（Skill 路径错、trigger 不匹配、
+   * 权限不足），拒绝落盘并抛错 —— 避免 UI 显示"已添加"但运行时根本没有它。
+   */
+  const saveMonitors = (next: MonitorConfig[], requireId?: string): MonitorConfig[] => {
+    const bindings = buildMonitorBindings(next, paths.dataDir, clock, log);
+    if (requireId && !bindings.some((b) => b.monitor.id === requireId)) {
+      throw new Error(`监测器 ${requireId} 未绑定成功，请检查 Skill 路径、trigger.monitor 与权限`);
+    }
+    const current = loadConfig(paths.configFile);
+    saveConfig(paths.configFile, { ...current.config, monitors: next });
+    monitorRuntime.reload(bindings);
+    return next;
+  };
+
   // ── 11 IPC + 握手文件
   const token = randomUUID();
   const startedAt = now();
@@ -343,6 +360,10 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
         monitors: {
           status: () => monitorRuntime.status(),
           scan: (id) => monitorRuntime.scanById(id),
+          config: () => loadConfig(paths.configFile).config.monitors,
+          add: (input) => saveMonitors([...loadConfig(paths.configFile).config.monitors, input], input.id),
+          remove: (id) =>
+            saveMonitors(loadConfig(paths.configFile).config.monitors.filter((m) => m.id !== id)),
         },
         skills: { dataDir: paths.dataDir },
       }),

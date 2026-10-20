@@ -212,6 +212,21 @@ export interface SkillListEntry {
   error: string | null;
 }
 
+/** 监测器配置（设置页新增/删除用；与 config.monitors 一致） */
+export type MonitorConfigView =
+  | {
+      id: string;
+      kind: "files";
+      root: string;
+      patterns: string[];
+      ignore: string[];
+      intervalS: number;
+      stableMs: number;
+      skills: string[];
+    }
+  | { id: string; kind: "system"; intervalS: number; skills: string[] }
+  | { id: string; kind: "web"; url: string; mode: "page" | "rss"; intervalS: number; skills: string[] };
+
 /** 监测器状态（设置页展示） */
 export interface MonitorStatusItem {
   id: string;
@@ -263,6 +278,12 @@ export interface DesktopApi {
   getSystemHealth(): Promise<{ health: SystemHealthView; errors: Array<{ path: string; message: string }> }>;
   /** 读取监测器运行状态 */
   getMonitorStatus(): Promise<{ monitors: MonitorStatusItem[] }>;
+  /** 读取监测器配置 */
+  getMonitorConfig(): Promise<{ monitors: MonitorConfigView[] }>;
+  /** 新增监测器并热重载运行时 */
+  addMonitor(config: MonitorConfigView): Promise<{ monitors: MonitorConfigView[] }>;
+  /** 删除监测器并热重载运行时 */
+  removeMonitor(id: string): Promise<{ monitors: MonitorConfigView[] }>;
   /** 立即扫描一个监测器；found=false 表示 id 不在当前运行配置中 */
   scanMonitor(id: string): Promise<{ found: boolean; notified: number; errors: number }>;
   /** 列出数据目录中的 Skill 文件 */

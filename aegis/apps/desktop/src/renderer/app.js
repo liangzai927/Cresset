@@ -137,6 +137,7 @@ async function refreshStatus() {
     "btn-refresh-history",
     "btn-refresh-health",
     "btn-refresh-monitors",
+    "btn-add-monitor",
     "btn-import-skill",
     "btn-refresh-skills",
     "btn-export-backup",
@@ -616,6 +617,8 @@ function renderMonitorStatus(monitors) {
     const kindLabel = monitor.kind === "files" ? "文件" : monitor.kind === "web" ? "网页" : "系统";
     head.appendChild(el("span", "monitor-badge", kindLabel));
 
+    const actions = el("div", "monitor-actions");
+
     const scan = el("button", "btn btn-ghost btn-small", "立即扫描");
     scan.addEventListener("click", async () => {
       scan.disabled = true;
@@ -632,7 +635,24 @@ function renderMonitorStatus(monitors) {
         scan.disabled = false;
       }
     });
-    head.appendChild(scan);
+    actions.appendChild(scan);
+
+    const remove = el("button", "btn btn-ghost btn-small", "删除");
+    remove.addEventListener("click", async () => {
+      if (!window.confirm(`删除监测器 ${monitor.id}？`)) return;
+      remove.disabled = true;
+      try {
+        await window.aegis.removeMonitor(monitor.id);
+        $("monitor-hint").textContent = `已删除 ${monitor.id}`;
+        await loadMonitorStatus();
+      } catch (err) {
+        $("monitor-hint").textContent = `删除失败：${err.message}`;
+      } finally {
+        remove.disabled = false;
+      }
+    });
+    actions.appendChild(remove);
+    head.appendChild(actions);
     row.appendChild(head);
 
     const meta = el("div", "monitor-meta");
@@ -771,6 +791,124 @@ $("btn-import-skill").addEventListener("click", async (e) => {
     $("skill-hint").textContent = `导入失败：${err.message}`;
   } finally {
     btn.disabled = false;
+  }
+});
+
+// ── 监测器表单 ──────────────────────────────────────────────────────────
+
+/** 逗号/换行分隔 → 去空数组 */
+function splitPatterns(value) {
+  return value
+    .split(/[,，\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/** 按类型显示文件/网页字段；系统监测没有额外字段 */
+function updateMonitorFormKind() {
+  const kind = $("mon-kind").value;
+  $("mon-file-fields").classList.toggle("hidden", kind !== "files");
+  $("mon-web-fields").classList.toggle("hidden", kind !== "web");
+}
+
+/** 用已导入的有效 Skill 填充多选；导入路径统一为 skills/<file> */
+async function loadMonitorFormSkills() {
+  const select = $("mon-skills");
+  select.textContent = "";
+  try {
+    const result = await window.aegis.getSkills();
+    const valid = result.skills.filter((s) => s.valid && s.file);
+    if (valid.length === 0) {
+      const option = el("option", "", "还没有有效 Skill，请先在下方导入");
+      option.disabled = true;
+      select.appendChild(option);
+      return;
+    }
+    for (const skill of valid) {
+      const option = el("option", "", `${skill.name || skill.file}（${skill.file}）`);
+      option.value = `skills/${skill.file}`;
+      select.appendChild(option);
+    }
+  } catch (err) {
+    $("monitor-form-hint").textContent = `读取 Skill 失败：${err.message}`;
+  }
+}
+
+/** 打开新增监测器表单 */
+async function openMonitorForm() {
+  const form = $("monitor-form");
+  form.reset();
+  $("mon-kind").value = "system";
+  $("mon-interval").value = "60";
+  $("monitor-form-hint").textContent = "Skill 的 trigger.monitor 必须等于这里的 ID";
+  updateMonitorFormKind();
+  form.classList.remove("hidden");
+  await loadMonitorFormSkills();
+  form.scrollIntoView({ block: "nearest" });
+}
+
+$("btn-add-monitor").addEventListener("click", () => void openMonitorForm());
+$("btn-cancel-monitor").addEventListener("click", () => {
+  $("monitor-form").classList.add("hidden");
+  $("monitor-form-hint").textContent = "";
+});
+$("mon-kind").addEventListener("change", updateMonitorFormKind);
+
+$("monitor-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const hint = $("monitor-form-hint");
+  const id = $("mon-id").value.trim();
+  const kind = $("mon-kind").value;
+  const intervalS = Number($("mon-interval").value);
+  const skills = [...$("mon-skills").selectedOptions].map((o) => o.value);
+
+  if (!id) {
+    hint.textContent = "ID 不能为空";
+    return;
+  }
+  if (!Number.isInteger(intervalS) || intervalS < 5) {
+    hint.textContent = "间隔必须 ≥5 秒";
+    return;
+  }
+  if (skills.length === 0) {
+    hint.textContent = "至少选择一个 Skill";
+    return;
+  }
+
+  const config = { id, kind, intervalS, skills };
+  if (kind === "files") {
+    const root = $("mon-root").value.trim();
+    if (!root) {
+      hint.textContent = "目录不能为空";
+      return;
+    }
+    Object.assign(config, {
+      root,
+      patterns: splitPatterns($("mon-patterns").value),
+      ignore: splitPatterns($("mon-ignore").value),
+      stableMs: Number($("mon-stable").value) || 0,
+    });
+  } else if (kind === "web") {
+    const url = $("mon-url").value.trim();
+    if (!/^https?:\/\//.test(url)) {
+      hint.textContent = "URL 必须以 http:// 或 https:// 开头";
+      return;
+    }
+    Object.assign(config, { url, mode: $("mon-mode").value });
+  }
+
+  const save = $("btn-save-monitor");
+  save.disabled = true;
+  hint.textContent = "保存中…";
+  try {
+    await window.aegis.addMonitor(config);
+    $("monitor-form").classList.add("hidden");
+    $("monitor-hint").textContent = `已添加 ${id}`;
+    await loadMonitorStatus();
+  } catch (err) {
+    hint.textContent = `保存失败：${err.message}`;
+  } finally {
+    save.disabled = false;
   }
 });
 

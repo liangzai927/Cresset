@@ -21,7 +21,11 @@ cp packages/skills/examples/downloads-change.yaml "$DATA/skills/"
 
 ## 2. 配置监测器
 
-编辑 `~/Library/Application Support/Aegis/config.json`，加入 `monitors`：
+**推荐**：设置 → 监测器 → 添加监测器，选择类型、ID、间隔与已导入 Skill。
+保存后会热重载，不需要重启；如果 Skill 的 `trigger.monitor`、路径或权限不匹配，
+daemon 会拒绝保存并提示原因。
+
+也可以手动编辑 `~/Library/Application Support/Aegis/config.json` 的 `monitors`：
 
 ```json
 {

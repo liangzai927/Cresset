@@ -70,7 +70,7 @@ export class MonitorRuntime {
   readonly #db: Db;
   readonly #clock: Clock;
   readonly #scheduler: Scheduler;
-  readonly #bindings: MonitorBinding[];
+  #bindings: MonitorBinding[];
   readonly #log: MonitorLog;
   readonly #timers: NodeJS.Timeout[] = [];
   readonly #busy = new Set<string>();
@@ -82,7 +82,13 @@ export class MonitorRuntime {
     this.#scheduler = options.scheduler;
     this.#bindings = options.bindings;
     this.#log = options.onLog ?? (() => {});
-    for (const binding of options.bindings) {
+    this.#resetStatus();
+  }
+
+  /** 重建状态表；reload 时旧状态不保留，避免显示已删除的监测器 */
+  #resetStatus(): void {
+    this.#status.clear();
+    for (const binding of this.#bindings) {
       this.#status.set(binding.monitor.id, {
         id: binding.monitor.id,
         kind: binding.kind,
@@ -105,6 +111,14 @@ export class MonitorRuntime {
       const timer = setInterval(() => void this.#scan(binding), binding.intervalMs);
       this.#timers.push(timer);
     }
+  }
+
+  /** 重新加载绑定（配置增删后调用）；停止旧定时器并重建状态 */
+  reload(bindings: MonitorBinding[]): void {
+    this.stop();
+    this.#bindings = bindings;
+    this.#resetStatus();
+    this.start();
   }
 
   /** 停止所有定时器 */

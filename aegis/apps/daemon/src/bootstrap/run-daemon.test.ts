@@ -5,7 +5,7 @@
  * IPC 端到端（含 C-4：断线重连必须自动重放握手）。
  */
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { VirtualClock } from "@aegis/clock";
@@ -632,6 +632,57 @@ describe("R2：调度器接入与 RPC 方法", () => {
     expect(monitors.monitors).toEqual([]);
     const scan = (await client.call("monitor.scan", { id: "missing" })) as { found: boolean };
     expect(scan.found).toBe(false);
+
+    client.close();
+    await daemon.stop("test");
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("★ monitor.add/remove 热更新配置并验证绑定", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-monitor-config-"));
+    const skillsDir = join(dataDir, "skills");
+    mkdirSync(skillsDir, { recursive: true });
+    writeFileSync(
+      join(skillsDir, "test.yaml"),
+      `name: monitor-config-test
+version: 1.0.0
+description: 配置热更新测试
+permissions: [system.read]
+cooldown: 1h
+params: {}
+trigger:
+  type: change
+  monitor: system.test
+action:
+  notify:
+    priority: normal
+    title: 配置测试
+    body: "{{monitor.mount}}"
+`,
+    );
+
+    const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
+    const hs = readHandshakeFile(join(dataDir, "handshake.json"));
+    const client = new IpcClient({ endpoint: hs.endpoint, token: hs.token });
+    await client.connect();
+
+    const added = (await client.call("monitor.add", {
+      id: "system.test",
+      kind: "system",
+      intervalS: 60,
+      skills: ["skills/test.yaml"],
+    })) as { monitors: Array<{ id: string }> };
+    expect(added.monitors.map((m) => m.id)).toEqual(["system.test"]);
+
+    const status = (await client.call("monitor.status", {})) as { monitors: Array<{ id: string }> };
+    expect(status.monitors.map((m) => m.id)).toEqual(["system.test"]);
+
+    const removed = (await client.call("monitor.remove", { id: "system.test" })) as {
+      monitors: unknown[];
+    };
+    expect(removed.monitors).toEqual([]);
+    const after = (await client.call("monitor.status", {})) as { monitors: unknown[] };
+    expect(after.monitors).toEqual([]);
 
     client.close();
     await daemon.stop("test");

@@ -100,9 +100,64 @@
           <h2>监测器</h2>
           <div class="monitor-list" id="monitor-list"></div>
           <div class="settings-actions">
+            <button class="btn" id="btn-add-monitor">添加监测器</button>
             <button class="btn btn-ghost" id="btn-refresh-monitors">刷新</button>
             <span class="hint" id="monitor-hint"></span>
           </div>
+
+          <form class="monitor-form hidden" id="monitor-form">
+            <div class="form-grid">
+              <label class="form-field">类型
+                <select id="mon-kind">
+                  <option value="system">系统</option>
+                  <option value="files">文件</option>
+                  <option value="web">网页 / RSS</option>
+                </select>
+              </label>
+              <label class="form-field">ID
+                <input id="mon-id" type="text" placeholder="system.host" />
+              </label>
+              <label class="form-field">间隔（秒）
+                <input id="mon-interval" type="number" value="60" min="5" max="3600" />
+              </label>
+            </div>
+
+            <div class="form-grid" id="mon-file-fields">
+              <label class="form-field">目录
+                <input id="mon-root" type="text" placeholder="/Users/you/Downloads" />
+              </label>
+              <label class="form-field">glob（逗号分隔）
+                <input id="mon-patterns" type="text" placeholder="**/*.pdf" />
+              </label>
+              <label class="form-field">忽略（逗号分隔）
+                <input id="mon-ignore" type="text" placeholder="**/*.part" />
+              </label>
+              <label class="form-field">稳定期（ms）
+                <input id="mon-stable" type="number" value="2000" min="0" />
+              </label>
+            </div>
+
+            <div class="form-grid hidden" id="mon-web-fields">
+              <label class="form-field">URL
+                <input id="mon-url" type="text" placeholder="https://example.com/feed.xml" />
+              </label>
+              <label class="form-field">模式
+                <select id="mon-mode">
+                  <option value="page">页面变化</option>
+                  <option value="rss">RSS / Atom 新条目</option>
+                </select>
+              </label>
+            </div>
+
+            <label class="form-field">绑定 Skill（可多选）
+              <select id="mon-skills" multiple size="4"></select>
+            </label>
+            <div class="settings-actions">
+              <button class="btn" id="btn-save-monitor" type="submit">保存</button>
+              <button class="btn btn-ghost" id="btn-cancel-monitor" type="button">取消</button>
+              <span class="hint" id="monitor-form-hint"></span>
+            </div>
+          </form>
         </div>
 
         <div class="settings-group">

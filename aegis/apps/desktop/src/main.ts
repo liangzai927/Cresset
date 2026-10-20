@@ -47,6 +47,7 @@ import type {
   CreateTaskPayload,
   DiagnosticInfo,
   DndSettingsView,
+  MonitorConfigView,
   MonitorStatusItem,
   NotificationItem,
   SkillListEntry,
@@ -843,6 +844,21 @@ async function ipcGetMonitorStatus(): Promise<{ monitors: MonitorStatusItem[] }>
   return (await client.call("monitor.status", {})) as { monitors: MonitorStatusItem[] };
 }
 
+async function ipcGetMonitorConfig(): Promise<{ monitors: MonitorConfigView[] }> {
+  const client = await ensureClient();
+  return (await client.call("monitor.config", {})) as { monitors: MonitorConfigView[] };
+}
+
+async function ipcAddMonitor(config: MonitorConfigView): Promise<{ monitors: MonitorConfigView[] }> {
+  const client = await ensureClient();
+  return (await client.call("monitor.add", config)) as { monitors: MonitorConfigView[] };
+}
+
+async function ipcRemoveMonitor(id: string): Promise<{ monitors: MonitorConfigView[] }> {
+  const client = await ensureClient();
+  return (await client.call("monitor.remove", { id })) as { monitors: MonitorConfigView[] };
+}
+
 /** 手动触发一次扫描；扫描结果由 renderer 展示，失败由 IPC 抛回 */
 async function ipcScanMonitor(id: string): Promise<{ found: boolean; notified: number; errors: number }> {
   const client = await ensureClient();
@@ -1112,6 +1128,18 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:monitor:scan",
     wrap((id: string) => ipcScanMonitor(id)),
+  );
+  ipcMain.handle(
+    "aegis:monitor:config",
+    wrap(() => ipcGetMonitorConfig()),
+  );
+  ipcMain.handle(
+    "aegis:monitor:add",
+    wrap((config: MonitorConfigView) => ipcAddMonitor(config)),
+  );
+  ipcMain.handle(
+    "aegis:monitor:remove",
+    wrap((id: string) => ipcRemoveMonitor(id)),
   );
   ipcMain.handle(
     "aegis:skill:list",

@@ -10,6 +10,46 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 
+/** 一个监测器实例的配置；M2 支持 files/system/web 三种 */
+export const MonitorConfigSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      id: z.string().min(1).max(120),
+      kind: z.literal("files"),
+      root: z.string().min(1),
+      patterns: z.array(z.string()).default([]),
+      ignore: z.array(z.string()).default([]),
+      intervalS: z.number().int().min(5).max(3_600).default(30),
+      stableMs: z.number().int().nonnegative().default(2_000),
+      skills: z.array(z.string()).default([]),
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string().min(1).max(120),
+      kind: z.literal("system"),
+      intervalS: z.number().int().min(5).max(3_600).default(60),
+      skills: z.array(z.string()).default([]),
+    })
+    .strict(),
+  z
+    .object({
+      id: z.string().min(1).max(120),
+      kind: z.literal("web"),
+      url: z
+        .string()
+        .url()
+        .refine((u) => /^https?:\/\//.test(u), "只支持 http/https"),
+      mode: z.enum(["page", "rss"]).default("page"),
+      intervalS: z.number().int().min(5).max(3_600).default(60),
+      skills: z.array(z.string()).default([]),
+    })
+    .strict(),
+]);
+
+/** 监测器配置类型 */
+export type MonitorConfig = z.infer<typeof MonitorConfigSchema>;
+
 /** 守护进程配置契约（非敏感项；敏感项一律走钥匙串） */
 export const DaemonConfigSchema = z
   .object({
@@ -51,45 +91,7 @@ export const DaemonConfigSchema = z
      * `skills` 是 YAML 路径（相对 dataDir 或绝对路径）；daemon 启动时加载并校验。
      * 一个监测器可以绑定多个 Skill；Skill 的 trigger.monitor 必须等于实例 id。
      */
-    monitors: z
-      .array(
-        z.discriminatedUnion("kind", [
-          z
-            .object({
-              id: z.string().min(1).max(120),
-              kind: z.literal("files"),
-              root: z.string().min(1),
-              patterns: z.array(z.string()).default([]),
-              ignore: z.array(z.string()).default([]),
-              intervalS: z.number().int().min(5).max(3_600).default(30),
-              stableMs: z.number().int().nonnegative().default(2_000),
-              skills: z.array(z.string()).default([]),
-            })
-            .strict(),
-          z
-            .object({
-              id: z.string().min(1).max(120),
-              kind: z.literal("system"),
-              intervalS: z.number().int().min(5).max(3_600).default(60),
-              skills: z.array(z.string()).default([]),
-            })
-            .strict(),
-          z
-            .object({
-              id: z.string().min(1).max(120),
-              kind: z.literal("web"),
-              url: z
-                .string()
-                .url()
-                .refine((u) => /^https?:\/\//.test(u), "只支持 http/https"),
-              mode: z.enum(["page", "rss"]).default("page"),
-              intervalS: z.number().int().min(5).max(3_600).default(60),
-              skills: z.array(z.string()).default([]),
-            })
-            .strict(),
-        ]),
-      )
-      .default([]),
+    monitors: z.array(MonitorConfigSchema).default([]),
     /** 通知优先级规则：DND 期间哪些级别可穿透（FR-A7） */
     dnd: z
       .object({

@@ -60,6 +60,26 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M2：监测器增删与热重载
+**里程碑**：M2（R5 并行观察）
+**改了什么**：
+- 配置 schema 拆出 `MonitorConfigSchema`，contract 新增 monitor.config/add/remove；
+- `MonitorRuntime.reload`：停止旧定时器、重建状态、启动新绑定；
+- daemon 保存 monitors 后热重载；新增时先构建绑定，未成功绑定则**拒绝落盘**，
+  避免"UI 显示已添加但运行时没有"；
+- 设置页增加添加监测器表单（files/system/web、Skill 多选）与删除按钮；
+- 新增 monitor.add/remove 热重载集成测试。
+**为什么**：配置只靠手工编辑无法验收 M2 的可用性；但热更新不能牺牲一致性，
+所以先验证绑定再写配置。
+**验证**：
+- `pnpm verify`：359 通过 / 9 跳过
+- RPC add → status → remove 闭环通过
+- 未绑定 Skill 的新增被拒绝
+**踩到的坑**：如果先 saveConfig 再 buildBindings，失败时会留下一个永远不生效的配置；
+顺序必须是 build → validate → save → reload。
+**留给下次**：监测器启停、CSS 选择器/JSONPath、完整 XML、连续失败告警；
+仍禁止 M3 的 LLM/知识库。
+
 ### 2026-10-20 · M2：监测器手动扫描
 **里程碑**：M2（R5 并行观察）
 **改了什么**：

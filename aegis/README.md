@@ -14,9 +14,9 @@
 | R2 调度引擎 | ✅ 完成：recurrence ｜ scheduler ｜ notify ｜ daemon 接入 ｜ CLI |
 | **R3 桌面外壳 + 界面** | ✅ **完成**：Electron 三层 ｜ 原生通知 ｜ 三块界面 ｜ 托盘 |
 | R4 系统集成（打包/自启/自恢复） | 🚧 进行中：自启 ✅ ｜ 自恢复（崩溃/启动卡死）✅ ｜ 打包（ad-hoc）✅ ｜ 备份导出 ✅ ｜ 正式签名/公证 待做 |
-| **M2 Skill + 规则引擎 + 本地监测** | 🚧 进行中：Skill YAML/规则引擎 ✅ ｜ File/System/Web/RSS 监测 ✅ ｜ Monitor 运行时 + Skill→通知 ✅ ｜ 状态/手动扫描 + Skill 导入 UI ✅ ｜ 监测器增删、CSS/JSONPath 待做 |
+| **M2 Skill + 规则引擎 + 本地监测** | 🚧 进行中：Skill YAML/规则引擎 ✅ ｜ File/System/Web/RSS 监测 ✅ ｜ Monitor 运行时 + Skill→通知 ✅ ｜ 监测器增删/手动扫描 + Skill 导入 UI ✅ ｜ CSS/JSONPath 待做 |
 
-**当前验证状态**：`pnpm verify` 全绿 ｜ **14 个工作区包** ｜ **358 测试通过** ｜ 注释占比 18.1%
+**当前验证状态**：`pnpm verify` 全绿 ｜ **14 个工作区包** ｜ **359 测试通过** ｜ 注释占比 17.9%
 **桌面验证**：`pnpm verify:desktop` 11 项集成检查全部通过（含 SIGKILL 后自动重启）
 
 ### 一条命令启动
@@ -195,7 +195,7 @@ pnpm verify                  # 依赖方向门禁 + typecheck + lint + 测试
 | `aegis monitor scan <目录>` | M2 文件监测 dry-run（glob/ignore，不发通知） |
 | `aegis monitor system` | 打印 CPU/内存/磁盘/uptime 指标（M2 dry-run） |
 | [M2 监测器配置](docs/M2-MONITORS.md) | 文件/系统监测 + Skill 告警的配置方式 |
-| 设置 → 监测器 | 查看状态、立即扫描；每个监测器的间隔、Skills、通知数与错误 |
+| 设置 → 监测器 | 添加/删除监测器、立即扫描；查看间隔、Skills、通知数与错误 |
 | 设置 → Skills | 导入/删除 YAML Skill，坏文件会显示校验错误 |
 | 顶栏 / 设置 → 系统健康 | 每 5 秒自动刷新 CPU/内存/磁盘；也可手动刷新 |
 | `pnpm r5:report` | 汇总 heartbeat/通知/投递/运行缺口，生成 R5 证据报告 |

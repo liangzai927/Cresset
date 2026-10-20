@@ -39,6 +39,7 @@ import { SkillLoadError } from "@aegis/skills";
 import type { AttemptSummary } from "@aegis/storage";
 import { z } from "zod";
 import { createBackup } from "../bootstrap/backup.js";
+import { type MonitorConfig, MonitorConfigSchema } from "../bootstrap/config.js";
 import type { MonitorStatus } from "../bootstrap/monitor-runtime.js";
 import { deleteSkill, importSkill, listSkills, SkillStoreError } from "../bootstrap/skill-store.js";
 
@@ -249,6 +250,9 @@ export interface DndMethodsContext {
 export interface MonitorMethodsContext {
   status: () => MonitorStatus[];
   scan: (id: string) => Promise<{ notified: number; errors: number } | null>;
+  config: () => MonitorConfig[];
+  add: (input: MonitorConfig) => MonitorConfig[];
+  remove: (id: string) => MonitorConfig[];
 }
 
 /** Skill 文件管理需要的运行期上下文 */
@@ -503,6 +507,31 @@ export function createMethods(
 
     "monitor.status": async () => {
       return { monitors: context.monitors?.status() ?? [] };
+    },
+
+    "monitor.config": async () => {
+      return { monitors: context.monitors?.config() ?? [] };
+    },
+
+    "monitor.add": async (params) => {
+      if (!context.monitors) throw new MethodError(E_INTERNAL, "监测器运行时未初始化");
+      const input = MonitorConfigSchema.parse(params);
+      if (context.monitors.config().some((m) => m.id === input.id)) {
+        throw new MethodError(E_INVALID_PARAMS, `监测器 id 已存在：${input.id}`);
+      }
+      return { monitors: context.monitors.add(input) };
+    },
+
+    "monitor.remove": async (params) => {
+      const p = z
+        .object({ id: z.string().min(1).max(120) })
+        .strict()
+        .parse(params);
+      if (!context.monitors) throw new MethodError(E_INTERNAL, "监测器运行时未初始化");
+      if (!context.monitors.config().some((m) => m.id === p.id)) {
+        throw new MethodError(E_INVALID_PARAMS, `监测器不存在：${p.id}`);
+      }
+      return { monitors: context.monitors.remove(p.id) };
     },
 
     "monitor.scan": async (params) => {
