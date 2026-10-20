@@ -62,6 +62,34 @@ describe("WebMonitor", () => {
     expect(result.facts[0]?.fields).toMatchObject({ item_id: "b", title: "第二条" });
   });
 
+  it("Atom entry 与 link href 也能识别", async () => {
+    body = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">
+      <entry><id>a</id><title>A</title><link rel="alternate" href="https://example.com/a"/></entry>
+    </feed>`;
+    const monitor = new WebMonitor({ id: "atom.test", url, mode: "rss", clock: new VirtualClock(1_000) });
+    expect((await monitor.scan()).facts).toEqual([]);
+
+    body = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">
+      <entry><id>a</id><title>A</title><link rel="alternate" href="https://example.com/a"/></entry>
+      <entry><id>b</id><title>B</title><link rel="alternate" href="https://example.com/b"/></entry>
+    </feed>`;
+    const result = await monitor.scan();
+    expect(result.facts).toHaveLength(1);
+    expect(result.facts[0]?.fields).toMatchObject({
+      item_id: "b",
+      title: "B",
+      link: "https://example.com/b",
+    });
+  });
+
+  it("坏 XML 进入 errors，不抛异常", async () => {
+    body = "<<<not xml";
+    const monitor = new WebMonitor({ id: "bad.xml", url, mode: "rss" });
+    const result = await monitor.scan();
+    expect(result.facts).toEqual([]);
+    expect(result.errors.length).toBeGreaterThan(0);
+  });
+
   it("CSS selector 只监控选中内容，忽略页面其他变化", async () => {
     body = `<html><title>价格</title><body><div class="price">100</div><div class="noise">a</div></body></html>`;
     const monitor = new WebMonitor({

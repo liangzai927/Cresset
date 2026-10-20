@@ -112,7 +112,8 @@ aegis skill check ~/Library/Application\ Support/Aegis/skills/disk-space-guard.y
 - 还没有 Skill 管理/导入界面；
 - Web 的 `page` 模式支持 CSS 选择器；不填时按"标题 + 可见文本"做变化检测；
 - Web 的 `json` 模式支持受限 JSONPath（`a.b[0].c`），不支持过滤器/通配符；
-- RSS/Atom 使用轻量正则解析（标题/link/guid）；复杂命名空间/嵌套结构后续用 XML 解析器替换；
+- RSS/Atom 使用 fast-xml-parser 解析 item/entry、guid/id、link/href；
+  支持常见命名空间结构，极端自定义 XML 仍需后续验证；
 - 文件重命名会在同一轮扫描中按内容指纹配对为 `file.renamed`；
   若两次扫描之间内容又变了，可能退化为删除 + 新增；
 - 不做脚本执行、不调模型。

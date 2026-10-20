@@ -60,6 +60,22 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M2：RSS/Atom 改用 XML 解析器
+**里程碑**：M2（R5 并行观察）
+**改了什么**：
+- WebMonitor 的 RSS/Atom 解析从正则换成 fast-xml-parser；
+- 支持 RSS item、Atom entry、link href/alternate、guid/id/title 回退；
+- XML 解析失败进入 errors，不再让 scan 抛异常；
+- 新增 Atom 与坏 XML 测试（共 7 个 WebMonitor 测试）。
+**为什么**：正则在 CDATA、命名空间、属性形式 link 上会漏条目；RSS 是 M2 的主要监测源之一。
+**验证**：
+- `pnpm verify`：365 通过 / 9 跳过
+- 打包后的 monitors dist 直接跑 RSS 新条目检测通过
+- 打包产物真实启动通过
+**踩到的坑**：XML 解析失败必须由 scan 捕获成 errors；否则一个坏 feed 会打断整个监测循环。
+**留给下次**：默认技能包/导出、M2 3 个 Skill 的 7 天验收；
+仍禁止 M3 的 LLM/知识库。
+
 ### 2026-10-20 · M2：文件重命名配对
 **里程碑**：M2（R5 并行观察）
 **改了什么**：

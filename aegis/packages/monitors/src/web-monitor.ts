@@ -6,12 +6,13 @@
  *   - json：抓取 JSON API；可用受限 JSONPath（`data.items[0].status`）只监控某个字段；
  *   - rss：解析 RSS/Atom 的 item/entry，出现新条目时逐条产生事实。
  *
- * HTML 解析用 node-html-parser（纯 JS，可被打包进 dist）；JSONPath 只实现
- * 点路径 + 数字下标的安全子集，不执行任意表达式。
+ * HTML 解析用 node-html-parser，XML 用 fast-xml-parser（均纯 JS，可打包进 dist）；
+ * JSONPath 只实现点路径 + 数字下标的安全子集，不执行任意表达式。
  */
 
 import { createHash } from "node:crypto";
 import { type Clock, SystemClock } from "@aegis/clock";
+import { XMLParser } from "fast-xml-parser";
 import { parse as parseHtml } from "node-html-parser";
 import type { Monitor, MonitorError, MonitorFact, MonitorScanResult } from "./types.js";
 
@@ -99,25 +100,82 @@ function readJsonPath(root: unknown, path: string): unknown {
   return current;
 }
 
-/** 从 RSS `<item>` / Atom `<entry>` 中提取 id/title/link */
+/** 把 XML 解析结果安全地收窄成 record，避免 `any` 渗进业务 */
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+/** XML 中单值/数组都可能；统一成数组 */
+function asArray(value: unknown): unknown[] {
+  if (value === undefined || value === null) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+/** 取 XML 节点的文本：字符串直接返回，对象取 #text */
+function xmlText(value: unknown): string {
+  if (typeof value === "string" || typeof value === "number") return String(value).trim();
+  const record = asRecord(value);
+  if (record) return xmlText(record["#text"]);
+  return "";
+}
+
+/** 取 Atom/RSS 的链接：文本 link 或带 href 属性的空元素 */
+function xmlLink(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  const record = asRecord(value);
+  if (!record) return "";
+  const href = record["@_href"];
+  if (typeof href === "string") return href.trim();
+  return xmlText(record["#text"]);
+}
+
+/** 解析 RSS/Atom 文档；兼容 RSS item 与 Atom entry 的常见结构 */
 function parseFeedItems(xml: string): FeedItem[] {
-  const blocks = xml.match(/<(item|entry)\b[\s\S]*?<\/\1>/gi) ?? [];
+  let doc: unknown;
+  try {
+    doc = XML_PARSER.parse(xml);
+  } catch (err) {
+    throw new Error(`XML 解析失败：${(err as Error).message}`);
+  }
+  const root = asRecord(doc);
+  if (!root) return [];
+
+  const rss = asRecord(root.rss);
+  const channel = rss ? asRecord(rss.channel) : null;
+  const atom = asRecord(root.feed);
+  const rawItems = channel ? asArray(channel.item) : atom ? asArray(atom.entry) : [];
+
   const items: FeedItem[] = [];
-  for (const block of blocks) {
-    const title = textOf(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(block)?.[1] ?? "");
-    const link =
-      textOf(/<link[^>]*>([\s\S]*?)<\/link>/i.exec(block)?.[1] ?? "") ||
-      (/<link[^>]*href=["']([^"']+)["'][^>]*\/?>/i.exec(block)?.[1] ?? "");
-    const id =
-      textOf(/<guid[^>]*>([\s\S]*?)<\/guid>/i.exec(block)?.[1] ?? "") ||
-      textOf(/<id[^>]*>([\s\S]*?)<\/id>/i.exec(block)?.[1] ?? "") ||
-      link ||
-      title;
+  for (const raw of rawItems) {
+    const record = asRecord(raw);
+    if (!record) continue;
+    const title = xmlText(record.title);
+    const linkValue = record.link;
+    // Atom 的 link 可能是数组（alternate/self）；优先 alternate 或第一个 href
+    const links = asArray(linkValue);
+    const preferred =
+      links.find((l) => {
+        const r = asRecord(l);
+        return r?.["@_rel"] === undefined || r["@_rel"] === "alternate";
+      }) ?? links[0];
+    const link = xmlLink(preferred);
+    const id = xmlText(record.guid) || xmlText(record.id) || link || title;
     if (!id) continue;
     items.push({ id, title, link });
   }
   return items;
 }
+
+/** 配置一次；XMLParser 本身无状态，可安全复用 */
+const XML_PARSER = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  textNodeName: "#text",
+  trimValues: true,
+  parseTagValue: false,
+});
 
 /** 网页/RSS 监测器实现 */
 export class WebMonitor implements Monitor {
@@ -177,7 +235,13 @@ export class WebMonitor implements Monitor {
     }
 
     if (this.#mode === "rss") {
-      const items = parseFeedItems(body);
+      let items: FeedItem[];
+      try {
+        items = parseFeedItems(body);
+      } catch (err) {
+        errors.push({ path: this.#url, message: (err as Error).message });
+        return { facts, errors };
+      }
       if (!this.#baselineDone) {
         this.#seenItems = new Set(items.map((i) => i.id));
         this.#baselineDone = true;
