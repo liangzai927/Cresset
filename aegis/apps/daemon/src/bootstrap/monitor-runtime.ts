@@ -57,6 +57,11 @@ export interface MonitorRuntimeOptions {
   onLog?: MonitorLog;
 }
 
+/** 连续失败达到这个次数才发故障通知，避免一次网络抖动就打扰用户 */
+const FAILURE_THRESHOLD = 3;
+/** 同一监测器的故障通知最小间隔；用 dedupe bucket 实现，无需额外表 */
+const FAILURE_COOLDOWN_MS = 30 * 60_000;
+
 /** cooldown 字符串（6h / 30m / 1d）→ 毫秒 */
 export function parseCooldown(value: string): number {
   const n = Number(value.slice(0, -1));
@@ -75,6 +80,7 @@ export class MonitorRuntime {
   readonly #timers: NodeJS.Timeout[] = [];
   readonly #busy = new Set<string>();
   readonly #status = new Map<string, MonitorStatus>();
+  readonly #failureCounts = new Map<string, number>();
 
   constructor(options: MonitorRuntimeOptions) {
     this.#db = options.db;
@@ -117,6 +123,7 @@ export class MonitorRuntime {
   reload(bindings: MonitorBinding[]): void {
     this.stop();
     this.#bindings = bindings;
+    this.#failureCounts.clear();
     this.#resetStatus();
     this.start();
   }
@@ -256,7 +263,46 @@ export class MonitorRuntime {
       }
     }
 
+    if (errors > 0) {
+      const count = (this.#failureCounts.get(id) ?? 0) + 1;
+      this.#failureCounts.set(id, count);
+      if (count >= FAILURE_THRESHOLD) {
+        this.#notifyFailure(binding, count, lastError ?? `${errors} 个采集错误`);
+      }
+    } else {
+      this.#failureCounts.delete(id);
+    }
+
     this.#log("debug", "monitor.scan_done", { monitor: id, facts, notified, errors });
     return { notified, errors };
+  }
+
+  /** 连续失败达到阈值时生成一次 failure 通知；30 分钟窗口内去重 */
+  #notifyFailure(binding: MonitorBinding, count: number, detail: string): void {
+    const now = this.#clock.wall();
+    const bucket = Math.floor(now / FAILURE_COOLDOWN_MS);
+    try {
+      const created = this.#scheduler.daos.notifications.createWithOutbox({
+        kind: "failure",
+        title: `监测器故障：${binding.monitor.id}`,
+        body: `连续 ${count} 次扫描失败：${detail}`,
+        priority: "high",
+        scheduledFor: now,
+        dedupeKey: `monitor-failure:${binding.monitor.id}:${bucket}`,
+      });
+      if (created.created) {
+        this.#log("warn", "monitor.failure_notified", {
+          monitor: binding.monitor.id,
+          count,
+          notificationId: created.id,
+        });
+      }
+    } catch (err) {
+      // 故障通知本身失败不能吞：至少留下日志，让设置页/日志能解释为什么没收到告警
+      this.#log("error", "monitor.failure_notify_error", {
+        monitor: binding.monitor.id,
+        error: (err as Error).message,
+      });
+    }
   }
 }

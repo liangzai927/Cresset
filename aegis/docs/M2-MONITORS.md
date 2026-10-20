@@ -93,7 +93,9 @@ aegis skill check ~/Library/Application\ Support/Aegis/skills/disk-space-guard.y
 
 - 应用「历史」页会多出 `monitor` 通知；
 - daemon 日志里的 `monitor.bound` / `monitor.notified` / `monitor.scan_error`；
-- 设置 → 监测器 →「立即扫描」可手动触发一次，不等待下一个 interval。
+- 设置 → 监测器 →「立即扫描」可手动触发一次，不等待下一个 interval；
+- 连续 3 次扫描失败会生成一条 `failure` 通知（30 分钟窗口内去重），
+  并在「历史」页可见；成功一次会清零连续失败计数。
 
 ## 5. 当前限制
 

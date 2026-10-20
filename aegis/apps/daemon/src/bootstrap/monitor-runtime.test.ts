@@ -117,4 +117,50 @@ describe("MonitorRuntime", () => {
     };
     expect(count.n).toBe(2);
   });
+
+  it("连续失败达到阈值才发 failure 通知，并按 30 分钟窗口去重", async () => {
+    const clock = new VirtualClock(2_000_000);
+    const scheduler = new Scheduler({
+      db,
+      clock,
+      notifiers: [],
+      dnd: { enabled: false, windows: [] },
+    });
+    const failing: Monitor = {
+      id: "system.failing",
+      permission: "system.read",
+      async scan() {
+        return { facts: [], errors: [{ path: "/", message: "boom" }] };
+      },
+    };
+    const runtime = new MonitorRuntime({
+      db,
+      clock,
+      scheduler,
+      bindings: [{ monitor: failing, kind: "system", skills: [], intervalMs: 1_000 }],
+    });
+
+    await runtime.scanOnce();
+    await runtime.scanOnce();
+    expect(
+      (db.prepare("SELECT COUNT(*) AS n FROM notification WHERE kind = 'failure'").get() as { n: number }).n,
+    ).toBe(0);
+
+    await runtime.scanOnce();
+    expect(
+      (db.prepare("SELECT COUNT(*) AS n FROM notification WHERE kind = 'failure'").get() as { n: number }).n,
+    ).toBe(1);
+
+    // 同一 30 分钟 bucket 内不重复
+    await runtime.scanOnce();
+    expect(
+      (db.prepare("SELECT COUNT(*) AS n FROM notification WHERE kind = 'failure'").get() as { n: number }).n,
+    ).toBe(1);
+
+    await clock.advance(31 * 60_000);
+    await runtime.scanOnce();
+    expect(
+      (db.prepare("SELECT COUNT(*) AS n FROM notification WHERE kind = 'failure'").get() as { n: number }).n,
+    ).toBe(2);
+  });
 });
