@@ -85,6 +85,7 @@ describe("MonitorRuntime", () => {
     });
 
     expect(await runtime.scanOnce()).toEqual({ notified: 1, errors: 0 });
+    expect(await runtime.scanById("missing")).toBeNull();
     expect(runtime.status()).toEqual([
       {
         id: "system.test",

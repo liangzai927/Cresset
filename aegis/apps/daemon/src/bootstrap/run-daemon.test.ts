@@ -630,6 +630,8 @@ describe("R2：调度器接入与 RPC 方法", () => {
 
     const monitors = (await client.call("monitor.status", {})) as { monitors: unknown[] };
     expect(monitors.monitors).toEqual([]);
+    const scan = (await client.call("monitor.scan", { id: "missing" })) as { found: boolean };
+    expect(scan.found).toBe(false);
 
     client.close();
     await daemon.stop("test");

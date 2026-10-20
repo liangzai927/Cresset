@@ -340,7 +340,10 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
             scheduler.setDndSettings(dnd);
           },
         },
-        monitors: { status: () => monitorRuntime.status() },
+        monitors: {
+          status: () => monitorRuntime.status(),
+          scan: (id) => monitorRuntime.scanById(id),
+        },
         skills: { dataDir: paths.dataDir },
       }),
       /**

@@ -88,7 +88,8 @@ aegis skill check ~/Library/Application\ Support/Aegis/skills/disk-space-guard.y
 启动后查看：
 
 - 应用「历史」页会多出 `monitor` 通知；
-- daemon 日志里的 `monitor.bound` / `monitor.notified` / `monitor.scan_error`。
+- daemon 日志里的 `monitor.bound` / `monitor.notified` / `monitor.scan_error`；
+- 设置 → 监测器 →「立即扫描」可手动触发一次，不等待下一个 interval。
 
 ## 5. 当前限制
 

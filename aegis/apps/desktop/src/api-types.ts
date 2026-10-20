@@ -263,6 +263,8 @@ export interface DesktopApi {
   getSystemHealth(): Promise<{ health: SystemHealthView; errors: Array<{ path: string; message: string }> }>;
   /** 读取监测器运行状态 */
   getMonitorStatus(): Promise<{ monitors: MonitorStatusItem[] }>;
+  /** 立即扫描一个监测器；found=false 表示 id 不在当前运行配置中 */
+  scanMonitor(id: string): Promise<{ found: boolean; notified: number; errors: number }>;
   /** 列出数据目录中的 Skill 文件 */
   getSkills(): Promise<{ skills: SkillListEntry[] }>;
   /** 打开原生文件选择器并读取 YAML（返回 null 表示取消） */

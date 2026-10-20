@@ -502,6 +502,10 @@ main {
   font-size: 12.5px;
 }
 
+.monitor-head .btn {
+  margin-left: auto;
+}
+
 .monitor-badge {
   padding: 1px 6px;
   border-radius: 999px;

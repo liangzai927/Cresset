@@ -83,6 +83,12 @@ function buildApi(): DesktopApi {
       }>,
     getMonitorStatus: () =>
       ipcRenderer.invoke("aegis:monitor:status") as Promise<{ monitors: MonitorStatusItem[] }>,
+    scanMonitor: (id: string) =>
+      ipcRenderer.invoke("aegis:monitor:scan", { id }) as Promise<{
+        found: boolean;
+        notified: number;
+        errors: number;
+      }>,
     getSkills: () => ipcRenderer.invoke("aegis:skill:list") as Promise<{ skills: SkillListEntry[] }>,
     pickSkillFile: () =>
       ipcRenderer.invoke("aegis:skill:pick") as Promise<{ filename: string; content: string } | null>,

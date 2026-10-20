@@ -248,6 +248,7 @@ export interface DndMethodsContext {
 /** `monitor.status` 需要的运行期上下文 */
 export interface MonitorMethodsContext {
   status: () => MonitorStatus[];
+  scan: (id: string) => Promise<{ notified: number; errors: number } | null>;
 }
 
 /** Skill 文件管理需要的运行期上下文 */
@@ -502,6 +503,16 @@ export function createMethods(
 
     "monitor.status": async () => {
       return { monitors: context.monitors?.status() ?? [] };
+    },
+
+    "monitor.scan": async (params) => {
+      const p = z
+        .object({ id: z.string().min(1) })
+        .strict()
+        .parse(params);
+      const result = await context.monitors?.scan(p.id);
+      if (!result) return { found: false, notified: 0, errors: 0 };
+      return { found: true, ...result };
     },
 
     "skill.list": async () => {

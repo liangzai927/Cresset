@@ -843,6 +843,12 @@ async function ipcGetMonitorStatus(): Promise<{ monitors: MonitorStatusItem[] }>
   return (await client.call("monitor.status", {})) as { monitors: MonitorStatusItem[] };
 }
 
+/** 手动触发一次扫描；扫描结果由 renderer 展示，失败由 IPC 抛回 */
+async function ipcScanMonitor(id: string): Promise<{ found: boolean; notified: number; errors: number }> {
+  const client = await ensureClient();
+  return (await client.call("monitor.scan", { id })) as { found: boolean; notified: number; errors: number };
+}
+
 /** 列出 Skill；daemon 负责读取 skills/ 并校验，坏文件也返回 */
 async function ipcListSkills(): Promise<{ skills: SkillListEntry[] }> {
   const client = await ensureClient();
@@ -1102,6 +1108,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:monitor:status",
     wrap(() => ipcGetMonitorStatus()),
+  );
+  ipcMain.handle(
+    "aegis:monitor:scan",
+    wrap((id: string) => ipcScanMonitor(id)),
   );
   ipcMain.handle(
     "aegis:skill:list",

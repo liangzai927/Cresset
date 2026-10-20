@@ -118,6 +118,13 @@ export class MonitorRuntime {
     return [...this.#status.values()].map((s) => ({ ...s, skills: [...s.skills] }));
   }
 
+  /** 立即扫描指定的监测器；id 不存在时返回 null（由 IPC 转成 found=false） */
+  async scanById(id: string): Promise<{ notified: number; errors: number } | null> {
+    const binding = this.#bindings.find((b) => b.monitor.id === id);
+    if (!binding) return null;
+    return this.#scan(binding);
+  }
+
   /** 测试/诊断入口：立即扫描全部绑定，返回本轮统计 */
   async scanOnce(): Promise<{ notified: number; errors: number }> {
     const totals = { notified: 0, errors: 0 };

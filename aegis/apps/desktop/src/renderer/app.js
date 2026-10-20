@@ -615,6 +615,24 @@ function renderMonitorStatus(monitors) {
     head.appendChild(el("strong", "", monitor.id));
     const kindLabel = monitor.kind === "files" ? "文件" : monitor.kind === "web" ? "网页" : "系统";
     head.appendChild(el("span", "monitor-badge", kindLabel));
+
+    const scan = el("button", "btn btn-ghost btn-small", "立即扫描");
+    scan.addEventListener("click", async () => {
+      scan.disabled = true;
+      $("monitor-hint").textContent = `正在扫描 ${monitor.id}…`;
+      try {
+        const result = await window.aegis.scanMonitor(monitor.id);
+        $("monitor-hint").textContent = result.found
+          ? `扫描完成：通知 ${result.notified} 条，错误 ${result.errors} 个`
+          : `当前运行配置中没有 ${monitor.id}`;
+        await loadMonitorStatus();
+      } catch (err) {
+        $("monitor-hint").textContent = `扫描失败：${err.message}`;
+      } finally {
+        scan.disabled = false;
+      }
+    });
+    head.appendChild(scan);
     row.appendChild(head);
 
     const meta = el("div", "monitor-meta");
