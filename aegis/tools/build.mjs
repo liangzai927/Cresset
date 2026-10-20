@@ -58,10 +58,16 @@ const TARGETS = [
   { name: "secrets", dir: "packages/secrets", entry: "src/index.ts", deps: ["contracts", "product"] },
   { name: "platform", dir: "packages/platform", entry: "src/index.ts", deps: ["clock", "contracts"] },
   {
+    name: "model-provider",
+    dir: "packages/model-provider",
+    entry: "src/index.ts",
+    deps: [],
+  },
+  {
     name: "redaction-gateway",
     dir: "packages/redaction-gateway",
     entry: "src/index.ts",
-    deps: ["contracts"],
+    deps: ["contracts", "model-provider"],
   },
   {
     name: "desktop",

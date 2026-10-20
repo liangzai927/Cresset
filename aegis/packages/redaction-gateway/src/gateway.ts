@@ -3,6 +3,7 @@
  */
 import { createHash } from "node:crypto";
 import type { DataClass } from "@aegis/contracts";
+import type { ProviderErrorKind } from "@aegis/model-provider";
 import { applyPlaceholders, builtinDetectors, runDetectors } from "./detectors.js";
 import {
   type ClassificationPolicy,
@@ -26,6 +27,8 @@ export interface GatewayOptions {
   detectors?: Detector[];
   policy?: GatewayPolicy;
   classification?: ClassificationPolicy;
+  /** 注入时钟；测试可固定审计时间 */
+  now?: () => number;
 }
 
 /**
@@ -44,7 +47,9 @@ export interface OutboundAuditRecord {
   redactionCount: number;
   policyVersion: string;
   payloadSha256: string;
-  outcome: "allowed" | "blocked";
+  outcome: "allowed" | "blocked" | "failed";
+  /** 失败类别；只允许 Provider 枚举，不含错误详情 */
+  errorKind?: ProviderErrorKind;
 }
 
 /** 策略版本；写入审计，便于回溯当时的判定依据是哪一版规则 */
@@ -93,7 +98,7 @@ export function evaluateOutbound(
   };
 
   const audit: OutboundAuditRecord = {
-    at: Date.now(),
+    at: opts.now?.() ?? Date.now(),
     actor: req.actor,
     purpose: req.purpose,
     destination: req.destination,

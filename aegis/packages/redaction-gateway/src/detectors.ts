@@ -108,16 +108,18 @@ export function runDetectors(detectors: Detector[], text: string): DetectorHit[]
 }
 
 /**
- * 占位替换（M1：只替换，不做还原）。
+ * 占位替换并返回可逆映射。
+ *
  * 同一会话内同一取值必须映射到同一占位符，否则模型无法理解"同一个对象"。
- * 完整实现（映射表 + 响应还原）在 M3。
+ * `mapping` 包含原文，**只能在本地用于响应还原**，绝不能写审计/日志或返回给 renderer。
  */
 export function applyPlaceholders(
   text: string,
   hits: DetectorHit[],
-): { redacted: string; summary: Map<string, number> } {
+): { redacted: string; summary: Map<string, number>; mapping: Map<string, string> } {
   const summary = new Map<string, number>();
-  if (hits.length === 0) return { redacted: text, summary };
+  const mapping = new Map<string, string>();
+  if (hits.length === 0) return { redacted: text, summary, mapping };
 
   // ① 先按**出现顺序**（位置升序）分配占位符编号，保证同一取值始终映射到同一占位符，
   //    且编号顺序与人类阅读顺序一致（[EMAIL_1] 一定出现在 [EMAIL_2] 之前）。
@@ -128,7 +130,9 @@ export function applyPlaceholders(
     if (assigned.has(hit.matched)) continue;
     const n = (counters.get(hit.category) ?? 0) + 1;
     counters.set(hit.category, n);
-    assigned.set(hit.matched, `[${hit.category.toUpperCase()}_${n}]`);
+    const placeholder = `[${hit.category.toUpperCase()}_${n}]`;
+    assigned.set(hit.matched, placeholder);
+    mapping.set(placeholder, hit.matched);
   }
 
   // ② 再从后往前替换，避免前面的替换导致后续偏移失效。
@@ -140,5 +144,12 @@ export function applyPlaceholders(
   }
 
   for (const [cat, n] of counters) summary.set(cat, n);
-  return { redacted: out, summary };
+  return { redacted: out, summary, mapping };
+}
+
+/** 把模型响应中的占位符换回本地原文（只在本地使用） */
+export function restorePlaceholders(text: string, mapping: Map<string, string>): string {
+  let out = text;
+  for (const [placeholder, original] of mapping) out = out.split(placeholder).join(original);
+  return out;
 }

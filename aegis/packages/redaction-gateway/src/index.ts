@@ -12,6 +12,8 @@
 
 import type { DataClass } from "@aegis/contracts";
 import { DEFAULT_DATA_CLASS } from "@aegis/contracts";
+import type { ProviderErrorKind } from "@aegis/model-provider";
+import type { OutboundAuditRecord } from "./gateway.js";
 
 /** 检测器：识别一段文本中的敏感项 */
 export interface Detector {
@@ -132,13 +134,25 @@ export const DETECTOR_LEVELS: Record<string, DataClass> = {
   connection_string: "L3",
 };
 
+/** 带模型名的完整外发请求 */
+export interface GatewayCompletionRequest extends OutboundRequest {
+  model: string;
+}
+
+/** 网关完成结果；`text` 已在本机还原占位符 */
+export interface GatewayResult {
+  text: string;
+  decision: OutboundDecision;
+  audit: OutboundAuditRecord;
+}
+
 /**
  * 模型网关接口。
  *
- * ⚠️ M1 只提供 fail-closed 实现（NoopModelGateway）：任何调用都抛错。
- *    这不是"没实现"，而是**刻意的安全默认值**：在 M3 补齐真实 Provider 之前，
- *    任何试图外发的代码路径都会立刻失败，而不是静默地把数据发出去。
+ * fail-closed 实现（M1）与真实 Provider 实现（M3）都遵守同一语义：
+ * 不允许就抛错，绝不静默返回空。
  */
 export interface ModelGateway {
-  complete(req: OutboundRequest): Promise<never>;
+  evaluate(req: OutboundRequest): OutboundDecision;
+  complete(req: GatewayCompletionRequest): Promise<GatewayResult>;
 }

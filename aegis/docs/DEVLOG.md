@@ -60,6 +60,30 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M3：Provider 抽象与真实脱敏外发
+**里程碑**：M3
+**改了什么**：
+- 新增 `@aegis/model-provider`：
+  - Provider 接口、OpenAI 兼容实现、领域错误；
+  - 只用内置 fetch，不引入模型 SDK；错误不携带响应体/密钥；
+- 扩展脱敏网关：
+  - `applyPlaceholders` 返回本地可逆映射；新增 `restorePlaceholders`；
+  - 新增 `RedactingModelGateway`：判定 → 脱敏 → Provider → 响应还原 → 审计；
+  - L2/L3 被拒时**不调用 Provider**；Provider 失败审计 outcome=failed；
+  - 审计只含哈希/类别/错误类别，审计时间可注入；
+- 新增 7 个测试：Provider 成功/鉴权/非法响应，网关还原/拒答/失败/还原函数；
+- 构建目标 15 个。
+**为什么**：M3 的硬前提是"真实外发只能走网关"；先把唯一出口做对，再接设置、知识库与业务判断。
+**验证**：
+- `pnpm verify`：374 通过 / 9 跳过
+- 假 Provider 只看到 `[EMAIL_1]`；响应回本地还原；
+- L3 载荷 Provider 调用次数为 0；
+- 审计序列化后不含原文。
+**踩到的坑**：evaluateOutbound 不能把命中原文暴露到公开 decision；
+网关为了还原占位符需要在本地重新跑检测并短暂持有 mapping，但 mapping 绝不进审计/日志。
+**留给下次**：Provider 设置/钥匙串、审计落库、LLM 混合判断、知识库摄取/检索；
+仍禁止 M4。
+
 ### 2026-10-20 · 跳过 M2 人工确认，进入 M3
 **里程碑**：M2 → M3
 **改了什么**：

@@ -38,7 +38,8 @@ M2 本地监测     packages/monitors（Monitor 接口、FileMonitor、SystemMon
 | `@aegis/storage` | SQLite 打开/迁移、blobs、DAO、审计写入 | 不做业务判断（如"该不该发通知"） |
 | `@aegis/secrets` | 系统钥匙串读写 + 可用性自检 | 不决定凭据用途 |
 | `@aegis/platform` | 通知/自启/权限/系统指标的平台实现 | 不含业务策略 |
-| `@aegis/redaction-gateway` | 唯一外发出口：分级、检测、脱敏、审计 | 不做业务提示词 |
+| `@aegis/model-provider` | 模型协议抽象与 OpenAI 兼容调用 | 不脱敏、不审计、不决定是否允许外发 |
+| `@aegis/redaction-gateway` | 唯一外发出口：分级、检测、脱敏、Provider 调用、审计 | 不做业务提示词 |
 | `@aegis/skills` | YAML Skill 契约、加载校验、模板与纯规则引擎 | 不做监测器、不发通知、不调模型 |
 | `@aegis/monitors` | 监测器统一接口与本地实现（FileMonitor / SystemMonitor） | 不做 Skill 解析、不做调度/通知 |
 | `apps/daemon` | 启动序列、调度编排、IPC 服务端、运行时状态 | 不直连模型、不实现平台细节 |
@@ -56,7 +57,8 @@ M2 本地监测     packages/monitors（Monitor 接口、FileMonitor、SystemMon
 | `storage` | `clock`, `contracts`, `product` |
 | `secrets` | `contracts`, `product` |
 | `platform` | `clock`, `contracts` |
-| `redaction-gateway` | `contracts`（以及未来的 `model-provider`） |
+| `model-provider` | （无工作区依赖） |
+| `redaction-gateway` | `contracts`, `model-provider` |
 | `daemon` | clock, contracts, ipc-contract, platform, product, redaction-gateway, secrets, skills, monitors, storage |
 
 ## 4. 四条铁律
