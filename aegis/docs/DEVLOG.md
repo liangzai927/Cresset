@@ -60,6 +60,20 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M3：修复重启后设置页显示初始化状态
+**里程碑**：M3
+**改了什么**：
+- `switchTab("settings")` 补上 `loadLlm/loadLlmAudit/loadBriefing/loadKnowledge/loadMonitorStatus/loadSkillList`；
+- 修正 `getLlmAudit` preload 参数：主进程 handler 接收 number，preload 原来传 `{limit}` 导致审计读取报错。
+**为什么**：设置卡片原来只在某些路径加载；重启后模型/知识库/监测器显示 HTML 初始值，
+用户会误以为配置丢失（实际 config.json 与钥匙串都还在）。
+**验证**：
+- `pnpm verify` 396 通过
+- 用 Electron CDP 延迟点击设置页验证：provider=deepseek、timeout=2000、daily=200、usage 正确
+- 配置仍在 `~/Library/Application Support/Aegis/config.json`，Key 在钥匙串
+**踩到的坑**：页签切换的按需加载列表必须覆盖所有设置卡片；新增卡片时容易漏。
+**留给下次**：继续外部数据源/渠道。
+
 ### 2026-10-20 · M3：本地每日简报
 **里程碑**：M3
 **改了什么**：

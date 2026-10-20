@@ -1619,6 +1619,14 @@ function switchTab(name) {
     void refreshStatus();
     void loadAutostart();
     void refreshSystemHealth({ silent: true });
+    // 设置页的每张卡片都必须在切页时重新拉取；只在启动时加载会导致
+    // "重启后显示成初始化状态"（模型/知识库/监测器都是独立 RPC）。
+    void loadBriefing();
+    void loadLlm();
+    void loadLlmAudit();
+    void loadKnowledge();
+    void loadMonitorStatus();
+    void loadSkillList();
   }
 }
 

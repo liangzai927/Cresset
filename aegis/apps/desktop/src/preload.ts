@@ -116,7 +116,7 @@ function buildApi(): DesktopApi {
     getLlm: () => ipcRenderer.invoke("aegis:llm:get") as Promise<LlmView>,
     discoverLlmModels: () => ipcRenderer.invoke("aegis:llm:models") as Promise<{ models: string[] }>,
     getLlmAudit: (limit = 20) =>
-      ipcRenderer.invoke("aegis:llm:audit", { limit }) as Promise<{ entries: LlmAuditEntry[] }>,
+      ipcRenderer.invoke("aegis:llm:audit", limit) as Promise<{ entries: LlmAuditEntry[] }>,
     setLlm: (settings: LlmSettingsView) => ipcRenderer.invoke("aegis:llm:set", settings) as Promise<LlmView>,
     setLlmKey: (apiKey: string) =>
       ipcRenderer.invoke("aegis:llm:set-key", { apiKey }) as Promise<{ hasApiKey: boolean }>,
