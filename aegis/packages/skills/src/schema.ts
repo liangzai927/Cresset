@@ -58,6 +58,22 @@ export const SkillActionSchema = z
   .strict();
 export type SkillAction = z.infer<typeof SkillActionSchema>;
 
+/**
+ * 可选的 LLM 判断步骤（M3 FR-D1）。
+ *
+ * 规则先决定"到没到/变没变"；这里才让模型判断"值不值得打断"与"怎么说"。
+ * 没有配置 judge 的 Skill 永远不调用模型。
+ */
+export const SkillJudgeSchema = z
+  .object({
+    /** 追加给模型的判断说明；规则命中后的标题/正文仍作为 fallback */
+    prompt: z.string().min(1).max(4_000),
+    /** 关闭后只让模型改写文案，不允许把通知抑制掉 */
+    canSuppress: z.boolean().default(true),
+  })
+  .strict();
+export type SkillJudge = z.infer<typeof SkillJudgeSchema>;
+
 /** 完整 Skill 定义 */
 export const SkillSchema = z
   .object({
@@ -73,6 +89,8 @@ export const SkillSchema = z
       .regex(/^\d+[smhd]$/, "cooldown 形如 30m / 6h / 1d")
       .default("24h"),
     trigger: SkillTriggerSchema,
+    /** 可选：规则命中后再让模型判断/改写；失败必须回退到规则文案 */
+    judge: SkillJudgeSchema.optional(),
     action: SkillActionSchema,
   })
   .strict();

@@ -313,6 +313,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
     clock,
     scheduler,
     bindings: monitorBindings,
+    judge: (skill, decision, fields) => llmService.judge(skill, decision, fields),
     onLog: log,
   });
   monitorRuntime.start();

@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { VirtualClock } from "@aegis/clock";
 import type { SecretAvailability, SecretStore } from "@aegis/secrets";
+import { parseSkill, type SkillDecision } from "@aegis/skills";
 import { AuditRepo, migrate, openDb } from "@aegis/storage";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { LlmService } from "./llm-service.js";
@@ -39,14 +40,16 @@ let dir: string;
 let db: ReturnType<typeof openDb>;
 let server: Server;
 let baseUrl: string;
+let chatReply = "OK";
 
 beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), "aegis-llm-"));
   db = openDb({ file: join(dir, "test.db") });
   migrate(db);
+  chatReply = "OK";
   server = createServer((_req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ choices: [{ message: { content: "OK" } }], model: "test-model" }));
+    res.end(JSON.stringify({ choices: [{ message: { content: chatReply } }], model: "test-model" }));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`;
@@ -130,6 +133,89 @@ describe("LlmService", () => {
     const result = await service.test();
     expect(result).toMatchObject({ ok: false, blocked: false, errorKind: "configuration" });
     expect(new AuditRepo(db).count()).toBe(0);
+  });
+
+  it("judge 只在规则命中后调用，并采用模型改写", async () => {
+    const service = new LlmService({
+      configFile: join(dir, "config.json"),
+      db,
+      clock: new VirtualClock(1_000),
+      secrets: new MemorySecrets(),
+    });
+    await service.setApiKey("sk-test");
+    chatReply = JSON.stringify({
+      notify: true,
+      title: "模型标题",
+      body: "模型正文",
+      priority: "urgent",
+      reason: "important",
+    });
+    const skill = parseSkill(`name: judged
+version: 1.0.0
+description: 判断测试
+permissions: [system.read]
+cooldown: 1h
+params: {}
+trigger:
+  type: change
+  monitor: system.test
+judge:
+  prompt: 判断这条通知是否值得打断
+action:
+  notify:
+    priority: normal
+    title: 规则标题
+    body: 规则正文
+`);
+    const decision: SkillDecision = {
+      skill: "judged",
+      priority: "normal",
+      title: "规则标题",
+      body: "规则正文",
+      cooldown: "1h",
+    };
+    const judged = await service.judge(skill, decision, { mount: "/", free_percent: 8 });
+    expect(judged).toMatchObject({ title: "模型标题", body: "模型正文", priority: "urgent" });
+  });
+
+  it("judge 可抑制通知；非法响应回退规则文案", async () => {
+    const service = new LlmService({
+      configFile: join(dir, "config.json"),
+      db,
+      clock: new VirtualClock(1_000),
+      secrets: new MemorySecrets(),
+    });
+    await service.setApiKey("sk-test");
+    const skill = parseSkill(`name: judged
+version: 1.0.0
+description: 判断测试
+permissions: [system.read]
+cooldown: 1h
+params: {}
+trigger:
+  type: change
+  monitor: system.test
+judge:
+  prompt: 判断
+action:
+  notify:
+    priority: normal
+    title: 规则标题
+    body: 规则正文
+`);
+    const decision: SkillDecision = {
+      skill: "judged",
+      priority: "normal",
+      title: "规则标题",
+      body: "规则正文",
+      cooldown: "1h",
+    };
+
+    chatReply = JSON.stringify({ notify: false, title: "", body: "", priority: "low", reason: "noise" });
+    expect(await service.judge(skill, decision, { path: "x" })).toBeNull();
+
+    chatReply = "not-json";
+    expect(await service.judge(skill, decision, { path: "x" })).toEqual(decision);
   });
 
   it("钥匙串读取失败会显示在视图里，而不是假装无 Key", async () => {

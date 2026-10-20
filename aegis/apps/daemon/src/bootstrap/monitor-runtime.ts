@@ -13,7 +13,7 @@
 import type { Clock } from "@aegis/clock";
 import type { Monitor } from "@aegis/monitors";
 import type { Scheduler } from "@aegis/scheduler";
-import type { Skill } from "@aegis/skills";
+import type { Skill, SkillDecision } from "@aegis/skills";
 import { evaluateSkill } from "@aegis/skills";
 import { type Db, rowOf } from "@aegis/storage";
 
@@ -54,6 +54,12 @@ export interface MonitorRuntimeOptions {
   clock: Clock;
   scheduler: Scheduler;
   bindings: MonitorBinding[];
+  /** 可选的 LLM 判断；返回 null 表示模型明确抑制这条通知 */
+  judge?: (
+    skill: Skill,
+    decision: SkillDecision,
+    fields: Record<string, unknown>,
+  ) => Promise<SkillDecision | null>;
   onLog?: MonitorLog;
 }
 
@@ -76,6 +82,7 @@ export class MonitorRuntime {
   readonly #clock: Clock;
   readonly #scheduler: Scheduler;
   #bindings: MonitorBinding[];
+  readonly #judge: MonitorRuntimeOptions["judge"];
   readonly #log: MonitorLog;
   readonly #timers: NodeJS.Timeout[] = [];
   readonly #busy = new Set<string>();
@@ -87,6 +94,7 @@ export class MonitorRuntime {
     this.#clock = options.clock;
     this.#scheduler = options.scheduler;
     this.#bindings = options.bindings;
+    this.#judge = options.judge;
     this.#log = options.onLog ?? (() => {});
     this.#resetStatus();
   }
@@ -197,8 +205,21 @@ export class MonitorRuntime {
           }
 
           try {
-            const decision = evaluateSkill(skill, fact.fields);
+            let decision = evaluateSkill(skill, fact.fields);
             if (!decision) continue;
+            if (this.#judge && skill.judge) {
+              try {
+                decision = await this.#judge(skill, decision, fact.fields);
+              } catch (err) {
+                // 判断失败回退规则文案；规则已命中，不能因为模型故障丢通知
+                this.#log("warn", "monitor.judge_failed", {
+                  monitor: id,
+                  skill: skill.name,
+                  error: (err as Error).message,
+                });
+              }
+              if (!decision) continue;
+            }
 
             const cooldownMs = parseCooldown(skill.cooldown);
             const subject = String(fact.fields.path ?? fact.fields.mount ?? fact.kind);

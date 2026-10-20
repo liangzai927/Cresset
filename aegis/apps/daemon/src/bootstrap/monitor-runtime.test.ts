@@ -118,6 +118,71 @@ describe("MonitorRuntime", () => {
     expect(count.n).toBe(2);
   });
 
+  it("judge 可抑制通知；judge 异常回退规则文案", async () => {
+    const clock = new VirtualClock(3_000_000);
+    const scheduler = new Scheduler({
+      db,
+      clock,
+      notifiers: [],
+      dnd: { enabled: false, windows: [] },
+    });
+    const monitor: Monitor = {
+      id: "system.test",
+      permission: "system.read",
+      async scan() {
+        return {
+          facts: [
+            { monitor: "system.test", kind: "system.threshold", at: clock.wall(), fields: { free: 5 } },
+          ],
+          errors: [],
+        };
+      },
+    };
+    const skill = parseSkill(`name: judged
+version: 1.0.0
+description: 判断测试
+permissions: [system.read]
+cooldown: 1h
+params: {}
+trigger:
+  type: change
+  monitor: system.test
+judge:
+  prompt: 判断
+action:
+  notify:
+    priority: normal
+    title: 规则标题
+    body: 规则正文
+`);
+    const suppress = new MonitorRuntime({
+      db,
+      clock,
+      scheduler,
+      bindings: [{ monitor, kind: "system", skills: [skill], intervalMs: 1_000 }],
+      judge: async () => null,
+    });
+    expect(await suppress.scanOnce()).toEqual({ notified: 0, errors: 0 });
+    expect(
+      (db.prepare("SELECT COUNT(*) AS n FROM notification WHERE kind = 'monitor'").get() as { n: number }).n,
+    ).toBe(0);
+
+    const fallback = new MonitorRuntime({
+      db,
+      clock,
+      scheduler,
+      bindings: [{ monitor, kind: "system", skills: [skill], intervalMs: 1_000 }],
+      judge: async () => {
+        throw new Error("model down");
+      },
+    });
+    expect(await fallback.scanOnce()).toEqual({ notified: 1, errors: 0 });
+    const row = db.prepare("SELECT title FROM notification WHERE kind = 'monitor'").get() as {
+      title: string;
+    };
+    expect(row.title).toBe("规则标题");
+  });
+
   it("连续失败达到阈值才发 failure 通知，并按 30 分钟窗口去重", async () => {
     const clock = new VirtualClock(2_000_000);
     const scheduler = new Scheduler({

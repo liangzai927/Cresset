@@ -17,6 +17,7 @@ import {
   RedactingModelGateway,
 } from "@aegis/redaction-gateway";
 import type { SecretStore } from "@aegis/secrets";
+import type { Skill, SkillDecision } from "@aegis/skills";
 import { AuditRepo, type Db, type StoredAuditEntry } from "@aegis/storage";
 import { type DaemonConfig, loadConfig, saveConfig } from "./config.js";
 
@@ -107,6 +108,88 @@ export class LlmService {
     return this.#audit.recent(limit);
   }
 
+  /**
+   * 规则命中后的可选 LLM 判断/改写。
+   *
+   * 失败、未启用、无 Key、超预算、被网关拒绝时**一律返回原规则决策**；
+   * 只有模型明确返回 `notify=false` 且 Skill 允许抑制时才返回 null。
+   * 这里不抛错，避免模型故障影响已经由规则确认的通知。
+   */
+  async judge(
+    skill: Skill,
+    decision: SkillDecision,
+    fields: Record<string, unknown>,
+  ): Promise<SkillDecision | null> {
+    if (!skill.judge) return decision;
+    const cfg = loadConfig(this.#configFile).config;
+    if (!cfg.llm.enabled) return decision;
+
+    const apiKey = await this.#secrets.get(LLM_API_KEY);
+    if (!apiKey) return decision;
+
+    let destination: string;
+    try {
+      destination = new URL(cfg.llm.baseUrl).host;
+    } catch {
+      return decision;
+    }
+    if (!this.#consumeCall(cfg.llm.dailyCallLimit, "skill.judge")) return decision;
+
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: cfg.llm.baseUrl,
+      apiKey,
+      model: cfg.llm.model,
+      timeoutMs: cfg.llm.timeoutMs,
+    });
+    const gateway = new RedactingModelGateway({
+      provider,
+      policy: { maxOutboundClass: cfg.llm.maxOutboundClass },
+      now: () => this.#clock.wall(),
+      audit: (audit) => this.#recordAudit(audit),
+    });
+
+    try {
+      const facts = JSON.stringify(fields).slice(0, 4_000);
+      const prompt = [
+        skill.judge.prompt,
+        "",
+        "规则命中后的通知草稿：",
+        `标题：${decision.title}`,
+        `正文：${decision.body}`,
+        `优先级：${decision.priority}`,
+        "监测事实（可能已被脱敏）：",
+        facts,
+        "",
+        "请只返回 JSON：",
+        '{"notify":true|false,"title":"...","body":"...","priority":"low|normal|high|urgent","reason":"..."}',
+        skill.judge.canSuppress ? "" : "注意：notify 必须为 true，不能抑制这条通知。",
+      ].join("\n");
+
+      const result = await gateway.complete({
+        actor: "daemon",
+        purpose: "skill-judge",
+        destination: `${destination}/${cfg.llm.model}`,
+        payload: prompt,
+        source: "team-doc",
+        model: cfg.llm.model,
+      });
+
+      const parsed = parseJudgeResponse(result.text);
+      if (!parsed) return decision;
+      if (!parsed.notify && skill.judge.canSuppress) return null;
+      if (!parsed.notify) return decision;
+      return {
+        ...decision,
+        title: parsed.title || decision.title,
+        body: parsed.body || decision.body,
+        priority: parsed.priority,
+      };
+    } catch {
+      // 模型/网关/解析失败都必须回退；规则已经确认的通知不能因为模型而丢失
+      return decision;
+    }
+  }
+
   /** 写入 API Key；只在成功时返回 hasApiKey=true */
   async setApiKey(apiKey: string): Promise<{ hasApiKey: boolean }> {
     if (!apiKey.trim()) throw new Error("API Key 不能为空");
@@ -134,7 +217,7 @@ export class LlmService {
     } catch {
       return { ok: false, blocked: false, errorKind: "configuration", reason: "Base URL 非法" };
     }
-    if (!this.#consumeCall(cfg.llm.dailyCallLimit)) {
+    if (!this.#consumeCall(cfg.llm.dailyCallLimit, "llm.test")) {
       return { ok: false, blocked: false, errorKind: "rate_limit", reason: "已达到今日调用上限" };
     }
 
@@ -187,19 +270,19 @@ export class LlmService {
    * 用条件 UPSERT 而不是"先 SELECT 再 UPDATE"：即使未来出现并发调用，
    * 也只有未达上限的请求能让 changes=1。
    */
-  #consumeCall(limit: number): boolean {
+  #consumeCall(limit: number, purpose: string): boolean {
     const now = this.#clock.wall();
     const dayKey = Math.floor(now / 86_400_000);
     const result = this.#db
       .prepare(
         `INSERT INTO llm_usage (day_key, purpose, calls, updated_at)
-         VALUES (?, 'llm.test', 1, ?)
+         VALUES (?, ?, 1, ?)
          ON CONFLICT(day_key, purpose) DO UPDATE SET
            calls = calls + 1,
            updated_at = excluded.updated_at
          WHERE calls < ?`,
       )
-      .run(dayKey, now, limit);
+      .run(dayKey, purpose, now, limit);
     return result.changes > 0;
   }
 
@@ -220,4 +303,33 @@ export class LlmService {
       audit.at,
     );
   }
+}
+
+/** 解析模型 JSON；任何字段不合法都返回 null，由调用方回退 */
+function parseJudgeResponse(
+  text: string,
+): { notify: boolean; title: string; body: string; priority: SkillDecision["priority"] } | null {
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```$/, "");
+  let raw: unknown;
+  try {
+    raw = JSON.parse(cleaned);
+  } catch {
+    return null;
+  }
+  if (typeof raw !== "object" || raw === null) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.notify !== "boolean") return null;
+  const priority = r.priority;
+  if (priority !== "low" && priority !== "normal" && priority !== "high" && priority !== "urgent") {
+    return null;
+  }
+  return {
+    notify: r.notify,
+    title: typeof r.title === "string" ? r.title : "",
+    body: typeof r.body === "string" ? r.body : "",
+    priority,
+  };
 }
