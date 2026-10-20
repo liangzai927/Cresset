@@ -190,6 +190,7 @@ pnpm verify                  # 依赖方向门禁 + typecheck + lint + 测试
 | `pnpm verify` | **全量校验（提交前跑这个）**：门禁 → 解析 → 类型 → lint → 测试 → 构建 |
 | `pnpm repo:check` | 单仓库门禁：发现嵌套 `.git` 就失败 |
 | `pnpm acceptance` | R5 自动化门禁；`--full` 额外跑桌面与打包验证 |
+| `pnpm r5:report` | 汇总 heartbeat/通知/投递/运行缺口，生成 R5 证据报告 |
 | `pnpm build` | 构建全部产物（类型检查 + esbuild 打包 + 生成 .d.ts） |
 | `pnpm package` | 组装 `dist/Aegis.app`（随附 Node + ad-hoc 签名） |
 | `pnpm package:verify` | 组装后真实启动打包产物自检 |

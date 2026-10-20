@@ -20,3 +20,4 @@ dist/
 
 # R5 验收运行报告（本机证据，不入库）
 aegis/docs/acceptance/last-run.json
+aegis/docs/acceptance/r5-report.md

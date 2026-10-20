@@ -16,6 +16,7 @@
     "package:verify": "node tools/package-app.mjs --verify",
     "verify": "pnpm run repo:check && pnpm run boundaries && pnpm run comments && pnpm run devlog:check && pnpm run typecheck && pnpm run build && pnpm run resolve && pnpm run lint && pnpm run test",
     "acceptance": "node tools/acceptance.mjs",
+    "r5:report": "node tools/r5-report.mjs",
     "verify:desktop": "node tools/verify-desktop.mjs",
     "repo:check": "node tools/check-single-repo.mjs",
     "boundaries": "node tools/check-boundaries.mjs",
