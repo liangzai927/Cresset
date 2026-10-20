@@ -32,6 +32,7 @@ import type {
   DesktopApi,
   DiagnosticInfo,
   DndSettingsView,
+  EmailMonitorSettings,
   KnowledgeAnswerResult,
   KnowledgeDocument,
   KnowledgeHit,
@@ -88,6 +89,17 @@ function buildApi(): DesktopApi {
 
     exportBackup: () => ipcRenderer.invoke("aegis:backup:export") as Promise<BackupExportResult>,
 
+    getEmailMonitor: () => ipcRenderer.invoke("aegis:email-monitor:get") as Promise<EmailMonitorSettings>,
+    setEmailMonitor: (settings: EmailMonitorSettings) =>
+      ipcRenderer.invoke("aegis:email-monitor:set", settings) as Promise<EmailMonitorSettings>,
+    setEmailMonitorPassword: (password: string) =>
+      ipcRenderer.invoke("aegis:email-monitor:set-password", { password }) as Promise<{
+        hasPassword: boolean;
+      }>,
+    clearEmailMonitorPassword: () =>
+      ipcRenderer.invoke("aegis:email-monitor:clear-password") as Promise<{ hasPassword: boolean }>,
+    testEmailMonitor: () =>
+      ipcRenderer.invoke("aegis:email-monitor:test") as Promise<{ ok: boolean; detail: string }>,
     getCalendar: () => ipcRenderer.invoke("aegis:calendar:get") as Promise<CalendarSettings>,
     setCalendar: (settings: CalendarSettings) =>
       ipcRenderer.invoke("aegis:calendar:set", settings) as Promise<CalendarSettings>,

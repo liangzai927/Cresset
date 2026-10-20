@@ -40,13 +40,19 @@ import type { Scheduler } from "@aegis/scheduler";
 import type { SecretStore } from "@aegis/secrets";
 import { SkillLoadError } from "@aegis/skills";
 import type { AttemptSummary } from "@aegis/storage";
+import { ImapFlow } from "imapflow";
 import { z } from "zod";
 import { createBackup } from "../bootstrap/backup.js";
 import { loadConfig, type MonitorConfig, MonitorConfigSchema, saveConfig } from "../bootstrap/config.js";
 import { installDefaultSkills } from "../bootstrap/default-skills.js";
 import type { LlmService } from "../bootstrap/llm-service.js";
 import type { MonitorStatus } from "../bootstrap/monitor-runtime.js";
-import { BARK_DEVICE_KEY, EMAIL_PASSWORD_KEY, TELEGRAM_BOT_TOKEN_KEY } from "../bootstrap/notify-secrets.js";
+import {
+  BARK_DEVICE_KEY,
+  EMAIL_IMAP_PASSWORD_KEY,
+  EMAIL_PASSWORD_KEY,
+  TELEGRAM_BOT_TOKEN_KEY,
+} from "../bootstrap/notify-secrets.js";
 import {
   deleteSkill,
   importSkill,
@@ -529,6 +535,128 @@ export function createMethods(
 
     "monitor.status": async () => {
       return { monitors: context.monitors?.status() ?? [] };
+    },
+
+    "emailMonitor.get": async () => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      const m = loadConfig(configFile).config.emailMonitor;
+      let hasPassword = false;
+      try {
+        hasPassword = Boolean(await context.secrets?.get(EMAIL_IMAP_PASSWORD_KEY));
+      } catch {
+        hasPassword = false;
+      }
+      return {
+        enabled: m.enabled,
+        ...(m.host ? { host: m.host } : {}),
+        port: m.port,
+        secure: m.secure,
+        ...(m.user ? { user: m.user } : {}),
+        mailbox: m.mailbox,
+        pollIntervalS: m.pollIntervalS,
+        senders: m.senders,
+        keywords: m.keywords,
+        hasPassword,
+      };
+    },
+
+    "emailMonitor.set": async (params) => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      const p = z
+        .object({
+          enabled: z.boolean(),
+          host: z.string().max(255).optional(),
+          port: z.number().int().min(1).max(65_535),
+          secure: z.boolean(),
+          user: z.string().max(255).optional(),
+          mailbox: z.string().max(255),
+          pollIntervalS: z.number().int().min(60).max(3_600),
+          senders: z.array(z.string().max(255)),
+          keywords: z.array(z.string().max(50)),
+          hasPassword: z.boolean().optional(),
+        })
+        .strict()
+        .parse(params);
+      if (p.enabled && (!p.host || !p.user)) {
+        throw new MethodError(E_INVALID_PARAMS, "启用邮件监测必须填写 IMAP host/user");
+      }
+      const current = loadConfig(configFile);
+      saveConfig(configFile, {
+        ...current.config,
+        emailMonitor: {
+          enabled: p.enabled,
+          ...(p.host ? { host: p.host } : {}),
+          port: p.port,
+          secure: p.secure,
+          ...(p.user ? { user: p.user } : {}),
+          mailbox: p.mailbox,
+          passwordSecret: current.config.emailMonitor.passwordSecret,
+          pollIntervalS: p.pollIntervalS,
+          maxPerPoll: current.config.emailMonitor.maxPerPoll,
+          senders: p.senders,
+          keywords: p.keywords,
+        },
+      });
+      return p;
+    },
+
+    "emailMonitor.setPassword": async (params) => {
+      const p = z
+        .object({ password: z.string().min(1).max(500) })
+        .strict()
+        .parse(params);
+      if (!context.secrets) throw new MethodError(E_INTERNAL, "钥匙串未初始化");
+      try {
+        await context.secrets.set(EMAIL_IMAP_PASSWORD_KEY, p.password);
+        return { hasPassword: true };
+      } catch (err) {
+        throw new MethodError(E_INTERNAL, `保存 IMAP 密码失败：${(err as Error).message}`);
+      }
+    },
+
+    "emailMonitor.clearPassword": async () => {
+      if (!context.secrets) throw new MethodError(E_INTERNAL, "钥匙串未初始化");
+      try {
+        await context.secrets.delete(EMAIL_IMAP_PASSWORD_KEY);
+        return { hasPassword: false };
+      } catch (err) {
+        throw new MethodError(E_INTERNAL, `清除 IMAP 密码失败：${(err as Error).message}`);
+      }
+    },
+
+    "emailMonitor.test": async () => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      if (!context.secrets) throw new MethodError(E_INTERNAL, "钥匙串未初始化");
+      const m = loadConfig(configFile).config.emailMonitor;
+      if (!m.host || !m.user) return { ok: false, detail: "IMAP host/user 未配置" };
+      let pass: string | null;
+      try {
+        pass = await context.secrets.get(EMAIL_IMAP_PASSWORD_KEY);
+      } catch {
+        return { ok: false, detail: "钥匙串读取失败" };
+      }
+      if (!pass) return { ok: false, detail: "IMAP 密码未配置" };
+      const client = new ImapFlow({
+        host: m.host,
+        port: m.port,
+        secure: m.secure,
+        auth: { user: m.user, pass },
+        logger: false,
+      });
+      try {
+        await client.connect();
+        await client.mailboxOpen(m.mailbox);
+        return { ok: true, detail: `IMAP 连接成功（${m.mailbox}）` };
+      } catch (err) {
+        return { ok: false, detail: `IMAP 连接失败：${(err as Error).message.slice(0, 120)}` };
+      } finally {
+        await client.logout().catch(() => {
+          /* 测试连接失败时 logout 也可能失败，忽略 */
+        });
+      }
     },
 
     "calendar.get": async () => {

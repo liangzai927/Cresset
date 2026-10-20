@@ -227,6 +227,20 @@ export interface CalendarSettings {
   icsPath?: string;
 }
 
+/** 重要邮件监测设置 */
+export interface EmailMonitorSettings {
+  enabled: boolean;
+  host?: string;
+  port: number;
+  secure: boolean;
+  user?: string;
+  mailbox: string;
+  pollIntervalS: number;
+  senders: string[];
+  keywords: string[];
+  hasPassword?: boolean;
+}
+
 /** 通知渠道设置 */
 export interface NotifySettings {
   channels: Array<"os_notification" | "cli_fallback" | "webhook" | "telegram" | "bark" | "tts" | "email">;
@@ -409,6 +423,16 @@ export interface DesktopApi {
   resumeAll(): Promise<{ ok: boolean }>;
 
   checkUpdate(): Promise<UpdateInfo>;
+  /** 读取重要邮件监测设置 */
+  getEmailMonitor(): Promise<EmailMonitorSettings>;
+  /** 保存重要邮件监测设置 */
+  setEmailMonitor(settings: EmailMonitorSettings): Promise<EmailMonitorSettings>;
+  /** 保存 IMAP 密码到钥匙串 */
+  setEmailMonitorPassword(password: string): Promise<{ hasPassword: boolean }>;
+  /** 清除 IMAP 密码 */
+  clearEmailMonitorPassword(): Promise<{ hasPassword: boolean }>;
+  /** 测试 IMAP 连接 */
+  testEmailMonitor(): Promise<{ ok: boolean; detail: string }>;
   /** 读取本地日历设置 */
   getCalendar(): Promise<CalendarSettings>;
   /** 保存本地日历设置 */

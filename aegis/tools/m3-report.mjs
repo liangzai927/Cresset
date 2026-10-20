@@ -52,7 +52,6 @@ const audits = rows(
   "SELECT purpose, outcome, COUNT(*) AS n FROM outbound_audit WHERE at >= ? GROUP BY purpose, outcome ORDER BY purpose, outcome",
   sevenDaysAgo,
 );
-const auditTotal = one("SELECT COUNT(*) AS n FROM outbound_audit");
 const blocked = one("SELECT COUNT(*) AS n FROM outbound_audit WHERE outcome = 'blocked'");
 const knowledge = rows(
   "SELECT d.source_path, d.data_class, COUNT(c.id) AS chunks FROM knowledge_document d LEFT JOIN knowledge_chunk c ON c.document_id = d.id GROUP BY d.id ORDER BY d.created_at DESC",
@@ -83,12 +82,14 @@ function countIcsEvents(path) {
 const icsPath = cfg.calendar?.icsPath;
 const icsEvents = countIcsEvents(icsPath);
 const emailEnabled = cfg.notify?.email?.enabled === true;
+const emailMonitorEnabled = cfg.emailMonitor?.enabled === true;
 const routingEnabled = cfg.notify?.routing?.enabled === true;
 db.close();
 
 const concerns = [];
 if (digestDays < 7) concerns.push(`早报只覆盖 ${digestDays}/7 天；还不能宣称“连续 7 天有信息量”`);
-if (!emailEnabled) concerns.push("SMTP 邮件渠道未启用；“重要邮件”读取/监测仍未实现");
+if (!emailEnabled) concerns.push("SMTP 邮件渠道未启用");
+if (!emailMonitorEnabled) concerns.push("IMAP 重要邮件监测未配置；真实邮箱误报/漏报仍未验证");
 if (
   !successes.has("webhook") &&
   !successes.has("telegram") &&
@@ -124,6 +125,7 @@ const lines = [
   `| 早报覆盖天数 | ${digestDays} 天（目标 ≥7） |`,
   `| ICS 事件数 | ${icsEvents} |`,
   `| SMTP 邮件启用 | ${emailEnabled ? "是" : "否"} |`,
+  `| IMAP 邮件监测启用 | ${emailMonitorEnabled ? "是" : "否"} |`,
   `| 优先级分流启用 | ${routingEnabled ? "是" : "否"} |`,
   "",
   "## 外发审计（近 7 天）",

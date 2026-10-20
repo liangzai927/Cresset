@@ -181,6 +181,49 @@
         </div>
 
         <div class="settings-group">
+          <h2>重要邮件（IMAP）</h2>
+          <p class="hint">只读取未读邮件的发件人/主题，命中规则后提醒；不下载正文，也不把邮件外发给模型。</p>
+          <label class="dnd-toggle">
+            <input type="checkbox" id="email-monitor-enabled" />
+            启用邮件监测
+          </label>
+          <div class="form-grid">
+            <label class="form-field">IMAP host
+              <input id="email-monitor-host" type="text" placeholder="imap.example.com" />
+            </label>
+            <label class="form-field">端口
+              <input id="email-monitor-port" type="number" min="1" max="65535" placeholder="993" />
+            </label>
+            <label class="form-field">用户名
+              <input id="email-monitor-user" type="text" placeholder="me@example.com" />
+            </label>
+            <label class="form-field">邮箱文件夹
+              <input id="email-monitor-mailbox" type="text" placeholder="INBOX" />
+            </label>
+            <label class="form-field">轮询秒数
+              <input id="email-monitor-interval" type="number" min="60" max="3600" />
+            </label>
+            <label class="form-field">重要发件人（逗号分隔）
+              <input id="email-monitor-senders" type="text" placeholder="boss@, hr@" />
+            </label>
+            <label class="form-field">主题关键词（逗号分隔）
+              <input id="email-monitor-keywords" type="text" placeholder="紧急, 合同, 发票" />
+            </label>
+          </div>
+          <label class="dnd-toggle">
+            <input type="checkbox" id="email-monitor-secure" />
+            使用 TLS
+          </label>
+          <input id="email-monitor-password" type="password" placeholder="IMAP 密码（只写入钥匙串）" autocomplete="off" />
+          <div class="settings-actions">
+            <button class="btn btn-ghost btn-small" id="btn-save-email-monitor">保存监测设置</button>
+            <button class="btn btn-ghost btn-small" id="btn-set-email-monitor-password">保存密码</button>
+            <button class="btn btn-ghost btn-small" id="btn-test-email-monitor">测试连接</button>
+            <span class="hint" id="email-monitor-hint"></span>
+          </div>
+        </div>
+
+        <div class="settings-group">
           <h2>知识库</h2>
           <div class="settings-actions">
             <button class="btn" id="btn-import-knowledge">导入文档</button>

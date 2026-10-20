@@ -60,6 +60,24 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M3：IMAP 重要邮件监测（规则版）
+**里程碑**：M3
+**改了什么**：
+- 新增 EmailMonitor：轮询未读邮件 envelope，按发件人/关键词规则筛选；
+- 命中生成 kind=monitor / priority=high 通知，dedupe_key=email:uidValidity:uid；
+- config 增加 emailMonitor；IMAP 密码进钥匙串；
+- 设置页增加 host/port/邮箱/规则/密码/测试连接；
+- 新增 3 个规则测试。
+**为什么**：M3 的最后一块功能缺口是“重要邮件”；规则版可以先把 IMAP 链路和误报可见性跑通。
+**验证**：
+- `pnpm verify`：423 通过 / 9 跳过
+- 规则：发件人命中、关键词命中、无规则不命中
+- 打包：imapflow 不能内联（pino 动态 require），改为 external + 复制依赖闭包；
+  `package:verify` 通过（439MB）
+**限制**：不读正文/附件，无 LLM 语义判断，只有轮询；真实误报/漏报还未验收。
+**留给下次**：真实邮箱样本、IMAP IDLE、M3 报告再次生成；
+仍禁止 M4。
+
 ### 2026-10-20 · M3：验收证据报告
 **里程碑**：M3
 **改了什么**：

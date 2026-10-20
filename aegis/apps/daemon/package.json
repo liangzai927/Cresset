@@ -14,17 +14,18 @@
     "@aegis/clock": "workspace:*",
     "@aegis/contracts": "workspace:*",
     "@aegis/ipc-contract": "workspace:*",
-    "@aegis/platform": "workspace:*",
-    "@aegis/redaction-gateway": "workspace:*",
-    "@aegis/secrets": "workspace:*",
-    "@aegis/storage": "workspace:*",
-    "@aegis/product": "workspace:*",
-    "zod": "^3.24.0",
-    "@aegis/scheduler": "workspace:*",
-    "@aegis/recurrence": "workspace:*",
-    "@aegis/skills": "workspace:*",
+    "@aegis/knowledge": "workspace:*",
     "@aegis/monitors": "workspace:*",
-    "@aegis/knowledge": "workspace:*"
+    "@aegis/platform": "workspace:*",
+    "@aegis/product": "workspace:*",
+    "@aegis/recurrence": "workspace:*",
+    "@aegis/redaction-gateway": "workspace:*",
+    "@aegis/scheduler": "workspace:*",
+    "@aegis/secrets": "workspace:*",
+    "@aegis/skills": "workspace:*",
+    "@aegis/storage": "workspace:*",
+    "imapflow": "^2.5.6",
+    "zod": "^3.24.0"
   },
   "exports": {
     ".": {

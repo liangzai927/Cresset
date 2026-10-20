@@ -49,6 +49,7 @@ import type {
   CreateTaskPayload,
   DiagnosticInfo,
   DndSettingsView,
+  EmailMonitorSettings,
   KnowledgeAnswerResult,
   KnowledgeDocument,
   KnowledgeHit,
@@ -839,6 +840,31 @@ async function ipcOpenNotificationSettings(): Promise<{ ok: boolean; detail: str
   return { ok: false, detail: "无法打开系统通知设置，请手动打开系统设置 → 通知" };
 }
 
+async function ipcGetEmailMonitor(): Promise<EmailMonitorSettings> {
+  const client = await ensureClient();
+  return (await client.call("emailMonitor.get", {})) as EmailMonitorSettings;
+}
+
+async function ipcSetEmailMonitor(settings: EmailMonitorSettings): Promise<EmailMonitorSettings> {
+  const client = await ensureClient();
+  return (await client.call("emailMonitor.set", settings)) as EmailMonitorSettings;
+}
+
+async function ipcSetEmailMonitorPassword(password: string): Promise<{ hasPassword: boolean }> {
+  const client = await ensureClient();
+  return (await client.call("emailMonitor.setPassword", { password })) as { hasPassword: boolean };
+}
+
+async function ipcClearEmailMonitorPassword(): Promise<{ hasPassword: boolean }> {
+  const client = await ensureClient();
+  return (await client.call("emailMonitor.clearPassword", {})) as { hasPassword: boolean };
+}
+
+async function ipcTestEmailMonitor(): Promise<{ ok: boolean; detail: string }> {
+  const client = await ensureClient();
+  return (await client.call("emailMonitor.test", {})) as { ok: boolean; detail: string };
+}
+
 async function ipcGetCalendar(): Promise<CalendarSettings> {
   const client = await ensureClient();
   return (await client.call("calendar.get", {})) as CalendarSettings;
@@ -1372,6 +1398,26 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:llm:get",
     wrap(() => ipcGetLlm()),
+  );
+  ipcMain.handle(
+    "aegis:email-monitor:get",
+    wrap(() => ipcGetEmailMonitor()),
+  );
+  ipcMain.handle(
+    "aegis:email-monitor:set",
+    wrap((settings: EmailMonitorSettings) => ipcSetEmailMonitor(settings)),
+  );
+  ipcMain.handle(
+    "aegis:email-monitor:set-password",
+    wrap((p: { password: string }) => ipcSetEmailMonitorPassword(p.password)),
+  );
+  ipcMain.handle(
+    "aegis:email-monitor:clear-password",
+    wrap(() => ipcClearEmailMonitorPassword()),
+  );
+  ipcMain.handle(
+    "aegis:email-monitor:test",
+    wrap(() => ipcTestEmailMonitor()),
   );
   ipcMain.handle(
     "aegis:calendar:get",

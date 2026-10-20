@@ -161,6 +161,22 @@ export const DaemonConfigSchema = z
         dailyCallLimit: z.number().int().min(1).max(10_000).default(200),
       })
       .default({}),
+    /** IMAP 重要邮件监测（规则版） */
+    emailMonitor: z
+      .object({
+        enabled: z.boolean().default(false),
+        host: z.string().max(255).optional(),
+        port: z.number().int().min(1).max(65_535).default(993),
+        secure: z.boolean().default(true),
+        user: z.string().max(255).optional(),
+        mailbox: z.string().max(255).default("INBOX"),
+        passwordSecret: z.string().max(255).default("email.imap.password"),
+        pollIntervalS: z.number().int().min(60).max(3_600).default(300),
+        maxPerPoll: z.number().int().min(1).max(50).default(20),
+        senders: z.array(z.string().max(255)).default([]),
+        keywords: z.array(z.string().max(50)).default(["紧急", "urgent", "合同", "发票", "面试", "deadline"]),
+      })
+      .default({}),
     /** 本地 ICS 日历（导出文件），用于早报展示今天的日程 */
     calendar: z
       .object({

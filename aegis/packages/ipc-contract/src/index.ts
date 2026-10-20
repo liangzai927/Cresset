@@ -240,6 +240,23 @@ export const NotifySettingsSchema = z
   .strict();
 export type NotifySettingsView = z.infer<typeof NotifySettingsSchema>;
 
+/** 重要邮件监测设置 */
+export const EmailMonitorSettingsSchema = z
+  .object({
+    enabled: z.boolean(),
+    host: z.string().max(255).optional(),
+    port: z.number().int().min(1).max(65_535),
+    secure: z.boolean(),
+    user: z.string().max(255).optional(),
+    mailbox: z.string().max(255),
+    pollIntervalS: z.number().int().min(60).max(3_600),
+    senders: z.array(z.string().max(255)),
+    keywords: z.array(z.string().max(50)),
+    hasPassword: z.boolean().optional(),
+  })
+  .strict();
+export type EmailMonitorSettingsView = z.infer<typeof EmailMonitorSettingsSchema>;
+
 /** 本地日历设置（ICS 导出文件） */
 export const CalendarSettingsSchema = z
   .object({

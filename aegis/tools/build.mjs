@@ -203,7 +203,7 @@ for (const t of targets) {
       // `electron` 由宿主进程提供，**绝不能打进产物** ——
       // 它的入口用动态 require 探测二进制路径，被 esbuild 内联后在 ESM 下会直接抛
       // "Dynamic require of child_process is not supported"（实测踩到）。
-      external: [...WORKSPACE_EXTERNAL, "yaml", "electron"],
+      external: [...WORKSPACE_EXTERNAL, "yaml", "electron", "imapflow"],
       format: "esm",
       target: "node24",
       platform: "node",
@@ -240,7 +240,7 @@ for (const t of targets) {
       await esbuildBuild({
         entryPoints: [join(dir, t.preload)],
         bundle: true,
-        external: [...WORKSPACE_EXTERNAL, "yaml", "electron"],
+        external: [...WORKSPACE_EXTERNAL, "yaml", "electron", "imapflow"],
         format: "cjs",
         target: "node24",
         platform: "node",

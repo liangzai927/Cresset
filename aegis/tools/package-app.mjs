@@ -53,7 +53,7 @@ import {
 } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const ROOT = resolve(import.meta.dirname, "..");
@@ -242,6 +242,66 @@ function copyExternalRuntimeDependencies() {
   const yamlManifest = requireFromSkills.resolve("yaml/package.json");
   const dest = join(RESOURCES, "node_modules", "yaml");
   cpSync(dirname(yamlManifest), dest, { recursive: true });
+
+  // imapflow 在 ESM 产物里会走 pino 的 CJS 动态 require，不能内联；
+  // 必须把 imapflow 及其纯 JS 依赖闭包复制到 Resources/node_modules。
+  const requireFromDaemon = createRequire(join(ROOT, "apps", "daemon", "package.json"));
+  const imapManifest = requireFromDaemon.resolve("imapflow/package.json");
+  copyPackageClosure(dirname(imapManifest), join(RESOURCES, "node_modules"), new Set());
+}
+
+/** 读取 package.json 的 name；失败返回空串 */
+function readManifestName(dir) {
+  try {
+    return JSON.parse(readFileSync(join(dir, "package.json"), "utf8")).name ?? "";
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * 递归复制一个 npm 包及其 dependencies。
+ *
+ * 只用于纯 JS 的 external 包（imapflow/pino…）；跳过嵌套 node_modules 与 sourcemap，
+ * 避免把 pnpm store 的软链/重复副本带进 app。
+ */
+function copyPackageClosure(srcDir, destRoot, seen) {
+  let manifest;
+  try {
+    manifest = JSON.parse(readFileSync(join(srcDir, "package.json"), "utf8"));
+  } catch {
+    return;
+  }
+  if (!manifest.name || seen.has(manifest.name)) return;
+  seen.add(manifest.name);
+  const dest = join(destRoot, manifest.name);
+  mkdirSync(dirname(dest), { recursive: true });
+  cpSync(srcDir, dest, {
+    recursive: true,
+    dereference: true,
+    filter: (src) =>
+      src === srcDir ||
+      (src.startsWith(`${srcDir}${sep}`) &&
+        !src.startsWith(`${srcDir}${sep}node_modules${sep}`) &&
+        !src.endsWith(".map")),
+  });
+
+  const req = createRequire(join(srcDir, "package.json"));
+  for (const dep of Object.keys(manifest.dependencies ?? {})) {
+    try {
+      const entry = req.resolve(dep);
+      let dir = dirname(entry);
+      // 有些包不导出 package.json；从入口文件向上找带 name 的 package.json。
+      while (!existsSync(join(dir, "package.json")) || readManifestName(dir) !== dep) {
+        const parent = dirname(dir);
+        if (parent === dir) throw new Error("未找到包目录");
+        dir = parent;
+      }
+      copyPackageClosure(dir, destRoot, seen);
+    } catch {
+      // 可选/平台相关依赖缺失不阻断；真正运行时缺模块会在启动自检暴露
+    }
+  }
 }
 
 /**

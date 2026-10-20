@@ -148,6 +148,9 @@ async function refreshStatus() {
     "btn-search-knowledge",
     "btn-ask-knowledge",
     "btn-save-briefing",
+    "btn-save-email-monitor",
+    "btn-set-email-monitor-password",
+    "btn-test-email-monitor",
     "btn-pick-calendar",
     "btn-clear-calendar",
     "btn-save-webhook",
@@ -615,6 +618,89 @@ $("btn-refresh-health").addEventListener("click", async (e) => {
   btn.disabled = true;
   try {
     await refreshSystemHealth();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── 重要邮件监测（IMAP） ───────────────────────────────────────────────
+
+/** 读取 IMAP 监测设置；密码只显示是否已配置 */
+async function loadEmailMonitor() {
+  try {
+    const v = await window.aegis.getEmailMonitor();
+    $("email-monitor-enabled").checked = v.enabled;
+    $("email-monitor-host").value = v.host ?? "";
+    $("email-monitor-port").value = String(v.port);
+    $("email-monitor-secure").checked = v.secure;
+    $("email-monitor-user").value = v.user ?? "";
+    $("email-monitor-mailbox").value = v.mailbox;
+    $("email-monitor-interval").value = String(v.pollIntervalS);
+    $("email-monitor-senders").value = v.senders.join(", ");
+    $("email-monitor-keywords").value = v.keywords.join(", ");
+    $("email-monitor-hint").textContent = v.hasPassword ? "已配置 IMAP 密码" : "未配置 IMAP 密码";
+  } catch (err) {
+    $("email-monitor-hint").textContent = `读取失败：${err.message}`;
+  }
+}
+
+/** 逗号分隔 → 去空数组 */
+function splitList(value) {
+  return value.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+$("btn-save-email-monitor").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await window.aegis.setEmailMonitor({
+      enabled: $("email-monitor-enabled").checked,
+      ...($("email-monitor-host").value.trim() ? { host: $("email-monitor-host").value.trim() } : {}),
+      port: Number($("email-monitor-port").value),
+      secure: $("email-monitor-secure").checked,
+      ...($("email-monitor-user").value.trim() ? { user: $("email-monitor-user").value.trim() } : {}),
+      mailbox: $("email-monitor-mailbox").value.trim() || "INBOX",
+      pollIntervalS: Number($("email-monitor-interval").value),
+      senders: splitList($("email-monitor-senders").value),
+      keywords: splitList($("email-monitor-keywords").value),
+    });
+    $("email-monitor-hint").textContent = "已保存；下一轮轮询生效";
+  } catch (err) {
+    $("email-monitor-hint").textContent = `保存失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-set-email-monitor-password").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const input = $("email-monitor-password");
+  const password = input.value.trim();
+  if (!password) {
+    $("email-monitor-hint").textContent = "IMAP 密码不能为空";
+    return;
+  }
+  btn.disabled = true;
+  try {
+    await window.aegis.setEmailMonitorPassword(password);
+    input.value = "";
+    $("email-monitor-hint").textContent = "IMAP 密码已写入钥匙串";
+  } catch (err) {
+    $("email-monitor-hint").textContent = `保存失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-test-email-monitor").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $("email-monitor-hint").textContent = "连接中…";
+  try {
+    const r = await window.aegis.testEmailMonitor();
+    $("email-monitor-hint").textContent = r.detail;
+  } catch (err) {
+    $("email-monitor-hint").textContent = `测试失败：${err.message}`;
   } finally {
     btn.disabled = false;
   }
@@ -1988,6 +2074,7 @@ function switchTab(name) {
     void refreshSystemHealth({ silent: true });
     // 设置页的每张卡片都必须在切页时重新拉取；只在启动时加载会导致
     // "重启后显示成初始化状态"（模型/知识库/监测器都是独立 RPC）。
+    void loadEmailMonitor();
     void loadCalendar();
     void loadNotify();
     void loadBriefing();

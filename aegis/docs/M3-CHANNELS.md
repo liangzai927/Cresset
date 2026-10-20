@@ -71,6 +71,11 @@ Bot Token 存钥匙串 `com.aegis.credentials / notify.telegram.token`，
 
 Device Key 存钥匙串 `com.aegis.credentials / notify.bark.deviceKey`。
 
+## SMTP 邮件 / IMAP 监测
+
+IMAP 重要邮件监测见 [M3-EMAIL.md](M3-EMAIL.md)。SMTP 只负责发通知，
+IMAP 只读取未读邮件的发件人/主题，二者使用不同密码。
+
 ## SMTP 邮件
 
 设置 → 通知渠道 → 邮件：

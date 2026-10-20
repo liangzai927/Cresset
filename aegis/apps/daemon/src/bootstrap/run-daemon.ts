@@ -45,6 +45,7 @@ import { IpcServer } from "../ipc/server.js";
 import { BriefingService } from "./briefing-service.js";
 import { type DaemonConfig, loadConfig, type MonitorConfig, saveConfig } from "./config.js";
 import { installDefaultSkills } from "./default-skills.js";
+import { EmailMonitor } from "./email-monitor.js";
 import { LlmService } from "./llm-service.js";
 import { DaemonLock } from "./lock.js";
 import { buildMonitorBindings } from "./monitor-bindings.js";
@@ -292,6 +293,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
   // 通过 `ticking` 标志防止上一轮未结束时重入（否则同一批实例会被两个循环同时处理）。
   let ticking = false;
   let briefing: BriefingService | null = null;
+  let emailMonitor: EmailMonitor | null = null;
   const tickTimer = setInterval(() => {
     if (ticking) {
       log("warn", "scheduler.tick_skipped", { reason: "上一轮尚未结束" });
@@ -343,6 +345,15 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
     monitorStatus: () => monitorRuntime.status(),
   });
   if (briefing.maybeGenerate()) log("info", "briefing.generated", { reason: "startup" });
+
+  emailMonitor = new EmailMonitor({
+    configFile: paths.configFile,
+    scheduler,
+    clock,
+    secrets: new MacOsKeychain({ service: KEYCHAIN_SERVICE }),
+    onLog: (level, event, detail) => log(level, event, detail as Record<string, unknown> | undefined),
+  });
+  emailMonitor.start();
 
   /**
    * 保存 monitors 并热重载。
@@ -506,6 +517,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
   const stop = async (reason: string): Promise<number> => {
     log("info", "shutdown.begin", { reason });
     monitorRuntime.stop();
+    emailMonitor?.stop();
     clearInterval(tickTimer);
     clearInterval(heartbeatTimer);
     try {
