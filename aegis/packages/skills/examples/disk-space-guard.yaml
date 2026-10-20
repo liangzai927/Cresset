@@ -8,12 +8,12 @@ params:
   threshold_percent: 10
 trigger:
   type: threshold
-  monitor: system.disk
-  field: free_percent
+  monitor: system.host
+  field: disk_free_percent
   op: "<"
   value: "{{params.threshold_percent}}"
 action:
   notify:
     priority: high
     title: "磁盘空间不足"
-    body: "{{monitor.mount}} 剩余 {{monitor.free_percent}}%（{{monitor.free_gb}} GB）"
+    body: "{{monitor.mount}} 剩余 {{monitor.disk_free_percent}}%（{{monitor.disk_free_gb}} GB）"

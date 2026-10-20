@@ -60,6 +60,25 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M2：SystemMonitor + 系统指标 dry-run
+**里程碑**：M2（R5 并行观察）
+**改了什么**：
+- `@aegis/monitors` 新增 `SystemMonitor`：
+  - 采集 load1/5/15、CPU 核数、内存/磁盘总量与剩余百分比、uptime；
+  - 采集器可注入，单测不依赖本机状态；
+  - 采集失败进入 `errors`，不伪造 0 值；
+- CLI 新增 `aegis monitor system`，打印当前系统指标；
+- 磁盘示例 Skill 对齐为 `system.host` / `disk_free_percent` / `disk_free_gb`。
+**为什么**：M2 的 FR-B4 需要 CPU/内存/磁盘/网络等系统健康监测；先把可测试的采集层与 dry-run
+做出来，再接调度与通知。
+**验证**：
+- `pnpm verify`：346 通过 / 9 跳过；20 个测试文件
+- `aegis monitor system` 输出 CPU/内存/磁盘/uptime
+- `aegis skill check` 能校验对齐后的磁盘 Skill
+**踩到的坑**：磁盘 free 不能只看 bsize/blocks，要用 bavail 才是普通用户可用空间。
+**留给下次**：SystemMonitor 的网络/进程/端口/阈值滞回；Web/RSS；Monitor 调度与 Skill→通知；
+仍禁止 M3 的 LLM/知识库。
+
 ### 2026-10-20 · M2：Monitor 接口 + FileMonitor + dry-run
 **里程碑**：M2（R5 并行观察）
 **改了什么**：

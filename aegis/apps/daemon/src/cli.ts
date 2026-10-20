@@ -30,7 +30,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { SystemClock } from "@aegis/clock";
-import { FileMonitor } from "@aegis/monitors";
+import { FileMonitor, SystemMonitor } from "@aegis/monitors";
 import { type DataPaths, resolveDataPaths } from "@aegis/product";
 import { loadSkillFile, SkillLoadError } from "@aegis/skills";
 import { createBackup } from "./bootstrap/backup.js";
@@ -67,6 +67,7 @@ function usage(): string {
     "  backup --out <目录>            导出一致性数据备份（不包含钥匙串）",
     "  skill check <file.yaml>       校验 Skill YAML（M2）",
     "  monitor scan <目录>           预览文件监测结果（M2，dry-run）",
+    "  monitor system                打印系统健康指标（M2，dry-run）",
     "",
     "示例：",
     '  aegis add "交周报" --at 明天9:00 --weekly 5',
@@ -592,8 +593,27 @@ function cmdSkill(args: string[]): number {
  */
 async function cmdMonitor(args: string[]): Promise<number> {
   const [sub, root] = args;
+  if (sub === "system") {
+    const result = await new SystemMonitor().scan();
+    for (const err of result.errors) process.stderr.write(`⚠ ${err.path}：${err.message}\n`);
+    const fields = result.facts[0]?.fields;
+    if (!fields) {
+      process.stderr.write("系统指标采集失败\n");
+      return 1;
+    }
+    process.stdout.write(
+      `系统健康（${String(fields.mount)}）\n` +
+        `  CPU：${String(fields.cpu_count)} 核，load ${Number(fields.load1).toFixed(2)} / ${Number(fields.load5).toFixed(2)} / ${Number(fields.load15).toFixed(2)}\n` +
+        `  内存：剩余 ${String(fields.memory_free_percent)}%（${String(fields.memory_free_gb)} GB / ${String(fields.memory_total_gb)} GB）\n` +
+        `  磁盘：剩余 ${String(fields.disk_free_percent)}%（${String(fields.disk_free_gb)} GB / ${String(fields.disk_total_gb)} GB）\n` +
+        `  运行：${String(fields.uptime_s)} 秒\n`,
+    );
+    return result.errors.length > 0 ? 1 : EXIT_OK;
+  }
   if (sub !== "scan" || !root) {
-    usageError("用法：aegis monitor scan <目录> [--glob <pattern>] [--ignore <pattern>]");
+    usageError(
+      "用法：aegis monitor scan <目录> [--glob <pattern>] [--ignore <pattern>] | aegis monitor system",
+    );
   }
 
   const patterns: string[] = [];
