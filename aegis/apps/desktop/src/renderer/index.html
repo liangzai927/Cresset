@@ -25,6 +25,7 @@
         <h1>Aegis</h1>
       </div>
       <div class="topbar-actions">
+        <span class="health-chip hidden" id="health-chip" title="系统健康"></span>
         <span class="status-text" id="status-text">正在连接…</span>
         <button class="btn btn-ghost" id="btn-test-notify" title="立刻发一条测试通知">
           测试通知
@@ -84,6 +85,15 @@
         <div class="settings-group">
           <h2>运行状态</h2>
           <dl class="kv" id="diag-basic"></dl>
+        </div>
+
+        <div class="settings-group">
+          <h2>系统健康</h2>
+          <dl class="kv" id="system-health"></dl>
+          <div class="settings-actions">
+            <button class="btn btn-ghost" id="btn-refresh-health">刷新</button>
+            <span class="hint" id="system-health-hint"></span>
+          </div>
         </div>
 
         <div class="settings-group">

@@ -124,6 +124,29 @@ export const DndSettingsSchema = z
   .strict();
 export type DndSettingsView = z.infer<typeof DndSettingsSchema>;
 
+/** 一次系统健康采集的对外视图（字段已转成 UI 可直接展示的单位） */
+export const SystemHealthViewSchema = z
+  .object({
+    at: z.number().int(),
+    mount: z.string(),
+    cpuCount: z.number().int().nonnegative(),
+    load1: z.number(),
+    load5: z.number(),
+    load15: z.number(),
+    memoryTotalGb: z.number().nonnegative(),
+    memoryFreeGb: z.number().nonnegative(),
+    memoryFreePercent: z.number(),
+    diskTotalGb: z.number().nonnegative(),
+    diskFreeGb: z.number().nonnegative(),
+    diskFreePercent: z.number(),
+    uptimeS: z.number().int().nonnegative(),
+  })
+  .strict();
+export type SystemHealthView = z.infer<typeof SystemHealthViewSchema>;
+
+/** 监测器采集错误 */
+export const MonitorErrorSchema = z.object({ path: z.string(), message: z.string() }).strict();
+
 /** 通知的对外视图；`isCatchup`/`isUncertain` 用于在界面上区分补偿补发与不确定投递 */
 export const NotificationViewSchema = z
   .object({
@@ -235,6 +258,10 @@ export const RPC_METHODS = {
     result: z.object({ ok: z.boolean() }).strict(),
   },
   "ctrl.resumeAll": { params: z.object({}).strict(), result: z.object({ ok: z.boolean() }).strict() },
+  "monitor.system": {
+    params: z.object({}).strict(),
+    result: z.object({ health: SystemHealthViewSchema, errors: z.array(MonitorErrorSchema) }).strict(),
+  },
   "dnd.get": {
     params: z.object({}).strict(),
     result: DndSettingsSchema,

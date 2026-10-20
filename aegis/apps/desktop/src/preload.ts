@@ -32,6 +32,7 @@ import type {
   DndSettingsView,
   NotificationsPage,
   OnboardingState,
+  SystemHealthView,
   TaskEditItem,
   TasksPage,
   UpdateInfo,
@@ -73,6 +74,11 @@ function buildApi(): DesktopApi {
 
     exportBackup: () => ipcRenderer.invoke("aegis:backup:export") as Promise<BackupExportResult>,
 
+    getSystemHealth: () =>
+      ipcRenderer.invoke("aegis:system:health") as Promise<{
+        health: SystemHealthView;
+        errors: Array<{ path: string; message: string }>;
+      }>,
     getDnd: () => ipcRenderer.invoke("aegis:dnd:get") as Promise<DndSettingsView>,
     setDnd: (settings: DndSettingsView) =>
       ipcRenderer.invoke("aegis:dnd:set", settings) as Promise<{ ok: boolean }>,

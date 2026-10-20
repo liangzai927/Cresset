@@ -21,9 +21,11 @@ import {
   DndSettingsSchema,
   type DndSettingsView,
   type NotificationView,
+  type SystemHealthView,
   type TaskEditView,
   type TaskView,
 } from "@aegis/ipc-contract";
+import { SystemMonitor } from "@aegis/monitors";
 import type { DataPaths } from "@aegis/product";
 import {
   describeRecurrence,
@@ -481,6 +483,31 @@ export function createMethods(
     "ctrl.resumeAll": async () => {
       tasks.setAllEnabled(true);
       return { ok: true };
+    },
+
+    "monitor.system": async () => {
+      const result = await new SystemMonitor().scan();
+      const fields = result.facts[0]?.fields;
+      if (!fields) {
+        const detail = result.errors.map((e) => `${e.path}: ${e.message}`).join("; ");
+        throw new MethodError(E_INTERNAL, `系统指标不可用${detail ? `：${detail}` : ""}`);
+      }
+      const health: SystemHealthView = {
+        at: Number(fields.at),
+        mount: String(fields.mount),
+        cpuCount: Number(fields.cpu_count),
+        load1: Number(fields.load1),
+        load5: Number(fields.load5),
+        load15: Number(fields.load15),
+        memoryTotalGb: Number(fields.memory_total_gb),
+        memoryFreeGb: Number(fields.memory_free_gb),
+        memoryFreePercent: Number(fields.memory_free_percent),
+        diskTotalGb: Number(fields.disk_total_gb),
+        diskFreeGb: Number(fields.disk_free_gb),
+        diskFreePercent: Number(fields.disk_free_percent),
+        uptimeS: Number(fields.uptime_s),
+      };
+      return { health, errors: result.errors };
     },
 
     "dnd.get": async () => {

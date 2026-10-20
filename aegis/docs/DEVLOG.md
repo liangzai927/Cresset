@@ -60,6 +60,22 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M2：系统健康实时显示
+**里程碑**：M2（R5 并行观察）
+**改了什么**：
+- daemon 契约新增 `monitor.system`，把 SystemMonitor 事实转成 UI 可直接展示的 View；
+- 桌面 API/preload 增加 `getSystemHealth`；主进程通过 daemon RPC 读取；
+- 设置页增加「系统健康」卡片，展示 CPU/load、内存、磁盘、uptime、采集时间，可手动刷新；
+- 顶栏增加常驻健康小标（CPU load + 内存可用），**每 5 秒自动刷新**，所有页签可见；
+- 轮询静默失败不打断用户，手动刷新才显示"采集中…"；旧值保留。
+**为什么**：CLI 的 `monitor system` 不够"在 app 里实时看到"；M2 的系统健康需要成为界面的一部分。
+**验证**：
+- `pnpm verify`：347 通过 / 9 跳过
+- 设置页截图确认顶栏小标与完整系统健康卡片
+- `monitor.system` RPC 集成测试
+**踩到的坑**：轮询不能和手动刷新并发打爆 IPC；用 `healthInFlight` 守卫，静默失败保留旧值。
+**留给下次**：阈值/滞回与 Skill 告警接线；Web/RSS；Monitor 调度与 Skill 管理界面；仍禁止 M3。
+
 ### 2026-10-20 · M2：SystemMonitor + 系统指标 dry-run
 **里程碑**：M2（R5 并行观察）
 **改了什么**：

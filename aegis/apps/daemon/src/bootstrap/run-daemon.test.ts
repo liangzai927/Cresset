@@ -611,6 +611,28 @@ describe("R2：调度器接入与 RPC 方法", () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
+  it("★ monitor.system 返回可展示的系统健康指标", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-health-"));
+    const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
+    const hs = readHandshakeFile(join(dataDir, "handshake.json"));
+    const client = new IpcClient({ endpoint: hs.endpoint, token: hs.token });
+    await client.connect();
+
+    const result = (await client.call("monitor.system", {})) as {
+      health: { cpuCount: number; diskFreePercent: number; memoryFreePercent: number; mount: string };
+      errors: unknown[];
+    };
+    expect(result.health.cpuCount).toBeGreaterThan(0);
+    expect(result.health.mount).toBe("/");
+    expect(result.health.diskFreePercent).toBeGreaterThanOrEqual(0);
+    expect(result.health.memoryFreePercent).toBeGreaterThanOrEqual(0);
+    expect(result.errors).toEqual([]);
+
+    client.close();
+    await daemon.stop("test");
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
   it("★ backup.export 经 RPC 生成一致快照", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-backup-"));
     const daemon = await runDaemon({ dataDir, tickMs: 60_000 });

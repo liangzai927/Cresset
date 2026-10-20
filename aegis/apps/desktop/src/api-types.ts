@@ -183,6 +183,23 @@ export interface DndSettingsView {
   windows: DndWindowView[];
 }
 
+/** 系统健康视图（单位已由 daemon 转好） */
+export interface SystemHealthView {
+  at: number;
+  mount: string;
+  cpuCount: number;
+  load1: number;
+  load5: number;
+  load15: number;
+  memoryTotalGb: number;
+  memoryFreeGb: number;
+  memoryFreePercent: number;
+  diskTotalGb: number;
+  diskFreeGb: number;
+  diskFreePercent: number;
+  uptimeS: number;
+}
+
 /** 导出备份的结果：取消与成功用可辨识联合，避免 UI 把取消当失败 */
 export type BackupExportResult =
   | { canceled: true }
@@ -216,6 +233,8 @@ export interface DesktopApi {
   resumeAll(): Promise<{ ok: boolean }>;
 
   checkUpdate(): Promise<UpdateInfo>;
+  /** 读取系统健康指标（由 daemon 采集） */
+  getSystemHealth(): Promise<{ health: SystemHealthView; errors: Array<{ path: string; message: string }> }>;
   /** 读取免打扰设置 */
   getDnd(): Promise<DndSettingsView>;
   /** 保存免打扰设置；daemon 会持久化到 config.json 并立即影响后续派发 */

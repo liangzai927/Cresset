@@ -48,6 +48,7 @@ import type {
   DiagnosticInfo,
   DndSettingsView,
   NotificationItem,
+  SystemHealthView,
   TaskEditItem,
   TaskItem,
   UpdateInfo,
@@ -824,6 +825,17 @@ async function ipcOpenNotificationSettings(): Promise<{ ok: boolean; detail: str
   return { ok: false, detail: "无法打开系统通知设置，请手动打开系统设置 → 通知" };
 }
 
+async function ipcGetSystemHealth(): Promise<{
+  health: SystemHealthView;
+  errors: Array<{ path: string; message: string }>;
+}> {
+  const client = await ensureClient();
+  return (await client.call("monitor.system", {})) as {
+    health: SystemHealthView;
+    errors: Array<{ path: string; message: string }>;
+  };
+}
+
 async function ipcGetDnd(): Promise<DndSettingsView> {
   const client = await ensureClient();
   return (await client.call("dnd.get", {})) as DndSettingsView;
@@ -1034,6 +1046,10 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:notifications:open-settings",
     wrap(() => ipcOpenNotificationSettings()),
+  );
+  ipcMain.handle(
+    "aegis:system:health",
+    wrap(() => ipcGetSystemHealth()),
   );
   ipcMain.handle(
     "aegis:dnd:get",

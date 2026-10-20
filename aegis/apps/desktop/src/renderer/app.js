@@ -521,6 +521,76 @@ async function saveDnd(btn) {
 $("btn-dnd-add").addEventListener("click", addDndWindow);
 $("btn-dnd-save").addEventListener("click", (e) => void saveDnd(e.currentTarget));
 
+// ── 系统健康 ────────────────────────────────────────────────────────────
+
+let healthTimer = null;
+let healthInFlight = false;
+
+/** 渲染系统健康指标；顶栏只放最短摘要，设置页展示完整值 */
+function renderSystemHealth(health) {
+  const load = `${health.load1.toFixed(2)} / ${health.load5.toFixed(2)} / ${health.load15.toFixed(2)}`;
+  const memory = `${health.memoryFreePercent}% 可用 · ${health.memoryFreeGb} / ${health.memoryTotalGb} GB`;
+  const disk = `${health.diskFreePercent}% 可用 · ${health.diskFreeGb} / ${health.diskTotalGb} GB`;
+
+  const chip = $("health-chip");
+  chip.textContent = `CPU ${health.load1.toFixed(1)} · 内存 ${health.memoryFreePercent}%`;
+  chip.title = `CPU：${health.cpuCount} 核 · load ${load}\n内存：${memory}\n磁盘：${disk}\n运行：${formatUptime(health.uptimeS)}`;
+  chip.classList.remove("hidden");
+
+  const box = $("system-health");
+  box.textContent = "";
+  const add = (k, v) => {
+    box.appendChild(el("dt", "", k));
+    box.appendChild(el("dd", "", v));
+  };
+  add("CPU", `${health.cpuCount} 核 · load ${load}`);
+  add("内存", memory);
+  add("磁盘", disk);
+  add("运行", formatUptime(health.uptimeS));
+  add("采集", new Date(health.at).toLocaleTimeString("zh-CN"));
+}
+
+/**
+ * 拉取一次系统健康。
+ *
+ * 定时轮询用 silent=true：不闪"采集中…"，失败时只在设置卡片/顶栏保留旧值；
+ * 手动刷新用 silent=false，给出明确反馈。
+ */
+async function refreshSystemHealth({ silent = false } = {}) {
+  if (healthInFlight) return;
+  healthInFlight = true;
+  if (!silent) $("system-health-hint").textContent = "采集中…";
+  try {
+    const result = await window.aegis.getSystemHealth();
+    renderSystemHealth(result.health);
+    $("system-health-hint").textContent =
+      result.errors.length > 0
+        ? `部分采集失败：${result.errors.map((e) => e.message).join("；")}`
+        : "每 5 秒自动刷新";
+  } catch (err) {
+    if (!silent) $("system-health-hint").textContent = `读取失败：${err.message}`;
+  } finally {
+    healthInFlight = false;
+  }
+}
+
+/** 启动全局轮询：顶栏小指标在所有页签都可见 */
+function startHealthPolling() {
+  if (healthTimer) return;
+  void refreshSystemHealth({ silent: true });
+  healthTimer = setInterval(() => void refreshSystemHealth({ silent: true }), 5_000);
+}
+
+$("btn-refresh-health").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await refreshSystemHealth();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
 // ── 启动与通知权限 ──────────────────────────────────────────────────────
 
 /** 读取开机自启状态（复用向导的 getOnboarding） */
@@ -660,6 +730,7 @@ function switchTab(name) {
   if (name === "settings") {
     void refreshStatus();
     void loadAutostart();
+    void refreshSystemHealth({ silent: true });
   }
 }
 
@@ -1229,6 +1300,7 @@ async function init() {
   await refreshStatus();
   void loadDnd();
   void loadAutostart();
+  startHealthPolling();
   await refreshTasks();
 
   // 首次配置向导：只在没配过时弹。
