@@ -40,8 +40,15 @@ import type { AttemptSummary } from "@aegis/storage";
 import { z } from "zod";
 import { createBackup } from "../bootstrap/backup.js";
 import { type MonitorConfig, MonitorConfigSchema } from "../bootstrap/config.js";
+import { installDefaultSkills } from "../bootstrap/default-skills.js";
 import type { MonitorStatus } from "../bootstrap/monitor-runtime.js";
-import { deleteSkill, importSkill, listSkills, SkillStoreError } from "../bootstrap/skill-store.js";
+import {
+  deleteSkill,
+  importSkill,
+  listSkills,
+  readSkill,
+  SkillStoreError,
+} from "../bootstrap/skill-store.js";
 
 /** RPC 处理失败：携带错误码，交由 IpcServer 序列化 */
 export class MethodError extends Error {
@@ -559,6 +566,30 @@ export function createMethods(
 
     "skill.list": async () => {
       return { skills: context.skills ? listSkills(context.skills.dataDir) : [] };
+    },
+
+    "skill.read": async (params) => {
+      const p = z
+        .object({ filename: z.string().min(1).max(128) })
+        .strict()
+        .parse(params);
+      if (!context.skills) throw new MethodError(E_INTERNAL, "Skill 存储未初始化");
+      try {
+        return { filename: p.filename, content: readSkill(context.skills.dataDir, p.filename) };
+      } catch (err) {
+        if (err instanceof SkillStoreError) throw new MethodError(E_INVALID_PARAMS, err.message);
+        throw new MethodError(E_INTERNAL, `读取 Skill 失败：${(err as Error).message}`);
+      }
+    },
+
+    "skill.installDefaults": async () => {
+      if (!context.skills) throw new MethodError(E_INTERNAL, "Skill 存储未初始化");
+      try {
+        return installDefaultSkills(context.skills.dataDir);
+      } catch (err) {
+        if (err instanceof SkillStoreError) throw new MethodError(E_INVALID_PARAMS, err.message);
+        throw new MethodError(E_INTERNAL, `安装默认 Skill 失败：${(err as Error).message}`);
+      }
     },
 
     "skill.import": async (params) => {

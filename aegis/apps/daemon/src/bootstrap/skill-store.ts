@@ -148,6 +148,18 @@ export function importSkill(dataDir: string, filename: string, content: string):
   return toEntry(filename, skill);
 }
 
+/** 读取一个 Skill 的原始 YAML（导出用）；路径校验与删除一致 */
+export function readSkill(dataDir: string, filename: string): string {
+  assertFilename(filename);
+  const target = join(dataDir, SKILLS_DIR, filename);
+  if (!existsSync(target)) throw new SkillStoreError("NOT_FOUND", `Skill 不存在：${filename}`);
+  try {
+    return readFileSync(target, "utf8");
+  } catch (err) {
+    throw new SkillStoreError("WRITE_FAILED", `读取 Skill 失败：${(err as Error).message}`);
+  }
+}
+
 /** 删除一个 Skill；不存在时抛 NOT_FOUND，避免 UI 假装成功 */
 export function deleteSkill(dataDir: string, filename: string): void {
   assertFilename(filename);

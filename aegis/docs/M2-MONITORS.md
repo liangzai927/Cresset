@@ -8,7 +8,9 @@
 Skill 有两种导入方式：
 
 1. **应用内导入（推荐）**：设置 → Skills → 导入 Skill，选择 YAML；文件会写入数据目录的 `skills/`。
-2. 手动复制到数据目录：
+2. **安装示例**：设置 → Skills → 安装示例，补齐四个内置 Skill（不覆盖已有文件）。
+3. **导出**：每个 Skill 行右侧「导出」可选择保存位置。
+4. 手动复制到数据目录：
 
 ```bash
 DATA="$HOME/Library/Application Support/Aegis"

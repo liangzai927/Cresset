@@ -730,10 +730,21 @@ action:
 
     const listed = (await client.call("skill.list", {})) as { skills: Array<{ file: string }> };
     expect(listed.skills.map((s) => s.file)).toEqual(["rpc-skill.yaml"]);
+    const read = (await client.call("skill.read", { filename: "rpc-skill.yaml" })) as {
+      content: string;
+    };
+    expect(read.content).toContain("rpc-skill");
 
     await client.call("skill.delete", { filename: "rpc-skill.yaml" });
     const after = (await client.call("skill.list", {})) as { skills: unknown[] };
     expect(after.skills).toEqual([]);
+
+    const defaults = (await client.call("skill.installDefaults", {})) as {
+      installed: string[];
+      skipped: string[];
+    };
+    expect(defaults.installed).toHaveLength(4);
+    expect(defaults.skipped).toEqual([]);
 
     client.close();
     await daemon.stop("test");

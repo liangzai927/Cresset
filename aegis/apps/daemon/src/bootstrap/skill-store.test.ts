@@ -2,12 +2,20 @@
  * SkillStore 测试：导入校验、坏文件可见、路径穿越拒绝、删除。
  */
 
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SkillLoadError } from "@aegis/skills";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { deleteSkill, importSkill, listSkills, SkillStoreError, skillsDir } from "./skill-store.js";
+import { DEFAULT_SKILLS, installDefaultSkills } from "./default-skills.js";
+import {
+  deleteSkill,
+  importSkill,
+  listSkills,
+  readSkill,
+  SkillStoreError,
+  skillsDir,
+} from "./skill-store.js";
 
 const VALID = `name: downloads-change
 version: 1.0.0
@@ -46,7 +54,7 @@ describe("skill-store", () => {
       permissions: ["files.read"],
       triggerMonitor: "files.downloads",
     });
-    expect(readFileSync(join(skillsDir(dir), "downloads.yaml"), "utf8")).toContain("downloads-change");
+    expect(readSkill(dir, "downloads.yaml")).toBe(VALID);
     expect(listSkills(dir)).toEqual([entry]);
   });
 
@@ -67,6 +75,16 @@ describe("skill-store", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]?.valid).toBe(false);
     expect(entries[0]?.error).toBeTruthy();
+  });
+
+  it("安装默认包只补缺失，重复安装不覆盖", () => {
+    const first = installDefaultSkills(dir);
+    expect(first.installed).toHaveLength(DEFAULT_SKILLS.length);
+    expect(first.skipped).toEqual([]);
+    const second = installDefaultSkills(dir);
+    expect(second.installed).toEqual([]);
+    expect(second.skipped).toHaveLength(DEFAULT_SKILLS.length);
+    expect(listSkills(dir).every((s) => s.valid)).toBe(true);
   });
 
   it("删除不存在的 Skill 返回 NOT_FOUND", () => {

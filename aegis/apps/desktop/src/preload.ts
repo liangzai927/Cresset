@@ -34,6 +34,7 @@ import type {
   MonitorStatusItem,
   NotificationsPage,
   OnboardingState,
+  SkillExportResult,
   SkillListEntry,
   SystemHealthView,
   TaskEditItem,
@@ -107,6 +108,13 @@ function buildApi(): DesktopApi {
       ipcRenderer.invoke("aegis:skill:import", { filename, content }) as Promise<{ skill: SkillListEntry }>,
     deleteSkill: (filename: string) =>
       ipcRenderer.invoke("aegis:skill:delete", { filename }) as Promise<{ ok: boolean }>,
+    exportSkill: (filename: string) =>
+      ipcRenderer.invoke("aegis:skill:export", { filename }) as Promise<SkillExportResult>,
+    installDefaultSkills: () =>
+      ipcRenderer.invoke("aegis:skill:install-defaults") as Promise<{
+        installed: string[];
+        skipped: string[];
+      }>,
     getDnd: () => ipcRenderer.invoke("aegis:dnd:get") as Promise<DndSettingsView>,
     setDnd: (settings: DndSettingsView) =>
       ipcRenderer.invoke("aegis:dnd:set", settings) as Promise<{ ok: boolean }>,

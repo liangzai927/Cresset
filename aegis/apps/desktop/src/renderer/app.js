@@ -139,6 +139,7 @@ async function refreshStatus() {
     "btn-refresh-monitors",
     "btn-add-monitor",
     "btn-import-skill",
+    "btn-install-defaults",
     "btn-refresh-skills",
     "btn-export-backup",
     "btn-dnd-add",
@@ -784,6 +785,20 @@ function renderSkillList(skills) {
     const head = el("div", "skill-head");
     head.appendChild(el("strong", "", skill.name || skill.file));
     head.appendChild(el("span", "monitor-badge", skill.valid ? "有效" : "错误"));
+    const exportButton = el("button", "btn btn-ghost btn-small", "导出");
+    exportButton.addEventListener("click", async () => {
+      exportButton.disabled = true;
+      try {
+        const result = await window.aegis.exportSkill(skill.file);
+        $("skill-hint").textContent = result.canceled ? "已取消导出" : `已导出到 ${result.path}`;
+      } catch (err) {
+        $("skill-hint").textContent = `导出失败：${err.message}`;
+      } finally {
+        exportButton.disabled = false;
+      }
+    });
+    head.appendChild(exportButton);
+
     const del = el("button", "btn btn-ghost btn-small", "删除");
     del.title = `删除 ${skill.file}`;
     del.addEventListener("click", async () => {
@@ -832,6 +847,21 @@ $("btn-refresh-skills").addEventListener("click", async (e) => {
   btn.disabled = true;
   try {
     await loadSkillList();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-install-defaults").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $("skill-hint").textContent = "安装示例中…";
+  try {
+    const result = await window.aegis.installDefaultSkills();
+    $("skill-hint").textContent = `已安装 ${result.installed.length} 个，跳过 ${result.skipped.length} 个已有文件`;
+    await loadSkillList();
+  } catch (err) {
+    $("skill-hint").textContent = `安装失败：${err.message}`;
   } finally {
     btn.disabled = false;
   }

@@ -50,6 +50,7 @@ import type {
   MonitorConfigView,
   MonitorStatusItem,
   NotificationItem,
+  SkillExportResult,
   SkillListEntry,
   SystemHealthView,
   TaskEditItem,
@@ -911,6 +912,36 @@ async function ipcDeleteSkill(filename: string): Promise<{ ok: boolean }> {
   return (await client.call("skill.delete", { filename })) as { ok: boolean };
 }
 
+/**
+ * 导出 Skill：daemon 负责读取（路径校验在 daemon），主进程负责让用户选保存位置。
+ * renderer 不能指定任意源路径或目标路径。
+ */
+async function ipcExportSkill(filename: string): Promise<SkillExportResult> {
+  const client = await ensureClient();
+  const r = (await client.call("skill.read", { filename })) as { filename: string; content: string };
+  const options = {
+    title: "导出 Skill",
+    defaultPath: r.filename,
+    filters: [{ name: "Skill", extensions: ["yaml", "yml"] }],
+  };
+  const picked =
+    ctx.window && !ctx.window.isDestroyed()
+      ? await dialog.showSaveDialog(ctx.window, options)
+      : await dialog.showSaveDialog(options);
+  if (picked.canceled || !picked.filePath) return { canceled: true };
+  writeFileSync(picked.filePath, r.content, "utf8");
+  log("info", "main.skill_exported", { filename: r.filename });
+  return { canceled: false, path: picked.filePath };
+}
+
+async function ipcInstallDefaultSkills(): Promise<{ installed: string[]; skipped: string[] }> {
+  const client = await ensureClient();
+  return (await client.call("skill.installDefaults", {})) as {
+    installed: string[];
+    skipped: string[];
+  };
+}
+
 async function ipcGetDnd(): Promise<DndSettingsView> {
   const client = await ensureClient();
   return (await client.call("dnd.get", {})) as DndSettingsView;
@@ -1165,6 +1196,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:skill:delete",
     wrap((p: { filename: string }) => ipcDeleteSkill(p.filename)),
+  );
+  ipcMain.handle(
+    "aegis:skill:export",
+    wrap((p: { filename: string }) => ipcExportSkill(p.filename)),
+  );
+  ipcMain.handle(
+    "aegis:skill:install-defaults",
+    wrap(() => ipcInstallDefaultSkills()),
   );
   ipcMain.handle(
     "aegis:dnd:get",

@@ -200,6 +200,9 @@ export interface SystemHealthView {
   uptimeS: number;
 }
 
+/** Skill 导出结果：取消与成功可辨识 */
+export type SkillExportResult = { canceled: true } | { canceled: false; path: string };
+
 /** Skill 列表项（设置页展示） */
 export interface SkillListEntry {
   file: string;
@@ -307,6 +310,10 @@ export interface DesktopApi {
   importSkill(filename: string, content: string): Promise<{ skill: SkillListEntry }>;
   /** 删除 Skill 文件 */
   deleteSkill(filename: string): Promise<{ ok: boolean }>;
+  /** 选择保存位置并导出 Skill YAML */
+  exportSkill(filename: string): Promise<SkillExportResult>;
+  /** 安装内置示例 Skills（只补缺失） */
+  installDefaultSkills(): Promise<{ installed: string[]; skipped: string[] }>;
   /** 读取免打扰设置 */
   getDnd(): Promise<DndSettingsView>;
   /** 保存免打扰设置；daemon 会持久化到 config.json 并立即影响后续派发 */
