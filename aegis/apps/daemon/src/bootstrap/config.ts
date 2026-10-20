@@ -6,7 +6,8 @@
  *   - 未知字段 → 保留（向前兼容：旧版本不该因为新字段而拒绝启动）
  *   - 校验失败 → 用默认值 + 明确报告哪一项有问题
  */
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { chmodSync, existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 
 /** 守护进程配置契约（非敏感项；敏感项一律走钥匙串） */
@@ -107,7 +108,27 @@ export function loadConfig(path: string): LoadConfigResult {
   return { config: parsed.data, issues, usedDefaults: false };
 }
 
-/** 写入配置文件（非敏感项；不要把凭据放进来） */
+/**
+ * 原子写回配置（0600，先写临时文件再 rename）。
+ *
+ * 只用于非敏感配置（DND/语言等）；凭据仍必须走钥匙串。
+ * 写失败会抛错，调用方必须把错误带给用户，不能静默丢掉设置。
+ *
+ * @param path 配置文件路径
+ * @param config 完整配置（未知字段会原样保留，依赖 Zod passthrough）
+ */
 export function saveConfig(path: string, config: DaemonConfig): void {
-  writeFileSync(path, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  const tmp = `${path}.tmp-${randomUUID()}`;
+  try {
+    writeFileSync(tmp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600 });
+    chmodSync(tmp, 0o600);
+    renameSync(tmp, path);
+  } catch (err) {
+    try {
+      rmSync(tmp, { force: true });
+    } catch {
+      /* 清理临时文件失败不掩盖原始错误 */
+    }
+    throw err;
+  }
 }

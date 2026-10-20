@@ -29,7 +29,7 @@ import { AuditRepo, type Db, migrate, OccurrenceDao, openDb } from "@aegis/stora
 import { createMethods } from "../ipc/methods.js";
 import type { HandshakeFile } from "../ipc/server.js";
 import { IpcServer } from "../ipc/server.js";
-import { type DaemonConfig, loadConfig } from "./config.js";
+import { type DaemonConfig, loadConfig, saveConfig } from "./config.js";
 import { DaemonLock } from "./lock.js";
 
 /** daemon 版本；与里程碑对应（发 tag 时同步更新） */
@@ -262,7 +262,17 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
     // 原有内联方法（关停）与 R2 的业务方法合并。
     // 若只保留其中一个，运行时不是 task.* 全部 E_METHOD_NOT_FOUND，就是 sys.shutdown 失效。
     methods: {
-      ...createMethods(scheduler, { paths, daemonVersion: DAEMON_VERSION }),
+      ...createMethods(scheduler, {
+        backup: { paths, daemonVersion: DAEMON_VERSION },
+        dnd: {
+          updateDnd: (dnd) => {
+            // 重新读一次配置，避免覆盖用户手工改过的其他字段
+            const current = loadConfig(paths.configFile);
+            saveConfig(paths.configFile, { ...current.config, dnd });
+            scheduler.setDndSettings(dnd);
+          },
+        },
+      }),
       /**
        * 关停 daemon。
        *

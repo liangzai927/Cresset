@@ -136,6 +136,8 @@ async function refreshStatus() {
     "btn-resume-all",
     "btn-refresh-history",
     "btn-export-backup",
+    "btn-dnd-add",
+    "btn-dnd-save",
     "wizard-test-notify",
   ]) {
     const el2 = $(id);
@@ -189,6 +191,7 @@ async function refreshStatus() {
   }
 
   renderSettings(status);
+  if (status.daemonReady === true && !dndState.loaded) void loadDnd();
 }
 
 function setStatusIndicator(level, text) {
@@ -359,6 +362,160 @@ async function refreshHistory() {
 }
 
 // ── 设置 / 诊断 ─────────────────────────────────────────────────────────
+
+// ── 免打扰设置 ──────────────────────────────────────────────────────────
+
+/** ISO 星期标签：1=周一 … 7=周日 */
+const DND_DAYS = [
+  [1, "一"],
+  [2, "二"],
+  [3, "三"],
+  [4, "四"],
+  [5, "五"],
+  [6, "六"],
+  [7, "日"],
+];
+
+const dndState = {
+  loaded: false,
+  loading: false,
+  enabled: false,
+  windows: [],
+};
+
+/** 从 daemon 读取 DND；失败时保留旧值并提示，由下一次状态刷新重试 */
+async function loadDnd() {
+  if (dndState.loading) return;
+  dndState.loading = true;
+  try {
+    const d = await window.aegis.getDnd();
+    dndState.enabled = d.enabled;
+    dndState.windows = d.windows.map((w) => ({ days: [...w.days], from: w.from, to: w.to }));
+    dndState.loaded = true;
+    $("dnd-hint").textContent = "";
+    renderDnd();
+  } catch (err) {
+    $("dnd-hint").textContent = `读取免打扰设置失败：${err.message}`;
+  } finally {
+    dndState.loading = false;
+  }
+}
+
+/** 渲染时段行；输入事件直接改 dndState，避免每敲一次就重建 DOM */
+function renderDnd() {
+  $("dnd-enabled").checked = dndState.enabled;
+  const box = $("dnd-windows");
+  box.textContent = "";
+
+  if (dndState.windows.length === 0) {
+    box.appendChild(el("p", "hint", "还没有时段；启用免打扰也不会生效。"));
+    return;
+  }
+
+  for (const [index, window] of dndState.windows.entries()) {
+    const row = el("div", "dnd-row");
+
+    const days = el("div", "dnd-days");
+    for (const [day, label] of DND_DAYS) {
+      const btn = el("button", "dnd-day", label);
+      btn.type = "button";
+      btn.setAttribute("aria-label", `周${label}`);
+      btn.setAttribute("aria-pressed", String(window.days.includes(day)));
+      if (window.days.includes(day)) btn.classList.add("active");
+      btn.addEventListener("click", () => {
+        if (window.days.includes(day)) {
+          window.days = window.days.filter((d) => d !== day);
+        } else {
+          window.days = [...window.days, day].sort((a, b) => a - b);
+        }
+        btn.classList.toggle("active", window.days.includes(day));
+        btn.setAttribute("aria-pressed", String(window.days.includes(day)));
+      });
+      days.appendChild(btn);
+    }
+    row.appendChild(days);
+
+    const from = document.createElement("input");
+    from.type = "time";
+    from.className = "dnd-time";
+    from.value = window.from;
+    from.setAttribute("aria-label", "免打扰开始时间");
+    from.addEventListener("change", () => {
+      window.from = from.value;
+    });
+    row.appendChild(from);
+
+    row.appendChild(el("span", "hint", "到"));
+    const to = document.createElement("input");
+    to.type = "time";
+    to.className = "dnd-time";
+    to.value = window.to;
+    to.setAttribute("aria-label", "免打扰结束时间");
+    to.addEventListener("change", () => {
+      window.to = to.value;
+    });
+    row.appendChild(to);
+
+    const remove = el("button", "btn btn-ghost", "删除");
+    remove.type = "button";
+    remove.addEventListener("click", () => {
+      dndState.windows.splice(index, 1);
+      renderDnd();
+    });
+    row.appendChild(remove);
+
+    box.appendChild(row);
+  }
+}
+
+/** 添加一个默认 22:00–08:00 的全周时段 */
+function addDndWindow() {
+  if (dndState.windows.length >= 10) {
+    $("dnd-hint").textContent = "最多 10 个免打扰时段";
+    return;
+  }
+  dndState.windows.push({ days: [1, 2, 3, 4, 5, 6, 7], from: "22:00", to: "08:00" });
+  renderDnd();
+}
+
+/** 保存免打扰；daemon 写 config.json 并立即替换 scheduler 的 DND */
+async function saveDnd(btn) {
+  const windows = dndState.windows.map((w) => ({
+    days: [...w.days].sort((a, b) => a - b),
+    from: w.from,
+    to: w.to,
+  }));
+  for (const w of windows) {
+    if (w.days.length === 0) {
+      $("dnd-hint").textContent = "每个时段至少选择一天";
+      return;
+    }
+    if (!/^\d{2}:\d{2}$/.test(w.from) || !/^\d{2}:\d{2}$/.test(w.to)) {
+      $("dnd-hint").textContent = "时间格式应为 HH:MM";
+      return;
+    }
+  }
+
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "保存中…";
+  try {
+    await window.aegis.setDnd({ enabled: $("dnd-enabled").checked, windows });
+    dndState.enabled = $("dnd-enabled").checked;
+    dndState.windows = windows.map((w) => ({ ...w, days: [...w.days] }));
+    $("dnd-hint").textContent = "已保存；对之后到点的提醒生效";
+    showToast("免打扰设置已保存");
+  } catch (err) {
+    $("dnd-hint").textContent = `保存失败：${err.message}`;
+    showBanner(`保存免打扰失败：${err.message}`, "err");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = original;
+  }
+}
+
+$("btn-dnd-add").addEventListener("click", addDndWindow);
+$("btn-dnd-save").addEventListener("click", (e) => void saveDnd(e.currentTarget));
 
 function renderSettings(status) {
   // 运行状态
@@ -936,6 +1093,7 @@ async function init() {
   }
 
   await refreshStatus();
+  void loadDnd();
   await refreshTasks();
 
   // 首次配置向导：只在没配过时弹。

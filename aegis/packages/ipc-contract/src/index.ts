@@ -86,6 +86,23 @@ export const TaskViewSchema = z
   .strict();
 export type TaskView = z.infer<typeof TaskViewSchema>;
 
+/** 免打扰时段；days 为 ISO 星期（1=周一 … 7=周日），允许跨午夜 */
+export const DndWindowSchema = z
+  .object({
+    days: z.array(z.number().int().min(1).max(7)).min(1),
+    from: z.string().regex(/^\d{2}:\d{2}$/),
+    to: z.string().regex(/^\d{2}:\d{2}$/),
+  })
+  .strict();
+/** 全局免打扰设置；windows 最多 10 段，空数组表示启用但不生效 */
+export const DndSettingsSchema = z
+  .object({
+    enabled: z.boolean(),
+    windows: z.array(DndWindowSchema).max(10),
+  })
+  .strict();
+export type DndSettingsView = z.infer<typeof DndSettingsSchema>;
+
 /** 通知的对外视图；`isCatchup`/`isUncertain` 用于在界面上区分补偿补发与不确定投递 */
 export const NotificationViewSchema = z
   .object({
@@ -191,14 +208,11 @@ export const RPC_METHODS = {
   "ctrl.resumeAll": { params: z.object({}).strict(), result: z.object({ ok: z.boolean() }).strict() },
   "dnd.get": {
     params: z.object({}).strict(),
-    result: z
-      .object({
-        enabled: z.boolean(),
-        windows: z.array(
-          z.object({ days: z.array(z.number().int()), from: z.string(), to: z.string() }).strict(),
-        ),
-      })
-      .strict(),
+    result: DndSettingsSchema,
+  },
+  "dnd.set": {
+    params: DndSettingsSchema,
+    result: z.object({ ok: z.boolean() }).strict(),
   },
   "platform.permissionStatus": {
     params: z.object({}).strict(),

@@ -5,7 +5,7 @@
  * IPC 端到端（含 C-4：断线重连必须自动重放握手）。
  */
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { VirtualClock } from "@aegis/clock";
@@ -476,6 +476,32 @@ describe("R2：调度器接入与 RPC 方法", () => {
 
     const afterRecurring = (await client.call("task.list", {})) as { items: Array<{ id: string }> };
     expect(afterRecurring.items.map((i) => i.id)).toContain(recurring.id);
+
+    client.close();
+    await daemon.stop("test");
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
+  it("★ dnd.set 持久化到 config.json 并立即影响 dnd.get", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-dnd-"));
+    const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
+    const hs = readHandshakeFile(join(dataDir, "handshake.json"));
+    const client = new IpcClient({ endpoint: hs.endpoint, token: hs.token });
+    await client.connect();
+
+    const settings = {
+      enabled: true,
+      windows: [{ days: [1, 2, 3, 4, 5], from: "22:00", to: "08:00" }],
+    };
+    const result = (await client.call("dnd.set", settings)) as { ok: boolean };
+    expect(result.ok).toBe(true);
+    expect(await client.call("dnd.get", {})).toEqual(settings);
+
+    const saved = JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")) as {
+      dnd?: unknown;
+    };
+    expect(saved.dnd).toEqual(settings);
+    expect(statSync(join(dataDir, "config.json")).mode & 0o777).toBe(0o600);
 
     client.close();
     await daemon.stop("test");

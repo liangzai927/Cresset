@@ -29,6 +29,7 @@ import type {
   CreateTaskPayload,
   DesktopApi,
   DiagnosticInfo,
+  DndSettingsView,
   NotificationsPage,
   OnboardingState,
   TasksPage,
@@ -66,6 +67,10 @@ function buildApi(): DesktopApi {
     testNotify: () => ipcRenderer.invoke("aegis:notifications:test") as Promise<{ ok: boolean }>,
 
     exportBackup: () => ipcRenderer.invoke("aegis:backup:export") as Promise<BackupExportResult>,
+
+    getDnd: () => ipcRenderer.invoke("aegis:dnd:get") as Promise<DndSettingsView>,
+    setDnd: (settings: DndSettingsView) =>
+      ipcRenderer.invoke("aegis:dnd:set", settings) as Promise<{ ok: boolean }>,
 
     // ── 全局控制 ──────────────────────────────────────────────────────
     pauseAll: () => ipcRenderer.invoke("aegis:ctrl:pauseAll") as Promise<{ ok: boolean }>,

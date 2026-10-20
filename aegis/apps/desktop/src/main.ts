@@ -46,6 +46,7 @@ import type {
   ChannelStatus,
   CreateTaskPayload,
   DiagnosticInfo,
+  DndSettingsView,
   NotificationItem,
   TaskItem,
   UpdateInfo,
@@ -790,6 +791,18 @@ async function ipcControl(pause: boolean): Promise<{ ok: boolean }> {
  * 这里刻意返回 `available: false` 并在 message 里说明，
  * 而不是假装"已是最新" —— 诚实的空实现比错误的实现好。
  */
+async function ipcGetDnd(): Promise<DndSettingsView> {
+  const client = await ensureClient();
+  return (await client.call("dnd.get", {})) as DndSettingsView;
+}
+
+async function ipcSetDnd(settings: DndSettingsView): Promise<{ ok: boolean }> {
+  const client = await ensureClient();
+  const r = (await client.call("dnd.set", settings)) as { ok: boolean };
+  notifyRefresh();
+  return r;
+}
+
 async function ipcCheckUpdate(): Promise<UpdateInfo> {
   return {
     available: false,
@@ -976,6 +989,14 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:backup:export",
     wrap(() => ipcExportBackup()),
+  );
+  ipcMain.handle(
+    "aegis:dnd:get",
+    wrap(() => ipcGetDnd()),
+  );
+  ipcMain.handle(
+    "aegis:dnd:set",
+    wrap((settings: DndSettingsView) => ipcSetDnd(settings)),
   );
   ipcMain.handle(
     "aegis:update:check",

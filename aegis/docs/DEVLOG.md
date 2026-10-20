@@ -22,7 +22,7 @@
 | --- | --- |
 | 阶段 | **R4 进行中**（自启/崩溃自恢复/ad-hoc 打包/备份导出已完成），剩余正式签名与公证 |
 | 版本 | daemon `0.2.0-r2` ／ 桌面 `0.3.0-r3` |
-| 校验 | `pnpm verify` 全绿（326 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
+| 校验 | `pnpm verify` 全绿（327 测试）＋ `pnpm verify:desktop` 11/11 ＋ `pnpm package:verify` 通过 |
 | 启动 | `pnpm dev`（智能增量构建后启动；打包产物为 `dist/Aegis.app`） |
 | 数据目录 | `~/Library/Application Support/Aegis`（含 `desktop.log`） |
 | 已实现 | 提醒创建/重复规则/到点投递/补偿/免打扰/历史/托盘/自启/首次向导/崩溃自恢复/启动看门狗/打包（ad-hoc）/备份导出 |
@@ -59,6 +59,24 @@
 ---
 
 ## 记录（新的在最上面）
+
+### 2026-10-20 · R4/M1：免打扰设置（持久化 + 设置页 UI）
+**里程碑**：R4/M1
+**改了什么**：
+- 契约新增 `dnd.set`；抽出 `DndWindowSchema`/`DndSettingsSchema`，`dnd.get` 复用同一 schema；
+- daemon 方法上下文注入 `updateDnd`：先原子写 `config.json`（0600），再替换 scheduler 的 DND；
+- `Scheduler.setDndSettings` 运行时生效；
+- 设置页新增免打扰卡片：启用开关、多时段（星期按钮 + 起止时间）、添加/删除/保存；
+- 新增 daemon 集成测试：`dnd.set` 持久化到 config 并立即反映到 `dnd.get`。
+**为什么**：M1 的 FR-A7 要求免打扰；此前只有启动时读配置和 `dnd.get`，用户无法在界面里设置。
+**验证**：
+- `pnpm verify`：327 通过 / 9 跳过
+- 设置页截图确认免打扰卡片、启用开关与空时段提示正常
+- 配置写入权限测试为 0600
+**踩到的坑**：
+- `config.ts` 原本已有一个简单 `saveConfig`，直接追加会重复定义；改为单一的原子写实现。
+- 修改 DND 只影响之后到点的派发；已经被旧时段推迟的通知不会被自动提前（避免一次性放出历史通知）。
+**留给下次**：R4 正式签名/公证（需 Apple 账号）→ R5 14 天验收 → M2；M2 不能提前。
 
 ### 2026-10-20 · repo：移除嵌套 .git 并加单仓库门禁
 **里程碑**：R4（仓库/流程）

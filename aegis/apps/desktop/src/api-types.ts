@@ -150,6 +150,20 @@ export interface UpdateInfo {
   message: string;
 }
 
+/** 免打扰时段（与 daemon 的 DndSettingsView 对齐） */
+export interface DndWindowView {
+  /** ISO 星期：1=周一 … 7=周日 */
+  days: number[];
+  from: string;
+  to: string;
+}
+
+/** 免打扰设置 */
+export interface DndSettingsView {
+  enabled: boolean;
+  windows: DndWindowView[];
+}
+
 /** 导出备份的结果：取消与成功用可辨识联合，避免 UI 把取消当失败 */
 export type BackupExportResult =
   | { canceled: true }
@@ -181,6 +195,10 @@ export interface DesktopApi {
   resumeAll(): Promise<{ ok: boolean }>;
 
   checkUpdate(): Promise<UpdateInfo>;
+  /** 读取免打扰设置 */
+  getDnd(): Promise<DndSettingsView>;
+  /** 保存免打扰设置；daemon 会持久化到 config.json 并立即影响后续派发 */
+  setDnd(settings: DndSettingsView): Promise<{ ok: boolean }>;
   /** 选择目录并导出备份；路径由主进程对话框决定，renderer 不能传任意路径 */
   exportBackup(): Promise<BackupExportResult>;
 

@@ -95,6 +95,21 @@
         </div>
 
         <div class="settings-group">
+          <h2>免打扰</h2>
+          <p class="hint">启用后，普通提醒会推迟到时段结束；重要提醒仍可穿透。</p>
+          <label class="dnd-toggle">
+            <input type="checkbox" id="dnd-enabled" />
+            启用免打扰
+          </label>
+          <div class="dnd-windows" id="dnd-windows"></div>
+          <div class="settings-actions">
+            <button class="btn btn-ghost" id="btn-dnd-add">添加时段</button>
+            <button class="btn btn-primary" id="btn-dnd-save">保存免打扰</button>
+            <span class="hint" id="dnd-hint"></span>
+          </div>
+        </div>
+
+        <div class="settings-group">
           <h2>数据</h2>
           <dl class="kv" id="diag-paths"></dl>
           <div class="settings-actions">

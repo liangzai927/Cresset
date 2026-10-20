@@ -17,7 +17,12 @@
  */
 
 import type { Task } from "@aegis/contracts";
-import type { NotificationView, TaskView } from "@aegis/ipc-contract";
+import {
+  DndSettingsSchema,
+  type DndSettingsView,
+  type NotificationView,
+  type TaskView,
+} from "@aegis/ipc-contract";
 import type { DataPaths } from "@aegis/product";
 import {
   describeRecurrence,
@@ -179,10 +184,21 @@ export interface BackupMethodsContext {
   daemonVersion: string;
 }
 
+/** `dnd.set` 需要的运行期上下文：持久化 + 通知 scheduler 立即生效 */
+export interface DndMethodsContext {
+  updateDnd: (settings: DndSettingsView) => void;
+}
+
+/** 构造 RPC handler 时注入的可选运行期能力 */
+export interface MethodsContext {
+  backup?: BackupMethodsContext;
+  dnd?: DndMethodsContext;
+}
+
 /** 构造全部 RPC handler。返回对象直接交给 IpcServer 的 `methods` 选项 */
 export function createMethods(
   scheduler: Scheduler,
-  backupContext?: BackupMethodsContext,
+  context: MethodsContext = {},
 ): Record<string, (params: unknown) => Promise<unknown>> {
   const { tasks, notifications } = scheduler.daos;
   const attempts = scheduler.daos.attempts;
@@ -270,7 +286,7 @@ export function createMethods(
         .object({ targetDir: z.string().min(1), includeHistory: z.boolean().optional() })
         .strict()
         .parse(params);
-      if (!backupContext) {
+      if (!context.backup) {
         throw new MethodError(E_INTERNAL, "备份服务未配置（daemon 缺少 dataDir/version）");
       }
       if (p.includeHistory === false) {
@@ -278,9 +294,9 @@ export function createMethods(
         throw new MethodError(E_INVALID_PARAMS, "backup.export 暂不支持 includeHistory=false");
       }
       const manifest = createBackup({
-        paths: backupContext.paths,
+        paths: context.backup.paths,
         outDir: p.targetDir,
-        daemonVersion: backupContext.daemonVersion,
+        daemonVersion: context.backup.daemonVersion,
       });
       return {
         path: p.targetDir,
@@ -372,6 +388,16 @@ export function createMethods(
         enabled: d.enabled,
         windows: d.windows.map((w) => ({ days: [...w.days], from: w.from, to: w.to })),
       };
+    },
+
+    "dnd.set": async (params) => {
+      const p = DndSettingsSchema.parse(params);
+      if (!context.dnd) {
+        throw new MethodError(E_INTERNAL, "免打扰设置服务未配置");
+      }
+      // 先持久化，成功后再改内存；写失败时 daemon 仍保持旧设置
+      context.dnd.updateDnd(p);
+      return { ok: true };
     },
 
     "notify.test": async () => {

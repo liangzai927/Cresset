@@ -111,7 +111,7 @@ export class Scheduler {
   readonly #db: Db;
   readonly #clock: Clock;
   readonly #notifiers: Notifier[];
-  readonly #dnd: DndSettings;
+  #dnd: DndSettings;
   readonly #catchupMergeThreshold: number;
   readonly #lookaheadMs: number;
   readonly #claimTtlMs: number;
@@ -193,6 +193,19 @@ export class Scheduler {
     return {
       enabled: this.#dnd.enabled,
       windows: this.#dnd.windows.map((w) => ({ ...w, days: [...w.days] })),
+    };
+  }
+
+  /**
+   * 运行时替换免打扰设置。
+   *
+   * 下一次 dispatch 起生效；已经因旧 DND 被推迟的通知仍按原 `scheduled_for`
+   * 等待（不在这里提前唤醒，避免 UI 改设置把历史通知一次性全放出来）。
+   */
+  setDndSettings(settings: DndSettings): void {
+    this.#dnd = {
+      enabled: settings.enabled,
+      windows: settings.windows.map((w) => ({ days: [...w.days], from: w.from, to: w.to })),
     };
   }
 
