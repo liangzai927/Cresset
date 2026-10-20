@@ -99,6 +99,22 @@ export const DaemonConfigSchema = z
      * 一个监测器可以绑定多个 Skill；Skill 的 trigger.monitor 必须等于实例 id。
      */
     monitors: z.array(MonitorConfigSchema).default([]),
+    /**
+     * M3 模型设置（非敏感）；API Key 只走钥匙串，绝不写这里。
+     */
+    llm: z
+      .object({
+        enabled: z.boolean().default(false),
+        baseUrl: z
+          .string()
+          .url()
+          .refine((u) => /^https?:\/\//.test(u), "只支持 http/https")
+          .default("https://api.openai.com/v1"),
+        model: z.string().min(1).max(120).default("gpt-4o-mini"),
+        timeoutMs: z.number().int().min(1_000).max(120_000).default(30_000),
+        maxOutboundClass: z.enum(["L0", "L1", "L2"]).default("L1"),
+      })
+      .default({}),
     /** 通知优先级规则：DND 期间哪些级别可穿透（FR-A7） */
     dnd: z
       .object({

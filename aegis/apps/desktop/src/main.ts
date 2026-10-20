@@ -47,6 +47,9 @@ import type {
   CreateTaskPayload,
   DiagnosticInfo,
   DndSettingsView,
+  LlmSettingsView,
+  LlmTestResult,
+  LlmView,
   MonitorConfigView,
   MonitorStatusItem,
   NotificationItem,
@@ -829,6 +832,31 @@ async function ipcOpenNotificationSettings(): Promise<{ ok: boolean; detail: str
   return { ok: false, detail: "无法打开系统通知设置，请手动打开系统设置 → 通知" };
 }
 
+async function ipcGetLlm(): Promise<LlmView> {
+  const client = await ensureClient();
+  return (await client.call("llm.get", {})) as LlmView;
+}
+
+async function ipcSetLlm(settings: LlmSettingsView): Promise<LlmView> {
+  const client = await ensureClient();
+  return (await client.call("llm.set", settings)) as LlmView;
+}
+
+async function ipcSetLlmKey(apiKey: string): Promise<{ hasApiKey: boolean }> {
+  const client = await ensureClient();
+  return (await client.call("llm.setKey", { apiKey })) as { hasApiKey: boolean };
+}
+
+async function ipcClearLlmKey(): Promise<{ hasApiKey: boolean }> {
+  const client = await ensureClient();
+  return (await client.call("llm.clearKey", {})) as { hasApiKey: boolean };
+}
+
+async function ipcTestLlm(): Promise<LlmTestResult> {
+  const client = await ensureClient();
+  return (await client.call("llm.test", {})) as LlmTestResult;
+}
+
 async function ipcGetSystemHealth(): Promise<{
   health: SystemHealthView;
   errors: Array<{ path: string; message: string }>;
@@ -1167,6 +1195,26 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:notifications:open-settings",
     wrap(() => ipcOpenNotificationSettings()),
+  );
+  ipcMain.handle(
+    "aegis:llm:get",
+    wrap(() => ipcGetLlm()),
+  );
+  ipcMain.handle(
+    "aegis:llm:set",
+    wrap((settings: LlmSettingsView) => ipcSetLlm(settings)),
+  );
+  ipcMain.handle(
+    "aegis:llm:set-key",
+    wrap((p: { apiKey: string }) => ipcSetLlmKey(p.apiKey)),
+  );
+  ipcMain.handle(
+    "aegis:llm:clear-key",
+    wrap(() => ipcClearLlmKey()),
+  );
+  ipcMain.handle(
+    "aegis:llm:test",
+    wrap(() => ipcTestLlm()),
   );
   ipcMain.handle(
     "aegis:system:health",

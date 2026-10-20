@@ -138,6 +138,10 @@ async function refreshStatus() {
     "btn-refresh-health",
     "btn-refresh-monitors",
     "btn-add-monitor",
+    "btn-save-llm",
+    "btn-set-llm-key",
+    "btn-clear-llm-key",
+    "btn-test-llm",
     "btn-monitor-preset",
     "btn-import-skill",
     "btn-install-defaults",
@@ -593,6 +597,100 @@ $("btn-refresh-health").addEventListener("click", async (e) => {
   btn.disabled = true;
   try {
     await refreshSystemHealth();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── 模型（LLM）设置 ─────────────────────────────────────────────────────
+
+/** 拉取设置并回填表单；API Key 只显示"是否已配置" */
+async function loadLlm() {
+  try {
+    const view = await window.aegis.getLlm();
+    $("llm-enabled").checked = view.enabled;
+    $("llm-base-url").value = view.baseUrl;
+    $("llm-model").value = view.model;
+    $("llm-timeout").value = String(view.timeoutMs);
+    $("llm-max-class").value = view.maxOutboundClass;
+    $("llm-key-status").textContent = view.hasApiKey ? "已配置 API Key" : "未配置 API Key";
+    if (view.keychainError) $("llm-key-status").textContent = `钥匙串不可用：${view.keychainError}`;
+    $("llm-hint").textContent = view.hasApiKey ? "测试连接会发起一次真实外发" : "先保存 API Key 再测试";
+  } catch (err) {
+    $("llm-hint").textContent = `读取失败：${err.message}`;
+  }
+}
+
+/** 从表单构建设置；URL/数字在前端先做基本检查 */
+function readLlmForm() {
+  const enabled = $("llm-enabled").checked;
+  const baseUrl = $("llm-base-url").value.trim();
+  const model = $("llm-model").value.trim();
+  const timeoutMs = Number($("llm-timeout").value);
+  const maxOutboundClass = $("llm-max-class").value;
+  if (!/^https?:\/\//.test(baseUrl)) throw new Error("Base URL 必须以 http:// 或 https:// 开头");
+  if (!model) throw new Error("模型名不能为空");
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1_000) throw new Error("超时必须 ≥1000 毫秒");
+  return { enabled, baseUrl, model, timeoutMs, maxOutboundClass };
+}
+
+$("btn-save-llm").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  try {
+    await window.aegis.setLlm(readLlmForm());
+    $("llm-hint").textContent = "设置已保存";
+    await loadLlm();
+  } catch (err) {
+    $("llm-hint").textContent = `保存失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-set-llm-key").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const input = $("llm-api-key");
+  const key = input.value.trim();
+  if (!key) {
+    $("llm-key-status").textContent = "API Key 不能为空";
+    return;
+  }
+  btn.disabled = true;
+  try {
+    await window.aegis.setLlmKey(key);
+    input.value = "";
+    $("llm-key-status").textContent = "已写入系统钥匙串";
+    await loadLlm();
+  } catch (err) {
+    $("llm-key-status").textContent = `保存失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-clear-llm-key").addEventListener("click", async () => {
+  if (!window.confirm("清除已保存的 API Key？")) return;
+  try {
+    await window.aegis.clearLlmKey();
+    $("llm-key-status").textContent = "已清除";
+    await loadLlm();
+  } catch (err) {
+    $("llm-key-status").textContent = `清除失败：${err.message}`;
+  }
+});
+
+$("btn-test-llm").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  $("llm-hint").textContent = "测试中（会发起一次真实外发）…";
+  try {
+    const result = await window.aegis.testLlm();
+    $("llm-hint").textContent = result.ok
+      ? `连接成功：${result.text.slice(0, 80)}（目标 ${result.destination}）`
+      : `测试失败：${result.reason}`;
+  } catch (err) {
+    $("llm-hint").textContent = `测试失败：${err.message}`;
   } finally {
     btn.disabled = false;
   }

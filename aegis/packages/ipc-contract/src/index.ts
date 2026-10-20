@@ -162,6 +162,40 @@ export const SkillListEntrySchema = z
   .strict();
 export type SkillListEntryView = z.infer<typeof SkillListEntrySchema>;
 
+/** LLM 非敏感设置 */
+export const LlmSettingsSchema = z
+  .object({
+    enabled: z.boolean(),
+    baseUrl: z
+      .string()
+      .url()
+      .refine((u) => /^https?:\/\//.test(u), "只支持 http/https"),
+    model: z.string().min(1).max(120),
+    timeoutMs: z.number().int().min(1_000).max(120_000),
+    maxOutboundClass: z.enum(["L0", "L1", "L2"]),
+  })
+  .strict();
+export type LlmSettingsView = z.infer<typeof LlmSettingsSchema>;
+
+/** LLM 设置页视图；不含 API Key */
+export const LlmViewSchema = LlmSettingsSchema.extend({
+  hasApiKey: z.boolean(),
+  keychainError: z.string().nullable(),
+}).strict();
+
+/** LLM 测试结果 */
+export const LlmTestResultSchema = z.union([
+  z.object({ ok: z.literal(true), text: z.string(), destination: z.string() }).strict(),
+  z
+    .object({
+      ok: z.literal(false),
+      blocked: z.boolean(),
+      reason: z.string(),
+      errorKind: z.string().optional(),
+    })
+    .strict(),
+]);
+
 /** 监测器配置视图；与 daemon config.monitors 的结构一致 */
 export const MonitorConfigViewSchema = z.discriminatedUnion("kind", [
   z

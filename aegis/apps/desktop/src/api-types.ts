@@ -183,6 +183,26 @@ export interface DndSettingsView {
   windows: DndWindowView[];
 }
 
+/** LLM 非敏感设置 */
+export interface LlmSettingsView {
+  enabled: boolean;
+  baseUrl: string;
+  model: string;
+  timeoutMs: number;
+  maxOutboundClass: "L0" | "L1" | "L2";
+}
+
+/** LLM 设置页视图；不含 API Key */
+export interface LlmView extends LlmSettingsView {
+  hasApiKey: boolean;
+  keychainError: string | null;
+}
+
+/** LLM 测试结果 */
+export type LlmTestResult =
+  | { ok: true; text: string; destination: string }
+  | { ok: false; blocked: boolean; reason: string; errorKind?: string };
+
 /** 系统健康视图（单位已由 daemon 转好） */
 export interface SystemHealthView {
   at: number;
@@ -288,6 +308,16 @@ export interface DesktopApi {
   resumeAll(): Promise<{ ok: boolean }>;
 
   checkUpdate(): Promise<UpdateInfo>;
+  /** 读取 LLM 设置（API Key 只返回是否已配置） */
+  getLlm(): Promise<LlmView>;
+  /** 保存非敏感 LLM 设置 */
+  setLlm(settings: LlmSettingsView): Promise<LlmView>;
+  /** 写入 API Key 到系统钥匙串 */
+  setLlmKey(apiKey: string): Promise<{ hasApiKey: boolean }>;
+  /** 删除 API Key */
+  clearLlmKey(): Promise<{ hasApiKey: boolean }>;
+  /** 发起一次公开探针外发（真实网络请求） */
+  testLlm(): Promise<LlmTestResult>;
   /** 读取系统健康指标（由 daemon 采集） */
   getSystemHealth(): Promise<{ health: SystemHealthView; errors: Array<{ path: string; message: string }> }>;
   /** 读取监测器运行状态 */

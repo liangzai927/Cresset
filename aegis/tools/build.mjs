@@ -130,6 +130,17 @@ if (!skipTypecheck) {
 }
 
 /**
+ * 工作区包默认保留为 external。
+ *
+ * 例外：`model-provider` 必须被**打包进 redaction-gateway**，而不是保留为
+ * 运行时裸导入 —— 否则 daemon/desktop 的 node_modules 里会缺这个传递依赖
+ * （pnpm 不会为未声明的传递包建立软链），而且安全边界要求只有网关能依赖它。
+ */
+const WORKSPACE_EXTERNAL = TARGETS.map((t) => `@aegis/${t.name}`).filter(
+  (n) => n !== "@aegis/model-provider",
+);
+
+/**
  * 按依赖关系拓扑排序。
  *
  * 为什么必须：声明生成阶段依赖"依赖包的 dist/*.d.ts 已存在"，
@@ -190,7 +201,7 @@ for (const t of targets) {
       // `electron` 由宿主进程提供，**绝不能打进产物** ——
       // 它的入口用动态 require 探测二进制路径，被 esbuild 内联后在 ESM 下会直接抛
       // "Dynamic require of child_process is not supported"（实测踩到）。
-      external: ["@aegis/*", "yaml", "electron"],
+      external: [...WORKSPACE_EXTERNAL, "yaml", "electron"],
       format: "esm",
       target: "node24",
       platform: "node",
@@ -227,7 +238,7 @@ for (const t of targets) {
       await esbuildBuild({
         entryPoints: [join(dir, t.preload)],
         bundle: true,
-        external: ["@aegis/*", "yaml", "electron"],
+        external: [...WORKSPACE_EXTERNAL, "yaml", "electron"],
         format: "cjs",
         target: "node24",
         platform: "node",

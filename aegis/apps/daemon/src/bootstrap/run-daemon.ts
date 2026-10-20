@@ -23,14 +23,16 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { type Clock, detectSkew, SystemClock } from "@aegis/clock";
 import type { HealthView } from "@aegis/ipc-contract";
 import { createDesktopChannelSender, defaultNotifiers, type Notifier } from "@aegis/platform";
-import { type DataPaths, resolveDataPaths } from "@aegis/product";
+import { type DataPaths, KEYCHAIN_SERVICE, resolveDataPaths } from "@aegis/product";
 import { Scheduler, type TickResult } from "@aegis/scheduler";
+import { MacOsKeychain } from "@aegis/secrets";
 import { AuditRepo, type Db, migrate, OccurrenceDao, openDb, rowOf } from "@aegis/storage";
 import { createMethods } from "../ipc/methods.js";
 import type { HandshakeFile } from "../ipc/server.js";
 import { IpcServer } from "../ipc/server.js";
 import { type DaemonConfig, loadConfig, type MonitorConfig, saveConfig } from "./config.js";
 import { installDefaultSkills } from "./default-skills.js";
+import { LlmService } from "./llm-service.js";
 import { DaemonLock } from "./lock.js";
 import { buildMonitorBindings } from "./monitor-bindings.js";
 import { MonitorRuntime } from "./monitor-runtime.js";
@@ -158,6 +160,12 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
 
   // ── 7 启动审计（M0 骨架：写一条"启动"记录，验证审计链路可用）
   const audit = new AuditRepo(db);
+  const llmService = new LlmService({
+    configFile: paths.configFile,
+    db,
+    clock,
+    secrets: new MacOsKeychain({ service: KEYCHAIN_SERVICE }),
+  });
   audit.record(
     {
       actor: "daemon",
@@ -398,6 +406,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
             scheduler.setDndSettings(dnd);
           },
         },
+        llm: llmService,
         monitors: {
           status: () => monitorRuntime.status(),
           scan: (id) => monitorRuntime.scanById(id),

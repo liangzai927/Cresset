@@ -41,6 +41,7 @@ import { z } from "zod";
 import { createBackup } from "../bootstrap/backup.js";
 import { type MonitorConfig, MonitorConfigSchema } from "../bootstrap/config.js";
 import { installDefaultSkills } from "../bootstrap/default-skills.js";
+import type { LlmService } from "../bootstrap/llm-service.js";
 import type { MonitorStatus } from "../bootstrap/monitor-runtime.js";
 import {
   deleteSkill,
@@ -280,6 +281,7 @@ export interface MethodsContext {
   dnd?: DndMethodsContext;
   monitors?: MonitorMethodsContext;
   skills?: SkillsMethodsContext;
+  llm?: LlmService;
 }
 
 /** 构造全部 RPC handler。返回对象直接交给 IpcServer 的 `methods` 选项 */
@@ -521,6 +523,54 @@ export function createMethods(
 
     "monitor.status": async () => {
       return { monitors: context.monitors?.status() ?? [] };
+    },
+
+    "llm.get": async () => {
+      if (!context.llm) throw new MethodError(E_INTERNAL, "LLM 服务未初始化");
+      return context.llm.get();
+    },
+
+    "llm.set": async (params) => {
+      const p = z
+        .object({
+          enabled: z.boolean(),
+          baseUrl: z.string().url(),
+          model: z.string().min(1).max(120),
+          timeoutMs: z.number().int().min(1_000).max(120_000),
+          maxOutboundClass: z.enum(["L0", "L1", "L2"]),
+        })
+        .strict()
+        .parse(params);
+      if (!context.llm) throw new MethodError(E_INTERNAL, "LLM 服务未初始化");
+      context.llm.save(p);
+      return context.llm.get();
+    },
+
+    "llm.setKey": async (params) => {
+      const p = z
+        .object({ apiKey: z.string().min(1).max(4_096) })
+        .strict()
+        .parse(params);
+      if (!context.llm) throw new MethodError(E_INTERNAL, "LLM 服务未初始化");
+      try {
+        return await context.llm.setApiKey(p.apiKey);
+      } catch (err) {
+        throw new MethodError(E_INTERNAL, `保存 API Key 失败：${(err as Error).message}`);
+      }
+    },
+
+    "llm.clearKey": async () => {
+      if (!context.llm) throw new MethodError(E_INTERNAL, "LLM 服务未初始化");
+      try {
+        return await context.llm.clearApiKey();
+      } catch (err) {
+        throw new MethodError(E_INTERNAL, `清除 API Key 失败：${(err as Error).message}`);
+      }
+    },
+
+    "llm.test": async () => {
+      if (!context.llm) throw new MethodError(E_INTERNAL, "LLM 服务未初始化");
+      return context.llm.test();
     },
 
     "monitor.config": async () => {

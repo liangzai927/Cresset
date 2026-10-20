@@ -60,6 +60,30 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M3：LLM 设置、钥匙串与真实测试连接
+**里程碑**：M3
+**改了什么**：
+- config 增加非敏感 `llm` 设置（enabled/baseUrl/model/timeout/maxOutboundClass）；
+- 新增 `LlmService`：
+  - API Key 只进钥匙串，视图只返回 hasApiKey/keychainError；
+  - 「测试连接」发送固定公开探针，经 RedactingModelGateway 与审计；
+  - 审计落 `outbound_audit`，失败/阻断也记录；
+- UI 设置页增加模型卡片（保存设置、保存/清除 Key、测试连接）；
+- L3 安全修复：即使策略上限写成 L3，L3 仍硬拒绝；配置/契约只允许 L0–L2；
+- Provider 通过网关包暴露，daemon 不直接依赖 model-provider；
+- 新增 3 个 LlmService 测试 + 1 个 L3 硬拒绝测试。
+**为什么**：M3 的第一条可用链路不是“问模型”，而是让用户能安全配置凭据并验证外发路径。
+**验证**：
+- `pnpm verify`：378 通过 / 9 跳过
+- 本机假 Provider 测试：Key 不落审计、L3 不调用 Provider、审计 allowed
+- 打包产物真实启动通过
+**踩到的坑**：
+- 安全边界"只有网关可依赖 model-provider"与 pnpm 传递依赖冲突；解决方案是
+  把 provider 打包进 redaction-gateway，并只在网关包暴露构造入口。
+- 配置里允许 maxOutboundClass=L3 会让 L3 被放行；已在判定处加硬边界。
+**留给下次**：每日调用上限、审计查询 UI、规则+LLM 混合判断、知识库；
+仍禁止 M4。
+
 ### 2026-10-20 · M3：Provider 抽象与真实脱敏外发
 **里程碑**：M3
 **改了什么**：

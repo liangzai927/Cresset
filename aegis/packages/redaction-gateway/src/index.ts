@@ -156,3 +156,15 @@ export interface ModelGateway {
   evaluate(req: OutboundRequest): OutboundDecision;
   complete(req: GatewayCompletionRequest): Promise<GatewayResult>;
 }
+export type {
+  CompletionRequest,
+  CompletionResponse,
+  ModelProvider,
+  ProviderErrorKind,
+} from "@aegis/model-provider";
+// 只有本包可以直接依赖 model-provider；对 daemon 暴露受限的构造入口，
+// 避免业务层直接 import Provider 而绕过唯一出口。
+export { OpenAICompatibleProvider, ProviderError } from "@aegis/model-provider";
+export type { GatewayOptions, OutboundAuditRecord } from "./gateway.js";
+export { evaluateOutbound, FailClosedGateway, POLICY_VERSION } from "./gateway.js";
+export * from "./redacting-gateway.js";

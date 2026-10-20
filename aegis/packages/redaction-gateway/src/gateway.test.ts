@@ -114,6 +114,21 @@ describe("TC-M0-02 fail-closed 语义", () => {
     expect(decision.allowed).toBe(false);
   });
 
+  it("即使策略上限为 L3，L3 仍然硬拒绝", () => {
+    const { decision } = evaluateOutbound(
+      {
+        actor: "daemon",
+        purpose: "test",
+        destination: "openai/gpt-x",
+        payload: "key=sk-abcdefghijklmnopqrstuvwxyz012345",
+        source: "public-web",
+      },
+      { policy: { maxOutboundClass: "L3" } },
+    );
+    expect(decision.allowed).toBe(false);
+    expect(decision.reason).toContain("L3");
+  });
+
   it("公开来源且无敏感命中时放行（L0/L1 可外发）", () => {
     const { decision } = evaluateOutbound({
       actor: "daemon",

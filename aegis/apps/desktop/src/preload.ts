@@ -30,6 +30,9 @@ import type {
   DesktopApi,
   DiagnosticInfo,
   DndSettingsView,
+  LlmSettingsView,
+  LlmTestResult,
+  LlmView,
   MonitorConfigView,
   MonitorStatusItem,
   NotificationsPage,
@@ -78,6 +81,12 @@ function buildApi(): DesktopApi {
 
     exportBackup: () => ipcRenderer.invoke("aegis:backup:export") as Promise<BackupExportResult>,
 
+    getLlm: () => ipcRenderer.invoke("aegis:llm:get") as Promise<LlmView>,
+    setLlm: (settings: LlmSettingsView) => ipcRenderer.invoke("aegis:llm:set", settings) as Promise<LlmView>,
+    setLlmKey: (apiKey: string) =>
+      ipcRenderer.invoke("aegis:llm:set-key", { apiKey }) as Promise<{ hasApiKey: boolean }>,
+    clearLlmKey: () => ipcRenderer.invoke("aegis:llm:clear-key") as Promise<{ hasApiKey: boolean }>,
+    testLlm: () => ipcRenderer.invoke("aegis:llm:test") as Promise<LlmTestResult>,
     getSystemHealth: () =>
       ipcRenderer.invoke("aegis:system:health") as Promise<{
         health: SystemHealthView;

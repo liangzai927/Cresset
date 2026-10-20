@@ -80,11 +80,11 @@ export function evaluateOutbound(
   const detectorSummary = [...summary.entries()].map(([category, count]) => ({ category, count }));
 
   let reason: string | undefined;
-  if (classRank(dataClass) > classRank(policy.maxOutboundClass)) {
-    reason =
-      dataClass === "L3"
-        ? "载荷含 L3 机密（凭据/私钥/连接串）：永不允许外发"
-        : `载荷分级 ${dataClass} 超过策略允许上限 ${policy.maxOutboundClass}`;
+  // L3 是硬边界：即使策略配置成 L3，也不允许外发（PRD FR-S13）
+  if (dataClass === "L3") {
+    reason = "载荷含 L3 机密（凭据/私钥/连接串）：永不允许外发";
+  } else if (classRank(dataClass) > classRank(policy.maxOutboundClass)) {
+    reason = `载荷分级 ${dataClass} 超过策略允许上限 ${policy.maxOutboundClass}`;
   }
 
   const allowed = reason === undefined;
