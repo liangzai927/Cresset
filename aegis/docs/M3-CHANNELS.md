@@ -3,9 +3,18 @@
 > M3 的第一个“离开电脑也能收到”渠道。启用 Webhook 后，桌面与 Webhook
 > 会并行扇出；只有两者都失败才落到 CLI 兜底。
 
-## 配置
+## 配置（UI）
 
-编辑 `config.json`：
+设置 → 通知渠道 → Webhook：
+
+- 勾选「启用 Webhook」
+- 填 URL
+- 「保存 Webhook」
+- 「测试」会立即 POST 一条测试通知
+
+⚠️ 保存后需要重启 daemon/应用才会重建 notifier 链。
+
+也可以直接编辑 `config.json`：
 
 ```json
 {
@@ -60,7 +69,7 @@ fanout(os_notification + webhook) → cli_fallback
 ## 当前限制
 
 - 目前只扇出桌面 + Webhook；Bark/Telegram 等尚未接入；
-- 没有 UI 配置页（先编辑 config.json）；
+- 保存 Webhook 配置后需要重启 daemon 才会生效；
 - 还没有按优先级/类型分流；
 - Bark / Telegram / 邮件 / TTS 待做。
 

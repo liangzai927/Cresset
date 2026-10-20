@@ -282,6 +282,18 @@
             按顺序尝试；上面的失败时自动用下面的兜底。
           </p>
           <ul class="channel-list" id="channel-list"></ul>
+          <div class="webhook-config">
+            <label class="dnd-toggle">
+              <input type="checkbox" id="webhook-enabled" />
+              启用 Webhook（桌面与 Webhook 并行发送）
+            </label>
+            <input id="webhook-url" type="text" placeholder="https://example.com/aegis-hook" />
+            <div class="settings-actions">
+              <button class="btn btn-ghost btn-small" id="btn-save-webhook">保存 Webhook</button>
+              <button class="btn btn-ghost btn-small" id="btn-test-webhook">测试</button>
+              <span class="hint" id="webhook-hint"></span>
+            </div>
+          </div>
           <div class="settings-actions">
             <button class="btn btn-ghost" id="btn-open-notification-settings">打开系统通知设置</button>
             <span class="hint">若被系统拒绝，先在通知设置里允许 Aegis；未签名版本仍可能被拒绝。</span>

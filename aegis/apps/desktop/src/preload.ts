@@ -41,6 +41,7 @@ import type {
   MonitorConfigView,
   MonitorStatusItem,
   NotificationsPage,
+  NotifySettings,
   OnboardingState,
   SkillExportResult,
   SkillListEntry,
@@ -86,6 +87,14 @@ function buildApi(): DesktopApi {
 
     exportBackup: () => ipcRenderer.invoke("aegis:backup:export") as Promise<BackupExportResult>,
 
+    getNotify: () => ipcRenderer.invoke("aegis:notify:get") as Promise<NotifySettings>,
+    setNotify: (settings: NotifySettings) =>
+      ipcRenderer.invoke("aegis:notify:set", settings) as Promise<NotifySettings>,
+    testWebhook: (url: string) =>
+      ipcRenderer.invoke("aegis:notify:test-webhook", { url }) as Promise<{
+        outcome: string;
+        error?: string;
+      }>,
     getBriefing: () => ipcRenderer.invoke("aegis:briefing:get") as Promise<BriefingSettings>,
     setBriefing: (settings: BriefingSettings) =>
       ipcRenderer.invoke("aegis:briefing:set", settings) as Promise<BriefingSettings>,

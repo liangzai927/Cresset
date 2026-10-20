@@ -222,6 +222,13 @@ export type LlmTestResult =
   | { ok: true; text: string; destination: string }
   | { ok: false; blocked: boolean; reason: string; errorKind?: string };
 
+/** 通知渠道设置 */
+export interface NotifySettings {
+  channels: Array<"os_notification" | "cli_fallback" | "webhook">;
+  webhookEnabled: boolean;
+  webhookUrl?: string;
+}
+
 /** 每日简报设置 */
 export interface BriefingSettings {
   enabled: boolean;
@@ -377,6 +384,12 @@ export interface DesktopApi {
   resumeAll(): Promise<{ ok: boolean }>;
 
   checkUpdate(): Promise<UpdateInfo>;
+  /** 读取通知渠道/Webhook 设置 */
+  getNotify(): Promise<NotifySettings>;
+  /** 保存通知渠道设置（重启 daemon 生效） */
+  setNotify(settings: NotifySettings): Promise<NotifySettings>;
+  /** 发送一次 Webhook 测试 */
+  testWebhook(url: string): Promise<{ outcome: string; error?: string }>;
   /** 读取每日简报设置 */
   getBriefing(): Promise<BriefingSettings>;
   /** 保存每日简报设置 */

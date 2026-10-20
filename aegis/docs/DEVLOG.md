@@ -60,6 +60,22 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M3：Webhook 配置界面
+**里程碑**：M3
+**改了什么**：
+- 契约新增 notify.get/notify.set/notify.testWebhook；
+- 设置页通知渠道增加 Webhook 开关、URL、保存、测试；
+- 保存时自动维护 channels（启用则加入 webhook，关闭则移除）；
+- 新增 notify.get/set RPC 测试。
+**为什么**：Webhook 已经能扇出，但只能手改 config.json，普通使用路径不通。
+**验证**：
+- `pnpm verify`：402 通过 / 9 跳过
+- UI 保存后 notify.get 返回 webhookEnabled=true 且 channels 含 webhook
+- 测试按钮直接复用 WebhookNotifier.send
+**踩到的坑**：notifier 链在 daemon 启动时构建，配置保存不会热替换；界面必须明确提示重启。
+**留给下次**：Bark/Telegram/邮件/TTS、按优先级分流、邮件/日历；
+仍禁止 M4。
+
 ### 2026-10-20 · M3：桌面 + Webhook 扇出
 **里程碑**：M3
 **改了什么**：

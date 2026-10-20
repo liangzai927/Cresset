@@ -27,6 +27,7 @@ import {
 } from "@aegis/ipc-contract";
 import type { KnowledgeBase } from "@aegis/knowledge";
 import { SystemMonitor } from "@aegis/monitors";
+import { WebhookNotifier } from "@aegis/platform";
 import type { DataPaths } from "@aegis/product";
 import {
   describeRecurrence,
@@ -525,6 +526,66 @@ export function createMethods(
 
     "monitor.status": async () => {
       return { monitors: context.monitors?.status() ?? [] };
+    },
+
+    "notify.get": async () => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      const notify = loadConfig(configFile).config.notify;
+      return {
+        channels: notify.channels.filter(
+          (c): c is "os_notification" | "cli_fallback" | "webhook" =>
+            c === "os_notification" || c === "cli_fallback" || c === "webhook",
+        ),
+        webhookEnabled: notify.webhook.enabled,
+        ...(notify.webhook.url ? { webhookUrl: notify.webhook.url } : {}),
+      };
+    },
+
+    "notify.set": async (params) => {
+      const configFile = context.backup?.paths.configFile;
+      if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
+      const p = z
+        .object({
+          channels: z.array(z.enum(["os_notification", "cli_fallback", "webhook"])),
+          webhookEnabled: z.boolean(),
+          webhookUrl: z.string().max(2_000).optional(),
+        })
+        .strict()
+        .parse(params);
+      if (p.webhookEnabled && !p.webhookUrl) {
+        throw new MethodError(E_INVALID_PARAMS, "启用 Webhook 必须填写 URL");
+      }
+      if (p.webhookUrl) {
+        try {
+          const u = new URL(p.webhookUrl);
+          if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("协议");
+        } catch {
+          throw new MethodError(E_INVALID_PARAMS, "Webhook URL 必须是 http/https");
+        }
+      }
+      const current = loadConfig(configFile);
+      saveConfig(configFile, {
+        ...current.config,
+        notify: {
+          ...current.config.notify,
+          channels: p.channels,
+          webhook: {
+            enabled: p.webhookEnabled,
+            ...(p.webhookUrl ? { url: p.webhookUrl } : {}),
+          },
+        },
+      });
+      return p;
+    },
+
+    "notify.testWebhook": async (params) => {
+      const p = z.object({ url: z.string().url() }).strict().parse(params);
+      const r = await new WebhookNotifier({ url: p.url }).send({
+        title: "Aegis Webhook 测试",
+        body: "这是一条来自 Aegis 的 Webhook 连通性测试。",
+      });
+      return { outcome: r.outcome, ...(r.error ? { error: r.error } : {}) };
     },
 
     "briefing.get": async () => {

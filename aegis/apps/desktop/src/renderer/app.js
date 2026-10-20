@@ -148,6 +148,8 @@ async function refreshStatus() {
     "btn-search-knowledge",
     "btn-ask-knowledge",
     "btn-save-briefing",
+    "btn-save-webhook",
+    "btn-test-webhook",
     "btn-monitor-preset",
     "btn-import-skill",
     "btn-install-defaults",
@@ -603,6 +605,72 @@ $("btn-refresh-health").addEventListener("click", async (e) => {
   btn.disabled = true;
   try {
     await refreshSystemHealth();
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ── 通知渠道 / Webhook ─────────────────────────────────────────────────
+
+let notifyChannels = ["os_notification", "cli_fallback"];
+
+/** 读取 Webhook 配置；保存后需要重启 daemon 才会重建 notifier 链 */
+async function loadNotify() {
+  try {
+    const view = await window.aegis.getNotify();
+    notifyChannels = view.channels;
+    $("webhook-enabled").checked = view.webhookEnabled;
+    $("webhook-url").value = view.webhookUrl ?? "";
+    $("webhook-hint").textContent = view.webhookEnabled
+      ? "已启用；保存后需重启 daemon 生效"
+      : "未启用";
+  } catch (err) {
+    $("webhook-hint").textContent = `读取失败：${err.message}`;
+  }
+}
+
+$("btn-save-webhook").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const enabled = $("webhook-enabled").checked;
+  const url = $("webhook-url").value.trim();
+  if (enabled && !/^https?:\/\//.test(url)) {
+    $("webhook-hint").textContent = "启用时必须填写 http/https URL";
+    return;
+  }
+  const channels = new Set(notifyChannels);
+  if (enabled) channels.add("webhook");
+  else channels.delete("webhook");
+  btn.disabled = true;
+  try {
+    const saved = await window.aegis.setNotify({
+      channels: [...channels],
+      webhookEnabled: enabled,
+      ...(url ? { webhookUrl: url } : {}),
+    });
+    notifyChannels = saved.channels;
+    $("webhook-hint").textContent = "已保存；重启 daemon 后生效";
+  } catch (err) {
+    $("webhook-hint").textContent = `保存失败：${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("btn-test-webhook").addEventListener("click", async (e) => {
+  const btn = e.currentTarget;
+  const url = $("webhook-url").value.trim();
+  if (!/^https?:\/\//.test(url)) {
+    $("webhook-hint").textContent = "请先填写 http/https URL";
+    return;
+  }
+  btn.disabled = true;
+  $("webhook-hint").textContent = "测试中…";
+  try {
+    const r = await window.aegis.testWebhook(url);
+    $("webhook-hint").textContent =
+      r.outcome === "success" ? "Webhook 测试成功" : `测试失败：${r.error ?? r.outcome}`;
+  } catch (err) {
+    $("webhook-hint").textContent = `测试失败：${err.message}`;
   } finally {
     btn.disabled = false;
   }
@@ -1621,6 +1689,7 @@ function switchTab(name) {
     void refreshSystemHealth({ silent: true });
     // 设置页的每张卡片都必须在切页时重新拉取；只在启动时加载会导致
     // "重启后显示成初始化状态"（模型/知识库/监测器都是独立 RPC）。
+    void loadNotify();
     void loadBriefing();
     void loadLlm();
     void loadLlmAudit();

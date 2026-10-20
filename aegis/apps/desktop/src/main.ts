@@ -58,6 +58,7 @@ import type {
   MonitorConfigView,
   MonitorStatusItem,
   NotificationItem,
+  NotifySettings,
   SkillExportResult,
   SkillListEntry,
   SystemHealthView,
@@ -837,6 +838,24 @@ async function ipcOpenNotificationSettings(): Promise<{ ok: boolean; detail: str
   return { ok: false, detail: "无法打开系统通知设置，请手动打开系统设置 → 通知" };
 }
 
+async function ipcGetNotify(): Promise<NotifySettings> {
+  const client = await ensureClient();
+  return (await client.call("notify.get", {})) as NotifySettings;
+}
+
+async function ipcSetNotify(settings: NotifySettings): Promise<NotifySettings> {
+  const client = await ensureClient();
+  return (await client.call("notify.set", settings)) as NotifySettings;
+}
+
+async function ipcTestWebhook(url: string): Promise<{ outcome: string; error?: string }> {
+  const client = await ensureClient();
+  return (await client.call("notify.testWebhook", { url })) as {
+    outcome: string;
+    error?: string;
+  };
+}
+
 async function ipcGetBriefing(): Promise<BriefingSettings> {
   const client = await ensureClient();
   return (await client.call("briefing.get", {})) as BriefingSettings;
@@ -1278,6 +1297,18 @@ function registerIpcHandlers(): void {
   ipcMain.handle(
     "aegis:llm:get",
     wrap(() => ipcGetLlm()),
+  );
+  ipcMain.handle(
+    "aegis:notify:get",
+    wrap(() => ipcGetNotify()),
+  );
+  ipcMain.handle(
+    "aegis:notify:set",
+    wrap((settings: NotifySettings) => ipcSetNotify(settings)),
+  );
+  ipcMain.handle(
+    "aegis:notify:test-webhook",
+    wrap((p: { url: string }) => ipcTestWebhook(p.url)),
   );
   ipcMain.handle(
     "aegis:briefing:get",

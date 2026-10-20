@@ -815,6 +815,32 @@ action:
     rmSync(dataDir, { recursive: true, force: true });
   });
 
+  it("★ notify.get/set 持久化 Webhook 配置", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-notify-"));
+    const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
+    const hs = readHandshakeFile(join(dataDir, "handshake.json"));
+    const client = new IpcClient({ endpoint: hs.endpoint, token: hs.token });
+    await client.connect();
+
+    const before = (await client.call("notify.get", {})) as { webhookEnabled: boolean };
+    expect(before.webhookEnabled).toBe(false);
+
+    const saved = (await client.call("notify.set", {
+      channels: ["os_notification", "cli_fallback", "webhook"],
+      webhookEnabled: true,
+      webhookUrl: "https://example.com/aegis-hook",
+    })) as { webhookEnabled: boolean; webhookUrl: string };
+    expect(saved).toMatchObject({ webhookEnabled: true, webhookUrl: "https://example.com/aegis-hook" });
+
+    const after = (await client.call("notify.get", {})) as { webhookEnabled: boolean; channels: string[] };
+    expect(after.webhookEnabled).toBe(true);
+    expect(after.channels).toContain("webhook");
+
+    client.close();
+    await daemon.stop("test");
+    rmSync(dataDir, { recursive: true, force: true });
+  });
+
   it("★ backup.export 经 RPC 生成一致快照", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "aegis-daemon-backup-"));
     const daemon = await runDaemon({ dataDir, tickMs: 60_000 });
