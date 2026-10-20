@@ -256,6 +256,61 @@ export class LlmService {
    * 只有模型明确返回 `notify=false` 且 Skill 允许抑制时才返回 null。
    * 这里不抛错，避免模型故障影响已经由规则确认的通知。
    */
+  /**
+   * 判断一封邮件的发件人/主题是否需要立即提醒。
+   *
+   * 只发送邮件头（发件人+主题），分级默认为 L2；L1 上限时会被网关阻断，
+   * 返回 null，调用方应保持规则结果而不是假装成功。
+   */
+  async classifyEmail(from: string, subject: string): Promise<boolean | null> {
+    const cfg = loadConfig(this.#configFile).config;
+    if (!cfg.llm.enabled) return null;
+    const apiKey = await this.#secrets.get(LLM_API_KEY);
+    if (!apiKey) return null;
+    let destination: string;
+    try {
+      destination = new URL(cfg.llm.baseUrl).host;
+    } catch {
+      return null;
+    }
+    if (!this.#consumeCall(cfg.llm.dailyCallLimit, "email.importance")) return null;
+
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: cfg.llm.baseUrl,
+      apiKey,
+      model: cfg.llm.model,
+      timeoutMs: cfg.llm.timeoutMs,
+    });
+    const gateway = new RedactingModelGateway({
+      provider,
+      policy: { maxOutboundClass: cfg.llm.maxOutboundClass },
+      now: () => this.#clock.wall(),
+      audit: (audit) => this.#recordAudit(audit),
+    });
+    try {
+      const result = await gateway.complete({
+        actor: "daemon",
+        purpose: "email-importance",
+        destination: `${destination}/${cfg.llm.model}`,
+        payload: [
+          "你是收件箱过滤器。只根据发件人和主题判断是否需要立即提醒用户。",
+          "营销、自动回复、账单通知、社交动态 → 不需要。",
+          "需要用户处理的合同、面试、发票、紧急事项 → 需要。",
+          `发件人：${from}`,
+          `主题：${subject}`,
+          '只返回 JSON：{"important":true|false,"reason":"..."}',
+        ].join("\n"),
+        source: "email-header",
+        model: cfg.llm.model,
+      });
+      const parsed = /"important"\s*:\s*(true|false)/i.exec(result.text);
+      return parsed ? parsed[1]?.toLowerCase() === "true" : null;
+    } catch {
+      // 网关阻断/模型失败：返回 null，让调用方保留规则结果
+      return null;
+    }
+  }
+
   async judge(
     skill: Skill,
     decision: SkillDecision,

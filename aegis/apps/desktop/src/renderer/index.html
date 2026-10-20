@@ -214,6 +214,10 @@
             <input type="checkbox" id="email-monitor-secure" />
             使用 TLS
           </label>
+          <label class="dnd-toggle">
+            <input type="checkbox" id="email-monitor-use-llm" />
+            规则未命中时用 LLM 判断（只外发发件人+主题，L2）
+          </label>
           <input id="email-monitor-password" type="password" placeholder="IMAP 密码（只写入钥匙串）" autocomplete="off" />
           <div class="settings-actions">
             <button class="btn btn-ghost btn-small" id="btn-save-email-monitor">保存监测设置</button>

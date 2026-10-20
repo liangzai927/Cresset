@@ -61,6 +61,8 @@ export interface EmailMonitorOptions {
   clock: Clock;
   secrets: SecretStore;
   onLog: (level: "info" | "warn" | "error", event: string, detail?: unknown) => void;
+  /** 可选的 LLM 语义判断；返回 null 表示不可用（不要标记已读） */
+  classify?: (header: EmailHeader) => Promise<boolean | null>;
   clientFactory?: (opts: {
     host: string;
     port: number;
@@ -151,7 +153,17 @@ export class EmailMonitor {
             .filter(Boolean)
             .join(", ");
           const subject = msg.envelope?.subject ?? "(无主题)";
-          const important = isImportantEmail({ uid: msg.uid, from, subject }, rules);
+          let important = isImportantEmail({ uid: msg.uid, from, subject }, rules);
+          let undecided = false;
+          if (!important && cfg.useLlm && this.#opts.classify) {
+            const verdict = await this.#opts.classify({ uid: msg.uid, from, subject });
+            if (verdict === null) {
+              undecided = true;
+              this.#opts.onLog("warn", "email_monitor.llm_undecided", { uid: msg.uid });
+            } else {
+              important = verdict;
+            }
+          }
           if (important) {
             const created = this.#opts.scheduler.daos.notifications.createWithOutbox({
               kind: "monitor",
@@ -163,7 +175,7 @@ export class EmailMonitor {
             });
             if (created.created) count += 1;
           }
-          toMark.push(msg.uid);
+          if (!undecided) toMark.push(msg.uid);
         }
         if (toMark.length > 0) {
           try {

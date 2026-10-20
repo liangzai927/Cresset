@@ -173,6 +173,8 @@ export const DaemonConfigSchema = z
         passwordSecret: z.string().max(255).default("email.imap.password"),
         pollIntervalS: z.number().int().min(60).max(3_600).default(300),
         maxPerPoll: z.number().int().min(1).max(50).default(20),
+        /** 规则未命中时是否让 LLM 判断；只发送发件人+主题，L2 */
+        useLlm: z.boolean().default(false),
         senders: z.array(z.string().max(255)).default([]),
         keywords: z.array(z.string().max(50)).default(["紧急", "urgent", "合同", "发票", "面试", "deadline"]),
       })

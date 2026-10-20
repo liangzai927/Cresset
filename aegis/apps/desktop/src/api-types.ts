@@ -236,6 +236,7 @@ export interface EmailMonitorSettings {
   user?: string;
   mailbox: string;
   pollIntervalS: number;
+  useLlm: boolean;
   senders: string[];
   keywords: string[];
   hasPassword?: boolean;

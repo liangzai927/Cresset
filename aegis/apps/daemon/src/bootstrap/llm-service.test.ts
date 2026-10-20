@@ -144,6 +144,49 @@ describe("LlmService", () => {
     expect(new AuditRepo(db).count()).toBe(0);
   });
 
+  it("classifyEmail 经网关判断邮件头；L1 上限时拒答", async () => {
+    writeFileSync(
+      join(dir, "config.json"),
+      JSON.stringify({
+        version: 1,
+        llm: {
+          enabled: true,
+          baseUrl,
+          model: "test-model",
+          timeoutMs: 5_000,
+          maxOutboundClass: "L2",
+        },
+      }),
+    );
+    const service = new LlmService({
+      configFile: join(dir, "config.json"),
+      db,
+      clock: new VirtualClock(1_000),
+      secrets: new MemorySecrets(),
+    });
+    await service.setApiKey("sk-test");
+    chatReply = '{"important":true,"reason":"合同"}';
+    expect(await service.classifyEmail("boss@example.com", "合同待确认")).toBe(true);
+
+    const audits = new AuditRepo(db).recent(10);
+    expect(audits[0]).toMatchObject({ purpose: "email-importance", outcome: "allowed" });
+    expect(JSON.stringify(audits)).not.toContain("sk-test");
+  });
+
+  it("classifyEmail 在 L1 上限下被网关阻断，返回 null", async () => {
+    const service = new LlmService({
+      configFile: join(dir, "config.json"),
+      db,
+      clock: new VirtualClock(1_000),
+      secrets: new MemorySecrets(),
+    });
+    await service.setApiKey("sk-test");
+    chatReply = '{"important":true}';
+    expect(await service.classifyEmail("boss@example.com", "合同")).toBeNull();
+    const audits = new AuditRepo(db).recent(10);
+    expect(audits[0]?.outcome).toBe("blocked");
+  });
+
   it("listModels 从 /models 获取并去重", async () => {
     const service = new LlmService({
       configFile: join(dir, "config.json"),
