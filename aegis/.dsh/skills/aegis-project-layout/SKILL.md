@@ -16,6 +16,7 @@ L1 执行层       员工 Worker × N（M4 起）          —— 一任务一�
 L0 平台适配     packages/platform               —— 所有 OS 差异只在这里
 共享内核        packages/{storage,secrets,redaction-gateway,product,clock,contracts,ipc-contract}
 M2 Skill/规则   packages/skills（YAML 契约、加载、模板、纯规则引擎）
+M2 本地监测     packages/monitors（Monitor 接口、FileMonitor；Web/RSS/System 后续）
 ```
 
 **判定原则（按顺序问）**：
@@ -39,6 +40,7 @@ M2 Skill/规则   packages/skills（YAML 契约、加载、模板、纯规则引
 | `@aegis/platform` | 通知/自启/权限/系统指标的平台实现 | 不含业务策略 |
 | `@aegis/redaction-gateway` | 唯一外发出口：分级、检测、脱敏、审计 | 不做业务提示词 |
 | `@aegis/skills` | YAML Skill 契约、加载校验、模板与纯规则引擎 | 不做监测器、不发通知、不调模型 |
+| `@aegis/monitors` | 监测器统一接口与本地实现（FileMonitor…） | 不做 Skill 解析、不做调度/通知 |
 | `apps/daemon` | 启动序列、调度编排、IPC 服务端、运行时状态 | 不直连模型、不实现平台细节 |
 
 ## 3. 依赖方向矩阵（机械强制）
@@ -55,7 +57,7 @@ M2 Skill/规则   packages/skills（YAML 契约、加载、模板、纯规则引
 | `secrets` | `contracts`, `product` |
 | `platform` | `clock`, `contracts` |
 | `redaction-gateway` | `contracts`（以及未来的 `model-provider`） |
-| `daemon` | clock, contracts, ipc-contract, platform, product, redaction-gateway, secrets, skills, storage |
+| `daemon` | clock, contracts, ipc-contract, platform, product, redaction-gateway, secrets, skills, monitors, storage |
 
 ## 4. 四条铁律
 

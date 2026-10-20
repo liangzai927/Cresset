@@ -30,6 +30,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { SystemClock } from "@aegis/clock";
+import { FileMonitor } from "@aegis/monitors";
 import { type DataPaths, resolveDataPaths } from "@aegis/product";
 import { loadSkillFile, SkillLoadError } from "@aegis/skills";
 import { createBackup } from "./bootstrap/backup.js";
@@ -65,6 +66,7 @@ function usage(): string {
     "  paths                         打印数据目录",
     "  backup --out <目录>            导出一致性数据备份（不包含钥匙串）",
     "  skill check <file.yaml>       校验 Skill YAML（M2）",
+    "  monitor scan <目录>           预览文件监测结果（M2，dry-run）",
     "",
     "示例：",
     '  aegis add "交周报" --at 明天9:00 --weekly 5',
@@ -493,6 +495,8 @@ export async function runCli(argv: string[]): Promise<number> {
       return cmdBackup(args);
     case "skill":
       return cmdSkill(args);
+    case "monitor":
+      return cmdMonitor(args);
     case undefined:
     case "help":
     case "--help":
@@ -578,6 +582,63 @@ function cmdSkill(args: string[]): number {
     }
     fail(err instanceof Error ? err.message : String(err));
   }
+}
+
+/**
+ * `monitor scan <目录> [--glob <pattern>] [--ignore <pattern>]`
+ *
+ * M2 的文件监测 dry-run：不需要启动 daemon，也不会发通知；只告诉你
+ * "现在有哪些文件会被监测、稳定期后会产生什么事实"。
+ */
+async function cmdMonitor(args: string[]): Promise<number> {
+  const [sub, root] = args;
+  if (sub !== "scan" || !root) {
+    usageError("用法：aegis monitor scan <目录> [--glob <pattern>] [--ignore <pattern>]");
+  }
+
+  const patterns: string[] = [];
+  const ignore: string[] = [];
+  for (let i = 2; i < args.length; i += 1) {
+    const arg = args[i];
+    if (arg === "--glob") {
+      const value = args[++i];
+      if (!value) usageError("--glob 需要一个 pattern");
+      patterns.push(value);
+    } else if (arg === "--ignore") {
+      const value = args[++i];
+      if (!value) usageError("--ignore 需要一个 pattern");
+      ignore.push(value);
+    } else {
+      usageError(`monitor 不认识的参数：${arg}`);
+    }
+  }
+
+  const monitor = new FileMonitor({
+    id: "files.cli",
+    root,
+    patterns,
+    ignore,
+    stableMs: 0,
+    emitInitial: true,
+    clock: new SystemClock(),
+  });
+  const result = await monitor.scan();
+
+  for (const err of result.errors) {
+    process.stderr.write(`⚠ ${err.path}：${err.message}\n`);
+  }
+  if (result.facts.length === 0) {
+    process.stdout.write("没有匹配到文件（或全部被 ignore 排除）\n");
+    return result.errors.length > 0 ? 1 : EXIT_OK;
+  }
+
+  process.stdout.write(`将监测 ${result.facts.length} 个文件：\n`);
+  for (const fact of result.facts) {
+    const path = String(fact.fields.path ?? "");
+    const size = Number(fact.fields.size ?? 0);
+    process.stdout.write(`  + ${path}  (${formatBytes(size)})\n`);
+  }
+  return result.errors.length > 0 ? 1 : EXIT_OK;
 }
 
 /** 人类可读体积（备份摘要用） */

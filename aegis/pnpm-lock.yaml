@@ -41,6 +41,9 @@ importers:
       '@aegis/ipc-contract':
         specifier: workspace:*
         version: link:../../packages/ipc-contract
+      '@aegis/monitors':
+        specifier: workspace:*
+        version: link:../../packages/monitors
       '@aegis/platform':
         specifier: workspace:*
         version: link:../../packages/platform
@@ -106,6 +109,12 @@ importers:
       zod:
         specifier: ^4.0.0
         version: 4.6.7
+
+  packages/monitors:
+    dependencies:
+      '@aegis/clock':
+        specifier: workspace:*
+        version: link:../clock
 
   packages/platform:
     dependencies:

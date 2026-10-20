@@ -47,6 +47,7 @@ function isCliInvocation(argv: string[]): boolean {
     "paths",
     "backup",
     "skill",
+    "monitor",
     "help",
   ]);
   if (argv.length === 0) return true; // 无参数 → 打印帮助而不是报错
@@ -87,7 +88,7 @@ function parseArgs(argv: string[]): Args {
           "  --help, -h          显示帮助",
           "",
           "子命令（同一个可执行文件）：",
-          "  aegis <命令>         见 `aegis help`（status / add / list / history / backup / skill …）",
+          "  aegis <命令>         见 `aegis help`（status / add / list / history / backup / skill / monitor …）",
           "",
         ].join("\n"),
       );

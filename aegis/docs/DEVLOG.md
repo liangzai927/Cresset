@@ -60,6 +60,29 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M2：Monitor 接口 + FileMonitor + dry-run
+**里程碑**：M2（R5 并行观察）
+**改了什么**：
+- 新增 `@aegis/monitors`：
+  - 统一 `Monitor` 接口（id/permission/scan → facts + errors）；
+  - `FileMonitor` 轮询式实现：基线、稳定期、sha256 内容指纹、超大文件降级、
+    glob/ignore、新增/修改/删除、采集错误可见；
+  - `emitInitial` 供 dry-run 列出当前匹配文件；
+- CLI 新增 `aegis monitor scan <目录> [--glob ...] [--ignore ...]`，不发通知、不启动 daemon；
+- 新增 5 个 FileMonitor 单测；仓库共 344 测试。
+**为什么**：M2 的监测器先做"可观察、可 dry-run"的第一条竖切，避免直接接调度后
+把基线文件全部当新增而刷屏。Monitor 接口确定后，Web/RSS/System 可按同一形状追加。
+**验证**：
+- `pnpm verify`：344 通过 / 9 跳过；14 个构建目标
+- `aegis monitor scan` 在临时目录正确只列出 `*.txt`
+- 打包产物内 CLI 也能运行；
+**踩到的坑**：
+- 首次扫描必须只建基线；否则启动即把所有历史文件当新增；
+- 稳定期要按"首次观察到内容不变"计时，不能直接拿 mtime；
+- `.git`/`node_modules` 默认不进入，避免每次扫描数千对象。
+**留给下次**：监测器调度/持久化、Web/RSS/System、Skill 与事实的端到端连接、冷却/去重；
+仍禁止 M3 的 LLM/知识库。
+
 ### 2026-10-20 · M2：Skill YAML 契约 / 加载 / 规则引擎 + CLI
 **里程碑**：M2（R5 并行观察；产品负责人 2026-10-20 明确授权）
 **改了什么**：
