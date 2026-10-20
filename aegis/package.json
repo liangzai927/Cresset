@@ -34,7 +34,8 @@
     "devlog": "node tools/devlog.mjs",
     "devlog:add": "node tools/devlog.mjs add",
     "devlog:check": "node tools/devlog.mjs check",
-    "m2:report": "node tools/m2-report.mjs"
+    "m2:report": "node tools/m2-report.mjs",
+    "m3:report": "node tools/m3-report.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.2.0",
