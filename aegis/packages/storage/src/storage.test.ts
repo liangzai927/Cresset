@@ -58,6 +58,51 @@ describe("数据库打开与迁移", () => {
     expect(() => migrate(db, Date.now, tampered)).toThrow(/checksum 与库中记录不一致/);
   });
 
+  it("0003 重建 notification 时保留旧通知与投递尝试，并允许 monitor kind", () => {
+    const upgrade = openDb({ file: join(dir, "upgrade.db") });
+    try {
+      migrate(upgrade, Date.now, MIGRATIONS.slice(0, 2));
+      upgrade
+        .prepare(
+          `INSERT INTO notification
+             (id, occurrence_id, kind, title, body, priority, scheduled_for, state, dedupe_key, created_at, updated_at)
+           VALUES ('n1', NULL, 'reminder', '旧提醒', NULL, 'normal', 1, 'pending', NULL, 1, 1)`,
+        )
+        .run();
+      upgrade
+        .prepare(
+          `INSERT INTO delivery_attempt
+             (id, notification_id, channel, attempt_no, outcome, error, started_at, finished_at)
+           VALUES ('a1', 'n1', 'cli_fallback', 1, 'success', NULL, 1, 2)`,
+        )
+        .run();
+
+      migrate(upgrade, Date.now);
+
+      const n = upgrade.prepare("SELECT id, title FROM notification WHERE id = 'n1'").get() as
+        | { id: string; title: string }
+        | undefined;
+      const a = upgrade.prepare("SELECT id FROM delivery_attempt WHERE id = 'a1'").get() as
+        | { id: string }
+        | undefined;
+      expect(n).toEqual({ id: "n1", title: "旧提醒" });
+      expect(a).toEqual({ id: "a1" });
+
+      upgrade
+        .prepare(
+          `INSERT INTO notification
+             (id, occurrence_id, kind, title, body, priority, scheduled_for, state, dedupe_key, created_at, updated_at)
+           VALUES ('n2', NULL, 'monitor', '监测', NULL, 'normal', 1, 'pending', NULL, 1, 1)`,
+        )
+        .run();
+      expect(upgrade.prepare("SELECT kind FROM notification WHERE id = 'n2'").get()).toEqual({
+        kind: "monitor",
+      });
+    } finally {
+      upgrade.close();
+    }
+  });
+
   it("库中存在代码未知的迁移时报错（防运行旧代码）", () => {
     const future = [
       ...MIGRATIONS,

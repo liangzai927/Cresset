@@ -45,6 +45,38 @@ export const DaemonConfigSchema = z
       })
       .default({}),
     autostart: z.boolean().default(true),
+    /**
+     * M2 监测器实例。
+     *
+     * `skills` 是 YAML 路径（相对 dataDir 或绝对路径）；daemon 启动时加载并校验。
+     * 一个监测器可以绑定多个 Skill；Skill 的 trigger.monitor 必须等于实例 id。
+     */
+    monitors: z
+      .array(
+        z.discriminatedUnion("kind", [
+          z
+            .object({
+              id: z.string().min(1).max(120),
+              kind: z.literal("files"),
+              root: z.string().min(1),
+              patterns: z.array(z.string()).default([]),
+              ignore: z.array(z.string()).default([]),
+              intervalS: z.number().int().min(5).max(3_600).default(30),
+              stableMs: z.number().int().nonnegative().default(2_000),
+              skills: z.array(z.string()).default([]),
+            })
+            .strict(),
+          z
+            .object({
+              id: z.string().min(1).max(120),
+              kind: z.literal("system"),
+              intervalS: z.number().int().min(5).max(3_600).default(60),
+              skills: z.array(z.string()).default([]),
+            })
+            .strict(),
+        ]),
+      )
+      .default([]),
     /** 通知优先级规则：DND 期间哪些级别可穿透（FR-A7） */
     dnd: z
       .object({

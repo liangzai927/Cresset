@@ -111,6 +111,7 @@ export const NotificationKindSchema = z.enum([
   "system_gap",
   "failure",
   "digest",
+  "monitor",
 ]);
 export type NotificationKind = z.infer<typeof NotificationKindSchema>;
 

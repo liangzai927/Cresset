@@ -60,6 +60,29 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M2：Monitor 运行时 + Skill→通知端到端
+**里程碑**：M2（R5 并行观察）
+**改了什么**：
+- `config.json` 新增 `monitors`（files/system），每个实例可绑定多个 YAML Skill；
+- 新增 `MonitorRuntime`：定时扫描、权限复核、规则评估、冷却、生成 `kind=monitor` 通知；
+- 新增 `monitor_cooldown` 表，冷却跨重启保留；
+- `notification.kind` 增加 `monitor`；迁移 0003 重建 notification 表并保留 delivery_attempt；
+- 迁移器在重建表期间关闭外键，结束后恢复；
+- 新增 2 个测试：MonitorRuntime 冷却、0003 升级保留旧通知/投递尝试；
+- 新增 [M2-MONITORS.md](M2-MONITORS.md) 配置说明。
+**为什么**：M2 不能只有孤立的 Monitor/Skill；必须证明"文件/系统事实真的能触发通知"。
+**验证**：
+- `pnpm verify`：349 通过 / 9 跳过；14 个构建目标
+- 临时 dataDir 配置 `system.test` + 磁盘 Skill，启动 daemon 后数据库出现
+  `kind=monitor` 的「磁盘空间不足」通知，日志有 `monitor.bound/notified`
+- 迁移测试确认旧 notification 与 delivery_attempt 均保留
+**踩到的坑**：
+- SQLite 不能直接改 CHECK 约束，必须重建 notification；重建期间外键必须关闭，
+  否则 delivery_attempt 会被级联删除；
+- 冷却不能只靠通知 dedupe_key，否则同一 Skill 永久只响一次；需要 cooldown 表 + 时间窗。
+**留给下次**：Web/RSS 监测、Skill 管理/监测器状态 UI、文件重命名配对、失败通知；
+仍禁止 M3 的 LLM/知识库。
+
 ### 2026-10-20 · M2：系统健康实时显示
 **里程碑**：M2（R5 并行观察）
 **改了什么**：

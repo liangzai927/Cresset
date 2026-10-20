@@ -31,6 +31,8 @@ import type { HandshakeFile } from "../ipc/server.js";
 import { IpcServer } from "../ipc/server.js";
 import { type DaemonConfig, loadConfig, saveConfig } from "./config.js";
 import { DaemonLock } from "./lock.js";
+import { buildMonitorBindings } from "./monitor-bindings.js";
+import { MonitorRuntime } from "./monitor-runtime.js";
 
 /** daemon 版本；与里程碑对应（发 tag 时同步更新） */
 export const DAEMON_VERSION = "0.2.0-r2";
@@ -295,6 +297,17 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
   }, heartbeatMs);
   writeHeartbeat(db, clock, 0, DAEMON_VERSION);
 
+  // ── 10.5 M2 监测器运行时（无 monitors 配置时为空，不产生定时器）
+  const monitorBindings = buildMonitorBindings(cfg.config.monitors, paths.dataDir, clock, log);
+  const monitorRuntime = new MonitorRuntime({
+    db,
+    clock,
+    scheduler,
+    bindings: monitorBindings,
+    onLog: log,
+  });
+  monitorRuntime.start();
+
   // ── 11 IPC + 握手文件
   const token = randomUUID();
   const startedAt = now();
@@ -376,6 +389,7 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
 
   const stop = async (reason: string): Promise<number> => {
     log("info", "shutdown.begin", { reason });
+    monitorRuntime.stop();
     clearInterval(tickTimer);
     clearInterval(heartbeatTimer);
     try {

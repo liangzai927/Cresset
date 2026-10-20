@@ -158,34 +158,44 @@ export function migrate(
   const appliedById = new Map(applied.map((m) => [m.id, m]));
   const result: MigrateResult = { applied: [], skipped: [] };
 
-  for (const m of migrations) {
-    const prev = appliedById.get(m.id);
-    if (prev) {
-      if (prev.checksum !== m.checksum) {
-        throw new MigrationError(
-          `迁移 ${m.id} (${m.name}) 的 checksum 与库中记录不一致：` +
-            `库中=${prev.checksum.slice(0, 12)}… 当前=${m.checksum.slice(0, 12)}…。` +
-            "已发布的迁移不可修改，请新增迁移文件。",
-        );
-      }
-      result.skipped.push(m.id);
-      continue;
-    }
+  // 重建 notification 表的迁移需要关闭 FK：SQLite 的 PRAGMA foreign_keys
+  // 不能在事务内切换，因此放在整个迁移循环之外；结束后恢复原值。
+  const fk = db.prepare("PRAGMA foreign_keys").get() as { foreign_keys?: number } | undefined;
+  const fkWasOn = fk?.foreign_keys === 1;
+  if (fkWasOn) db.exec("PRAGMA foreign_keys = OFF");
 
-    try {
-      db.transaction(() => {
-        db.exec(m.sql);
-        db.prepare("INSERT INTO schema_migration (id, name, checksum, applied_at) VALUES (?, ?, ?, ?)").run(
-          m.id,
-          m.name,
-          m.checksum,
-          now(),
-        );
-      });
-    } catch (err) {
-      throw new MigrationError(`应用迁移 ${m.id} (${m.name}) 失败：${String(err)}`);
+  try {
+    for (const m of migrations) {
+      const prev = appliedById.get(m.id);
+      if (prev) {
+        if (prev.checksum !== m.checksum) {
+          throw new MigrationError(
+            `迁移 ${m.id} (${m.name}) 的 checksum 与库中记录不一致：` +
+              `库中=${prev.checksum.slice(0, 12)}… 当前=${m.checksum.slice(0, 12)}…。` +
+              "已发布的迁移不可修改，请新增迁移文件。",
+          );
+        }
+        result.skipped.push(m.id);
+        continue;
+      }
+
+      try {
+        db.transaction(() => {
+          db.exec(m.sql);
+          db.prepare("INSERT INTO schema_migration (id, name, checksum, applied_at) VALUES (?, ?, ?, ?)").run(
+            m.id,
+            m.name,
+            m.checksum,
+            now(),
+          );
+        });
+      } catch (err) {
+        throw new MigrationError(`应用迁移 ${m.id} (${m.name}) 失败：${String(err)}`);
+      }
+      result.applied.push(m.id);
     }
-    result.applied.push(m.id);
+  } finally {
+    if (fkWasOn) db.exec("PRAGMA foreign_keys = ON");
   }
 
   // 库中已有的迁移若不在当前代码的列表里 → 说明代码比库旧

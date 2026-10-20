@@ -1,0 +1,15 @@
+name: downloads-change
+version: 1.0.0
+description: 下载目录出现新文件时通知
+author: aegis
+permissions: [files.read]
+cooldown: 5m
+params: {}
+trigger:
+  type: change
+  monitor: files.downloads
+action:
+  notify:
+    priority: normal
+    title: "下载目录有新文件"
+    body: "{{monitor.path}}（{{monitor.size}} 字节）"

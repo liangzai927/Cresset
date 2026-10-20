@@ -12,6 +12,12 @@
       "name": "init_runtime_and_security",
       "file": "0002_init_runtime_and_security.sql",
       "checksum": "13519c8a02ee7ca44a3ca7a6ab3ad531ee8df6bc83340902db9db58e0d70de5b"
+    },
+    {
+      "id": 3,
+      "name": "monitor_notifications",
+      "file": "0003_monitor_notifications.sql",
+      "checksum": "f97b74968ab7f0bfe8e72f76624cd8aa9bc743decfb7322023bd400fedf4b641"
     }
   ]
 }
