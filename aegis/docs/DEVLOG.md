@@ -60,6 +60,23 @@
 
 ## 记录（新的在最上面）
 
+### 2026-10-20 · M3：早报可选 LLM 润色
+**里程碑**：M3
+**改了什么**：
+- LlmService 增加 summarizeBrief：事实文本经网关，purpose=daily-briefing；
+- BriefingService 增加 maybeGenerateAsync：规则版生成后可选 LLM 润色，失败回退；
+- config/UI 增加 briefing.useLlm；daemon 改为异步生成并捕获错误；
+- 新增 2 个测试（润色采用/审计）。
+**为什么**：规则版早报可用但生硬；LLM 润色提升“有信息量”的阅读体验，
+同时保持不编造和失败回退。
+**验证**：
+- `pnpm verify`：433 通过 / 9 跳过
+- 模型文本替换 body；purpose=daily-briefing allowed 审计
+- 打包产物真实启动通过
+**取舍**：默认关闭；数据分级 L2，L1 上限会被网关阻断。
+**留给下次**：真实早报阅读验收、7 天观察；
+仍禁止 M4。
+
 ### 2026-10-20 · M3：天气地区改为自定义下拉
 **里程碑**：M3
 **改了什么**：

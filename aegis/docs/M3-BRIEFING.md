@@ -45,12 +45,22 @@
 - 幂等由 `notification.dedupe_key = briefing:YYYY-MM-DD` 唯一索引裁决
 - 不依赖内存日期，重启/多 tick 不会重复
 
+## LLM 润色（可选）
+
+设置 → 每日简报 → 「用 LLM 润色早报」。
+
+- 先由本地事实生成规则版
+- 再把**已生成的事实文本**发给模型，要求不编造、最多 8 行
+- 数据分级按 L2；`maxOutboundClass=L1` 会被网关阻断
+- 模型失败/被阻断 → 自动回退规则版
+- 每次生成消耗一次每日调用额度
+
 ## 当前限制
 
 - 天气来自 Open-Meteo（见 [M3-WEATHER.md](M3-WEATHER.md)），无缓存时缺席
 - 日历只支持本地 ICS 文件（见 [M3-CALENDAR.md](M3-CALENDAR.md)）
 - 没有邮件
-- 没有 LLM 摘要；内容是规则拼接
+- LLM 润色默认关闭；开启会消耗额度
 - 没有“本周避免了什么”统计
 
 ## 验证

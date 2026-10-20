@@ -286,9 +286,11 @@ export interface NotifySettings {
 }
 
 /** 每日简报设置 */
+/** 每日简报设置 */
 export interface BriefingSettings {
   enabled: boolean;
   time: string;
+  useLlm: boolean;
 }
 
 /** 知识库文档 */

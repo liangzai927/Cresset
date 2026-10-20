@@ -211,6 +211,8 @@ export const DaemonConfigSchema = z
           .string()
           .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "时间格式 HH:mm")
           .default("08:00"),
+        /** 用 LLM 润色规则版事实；失败回退 */
+        useLlm: z.boolean().default(false),
       })
       .default({}),
     /** 通知优先级规则：DND 期间哪些级别可穿透（FR-A7） */

@@ -1220,6 +1220,7 @@ async function loadBriefing() {
     const view = await window.aegis.getBriefing();
     $("briefing-enabled").checked = view.enabled;
     $("briefing-time").value = view.time;
+    $("briefing-use-llm").checked = view.useLlm;
     $("briefing-hint").textContent = view.enabled ? `每天 ${view.time} 生成` : "未启用";
   } catch (err) {
     $("briefing-hint").textContent = `读取失败：${err.message}`;
@@ -1232,6 +1233,7 @@ $("btn-save-briefing").addEventListener("click", async (e) => {
   const settings = {
     enabled: $("briefing-enabled").checked,
     time: $("briefing-time").value,
+    useLlm: $("briefing-use-llm").checked,
   };
   if (!/^\d{2}:\d{2}$/.test(settings.time)) {
     $("briefing-hint").textContent = "时间格式必须为 HH:mm";

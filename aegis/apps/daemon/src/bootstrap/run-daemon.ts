@@ -312,7 +312,9 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
         counters.lastTickResult = result;
         for (const err of result.errors) log("error", "scheduler.tick_error", { error: err });
         void weatherService.refreshIfStale();
-        briefing?.maybeGenerate();
+        void briefing?.maybeGenerateAsync().catch((err: unknown) => {
+          log("error", "briefing.generate_failed", { error: String(err) });
+        });
         calendarReminder?.maybeGenerate();
       })
       .catch((err: unknown) => {
@@ -350,8 +352,14 @@ export async function runDaemon(opts: RunDaemonOptions): Promise<RunningDaemon> 
     scheduler,
     monitorStatus: () => monitorRuntime.status(),
     weather: () => weatherService.summary(),
+    llm: (facts) => llmService.summarizeBrief(facts),
   });
-  if (briefing.maybeGenerate()) log("info", "briefing.generated", { reason: "startup" });
+  void briefing
+    .maybeGenerateAsync()
+    .then((created) => {
+      if (created) log("info", "briefing.generated", { reason: "startup" });
+    })
+    .catch((err: unknown) => log("error", "briefing.generate_failed", { error: String(err) }));
 
   calendarReminder = new CalendarReminder({
     configFile: paths.configFile,

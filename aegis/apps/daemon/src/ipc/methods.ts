@@ -1024,7 +1024,11 @@ export function createMethods(
       const configFile = context.backup?.paths.configFile;
       if (!configFile) throw new MethodError(E_INTERNAL, "配置路径未初始化");
       const cfg = loadConfig(configFile).config;
-      return { enabled: cfg.briefing.enabled, time: cfg.briefing.time };
+      return {
+        enabled: cfg.briefing.enabled,
+        time: cfg.briefing.time,
+        useLlm: cfg.briefing.useLlm,
+      };
     },
 
     "briefing.set": async (params) => {
@@ -1034,6 +1038,7 @@ export function createMethods(
         .object({
           enabled: z.boolean(),
           time: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+          useLlm: z.boolean().default(false),
         })
         .strict()
         .parse(params);

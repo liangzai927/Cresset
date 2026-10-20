@@ -311,6 +311,58 @@ export class LlmService {
     }
   }
 
+  /**
+   * 把本地早报事实整理成更自然的文字。
+   *
+   * 只发送已生成的事实文本；数据分级按 L2。失败/被阻断返回 null，
+   * 调用方必须回退规则版早报。
+   */
+  async summarizeBrief(facts: string): Promise<string | null> {
+    const cfg = loadConfig(this.#configFile).config;
+    if (!cfg.llm.enabled) return null;
+    const apiKey = await this.#secrets.get(LLM_API_KEY);
+    if (!apiKey) return null;
+    let destination: string;
+    try {
+      destination = new URL(cfg.llm.baseUrl).host;
+    } catch {
+      return null;
+    }
+    if (!this.#consumeCall(cfg.llm.dailyCallLimit, "daily-briefing")) return null;
+    const provider = new OpenAICompatibleProvider({
+      baseUrl: cfg.llm.baseUrl,
+      apiKey,
+      model: cfg.llm.model,
+      timeoutMs: cfg.llm.timeoutMs,
+    });
+    const gateway = new RedactingModelGateway({
+      provider,
+      policy: { maxOutboundClass: cfg.llm.maxOutboundClass },
+      now: () => this.#clock.wall(),
+      audit: (audit) => this.#recordAudit(audit),
+    });
+    try {
+      const result = await gateway.complete({
+        actor: "daemon",
+        purpose: "daily-briefing",
+        destination: `${destination}/${cfg.llm.model}`,
+        payload: [
+          "把下面的本地早报事实整理成简洁、自然的中文早报。",
+          "只使用已给事实，不要编造；保留时间/数字；最多 8 行。",
+          "只返回正文，不要 Markdown 标题代码块。",
+          "",
+          facts,
+        ].join("\n"),
+        source: "briefing",
+        model: cfg.llm.model,
+      });
+      const text = result.text.trim();
+      return text ? text.slice(0, 2_000) : null;
+    } catch {
+      return null;
+    }
+  }
+
   async judge(
     skill: Skill,
     decision: SkillDecision,

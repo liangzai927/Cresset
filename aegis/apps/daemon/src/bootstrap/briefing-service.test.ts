@@ -108,6 +108,29 @@ describe("BriefingService", () => {
     expect(row.body).toContain("周会");
   });
 
+  it("启用 useLlm 时采用模型文本；失败回退规则版", async () => {
+    writeFileSync(
+      configFile,
+      JSON.stringify({
+        version: 1,
+        briefing: { enabled: true, time: "00:00", useLlm: true },
+      }),
+    );
+    const service = new BriefingService({
+      configFile,
+      db,
+      clock,
+      scheduler,
+      monitorStatus: () => [],
+      llm: async () => "模型润色后的早报",
+    });
+    expect(await service.maybeGenerateAsync()).toBe(true);
+    const row = db.prepare("SELECT body FROM notification WHERE kind = 'digest'").get() as {
+      body: string;
+    };
+    expect(row.body).toBe("模型润色后的早报");
+  });
+
   it("未启用时不生成", () => {
     writeFileSync(configFile, JSON.stringify({ version: 1, briefing: { enabled: false, time: "08:00" } }));
     const service = new BriefingService({ configFile, db, clock, scheduler, monitorStatus: () => [] });

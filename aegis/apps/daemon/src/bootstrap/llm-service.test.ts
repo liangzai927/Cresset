@@ -173,6 +173,33 @@ describe("LlmService", () => {
     expect(JSON.stringify(audits)).not.toContain("sk-test");
   });
 
+  it("summarizeBrief 经网关润色早报事实", async () => {
+    writeFileSync(
+      join(dir, "config.json"),
+      JSON.stringify({
+        version: 1,
+        llm: {
+          enabled: true,
+          baseUrl,
+          model: "test-model",
+          timeoutMs: 5_000,
+          maxOutboundClass: "L2",
+        },
+      }),
+    );
+    const service = new LlmService({
+      configFile: join(dir, "config.json"),
+      db,
+      clock: new VirtualClock(1_000),
+      secrets: new MemorySecrets(),
+    });
+    await service.setApiKey("sk-test");
+    chatReply = "今天有两件事。";
+    expect(await service.summarizeBrief("09:00 周会")).toBe("今天有两件事。");
+    const audits = new AuditRepo(db).recent(10);
+    expect(audits[0]).toMatchObject({ purpose: "daily-briefing", outcome: "allowed" });
+  });
+
   it("classifyEmail 在 L1 上限下被网关阻断，返回 null", async () => {
     const service = new LlmService({
       configFile: join(dir, "config.json"),
