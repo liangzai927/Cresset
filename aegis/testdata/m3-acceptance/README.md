@@ -116,6 +116,16 @@ node testdata/m3-acceptance/webhook-server.mjs
 webhook 测试服务器：http://127.0.0.1:8787/ok
 ```
 
+如果提示端口被占用：
+
+```bash
+lsof -nP -iTCP:8787 -sTCP:LISTEN
+PORT=8788 node testdata/m3-acceptance/webhook-server.mjs
+```
+
+然后把 `http://127.0.0.1:8788/ok` 填到 Aegis Webhook。
+不要随意杀掉不认识的进程。
+
 设置 → 通知渠道 → Webhook：
 
 - 启用

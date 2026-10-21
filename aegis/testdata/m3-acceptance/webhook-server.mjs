@@ -58,6 +58,18 @@ const server = createServer((req, res) => {
   });
 });
 
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(`✗ 端口 ${port} 已被占用。`);
+    console.error("  查看占用进程：lsof -nP -iTCP:" + port + " -sTCP:LISTEN");
+    console.error(`  换一个端口：PORT=${port + 1} node testdata/m3-acceptance/webhook-server.mjs`);
+    console.error(`  然后把 http://${host}:${port + 1}/ok 填到 Aegis Webhook。`);
+  } else {
+    console.error(`✗ Webhook 服务启动失败：${err.message}`);
+  }
+  process.exit(1);
+});
+
 server.listen(port, host, () => {
   console.log(`webhook 测试服务器：http://${host}:${port}/ok`);
   console.log("把上述 URL 填到 Aegis 设置 → 通知渠道 → Webhook，然后保存并重启 daemon。");
