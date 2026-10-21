@@ -71,6 +71,26 @@ describe("KnowledgeBase", () => {
     expect(kb.search("")).toEqual([]);
   });
 
+  it("问答检索去掉问句成分后仍能命中内容词", () => {
+    kb.ingest({
+      sourcePath: "/tmp/security.md",
+      title: "安全说明",
+      content: "API Key 存储在系统钥匙串。L3 数据永远不允许外发。",
+      dataClass: "L2",
+    });
+    kb.ingest({
+      sourcePath: "/tmp/release.md",
+      title: "发布说明",
+      content: "发布前运行 pnpm verify；它依次运行构建和测试。",
+      dataClass: "L2",
+    });
+
+    expect(kb.searchForQuestion("API Key 存在哪里？")[0]?.title).toBe("安全说明");
+    expect(kb.searchForQuestion("L3 数据在什么情况下可以外发？")[0]?.title).toBe("安全说明");
+    expect(kb.searchForQuestion("pnpm verify 依次运行哪些阶段？")[0]?.title).toBe("发布说明");
+    expect(kb.searchForQuestion("公司年会在哪一天？")).toEqual([]);
+  });
+
   it("删除文档同时清理索引", () => {
     const doc = kb.ingest({ sourcePath: "/tmp/x.md", content: "可删除的知识库内容", dataClass: "L1" });
     kb.remove(doc.id);

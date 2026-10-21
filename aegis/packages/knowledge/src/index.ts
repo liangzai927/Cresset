@@ -44,7 +44,16 @@ export interface KnowledgeHit {
   score: number;
 }
 
-/** 自然语言问题里的高频停用词；问答检索先剔除它们，避免"是什么"导致零命中 */
+/**
+ * 自然语言问题里的高频停用词。
+ *
+ * 中文没有空格，FTS 又是逐字索引；如果直接对整句做 AND，"在/哪/里/情况/可以"
+ * 这些问句成分会把真正的内容词一起卡死。因此问答检索先做**短语清洗**，
+ * 再剔除单字停用词，最后用 OR 召回 + 覆盖率过滤。
+ */
+const QUESTION_PHRASES =
+  /(是什么|为什么|怎么样|怎么|如何|多少|哪些|哪里|什么|请问|一下|是否|包含|满足|存在|可以|情况|回答|需要|告诉我|吗|呢)/g;
+
 const QUESTION_STOPWORDS = new Set([
   "的",
   "了",
@@ -63,6 +72,35 @@ const QUESTION_STOPWORDS = new Set([
   "绍",
   "一",
   "下",
+  "在",
+  "哪",
+  "里",
+  "些",
+  "多",
+  "少",
+  "可",
+  "以",
+  "包",
+  "含",
+  "满",
+  "足",
+  "存",
+  "不",
+  "完",
+  "全",
+  "问",
+  "题",
+  "词",
+  "会",
+  "把",
+  "给",
+  "被",
+  "对",
+  "于",
+  "与",
+  "和",
+  "及",
+  "或",
   "what",
   "is",
   "the",
@@ -78,6 +116,14 @@ const QUESTION_STOPWORDS = new Set([
   "to",
   "and",
 ]);
+
+/** 清理问句短语与标点；保留内容词 */
+function cleanQuestion(question: string): string {
+  return question
+    .toLowerCase()
+    .replace(QUESTION_PHRASES, " ")
+    .replace(/[？?！!，,。.；;：:、"'“”‘’（）()]/g, " ");
+}
 
 /** 分块大小与重叠（字符数） */
 const CHUNK_SIZE = 800;
@@ -242,8 +288,67 @@ export class KnowledgeBase {
    * 这样 "Aegis 是什么" 不会被拆成必须同时出现的 5 个字符。
    */
   searchForQuestion(question: string, limit = 10): KnowledgeHit[] {
-    const tokens = tokenizeForFts(question).filter((t) => !QUESTION_STOPWORDS.has(t));
-    return this.#searchTokens(tokens, limit);
+    const tokens = [
+      ...new Set(tokenizeForFts(cleanQuestion(question)).filter((t) => !QUESTION_STOPWORDS.has(t))),
+    ];
+    if (tokens.length === 0) return [];
+
+    // OR 召回：先拿候选，再在 JS 里按“命中了多少查询词”排序。
+    // 这样 "API Key 存在哪里" 不会因为多了"哪里"而零命中。
+    const ftsQuery = tokens.map((t) => `"${t.replaceAll('"', '""')}"`).join(" OR ");
+    const rows = rowsOf<{
+      chunk_id: string;
+      score: number;
+      document_id: string;
+      title: string;
+      source_path: string;
+      data_class: string;
+      ordinal: number;
+      text: string;
+      start_offset: number;
+      end_offset: number;
+    }>(
+      this.#db.prepare(
+        `SELECT f.chunk_id, bm25(knowledge_fts) AS score,
+                c.document_id, c.ordinal, c.text, c.start_offset, c.end_offset,
+                d.title, d.source_path, d.data_class
+           FROM knowledge_fts f
+           JOIN knowledge_chunk c ON c.id = f.chunk_id
+           JOIN knowledge_document d ON d.id = c.document_id
+          WHERE knowledge_fts MATCH ?
+          ORDER BY score ASC LIMIT ?`,
+      ),
+      ftsQuery,
+      Math.max(limit * 20, 50),
+    );
+
+    // 至少命中 60% 的内容词，且不少于 2 个（单词查询除外）；
+    // 这是防止 "公司年会在哪一天" 只靠"会/天"误命中文档。
+    const required = Math.min(
+      tokens.length,
+      Math.max(tokens.length === 1 ? 1 : 2, Math.ceil(tokens.length * 0.6)),
+    );
+    return rows
+      .map((r) => {
+        const chunkTokens = new Set(tokenizeForFts(r.text));
+        const matched = tokens.filter((t) => chunkTokens.has(t)).length;
+        return { r, matched };
+      })
+      .filter(({ matched }) => matched >= required)
+      .sort((a, b) => b.matched - a.matched || a.r.score - b.r.score)
+      .slice(0, limit)
+      .map(({ r }) => ({
+        chunkId: r.chunk_id,
+        documentId: r.document_id,
+        title: r.title,
+        sourcePath: r.source_path,
+        dataClass: r.data_class as DataClass,
+        ordinal: r.ordinal,
+        text: r.text,
+        startOffset: r.start_offset,
+        endOffset: r.end_offset,
+        score: r.score,
+      }));
   }
 
   /** 共用 FTS 查询；空 token 直接返回空，避免 MATCH 空串报错 */
