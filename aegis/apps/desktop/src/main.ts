@@ -72,6 +72,7 @@ import type {
 } from "./api-types.js";
 import { deliverWithAttention, probeSystemNotification } from "./attention.js";
 import { type ChannelHostHandle, createElectronPresenter, startChannelHost } from "./channel-host.js";
+import { DOCUMENT_EXTENSIONS, extractDocumentText } from "./file-ingest.js";
 import { DaemonSupervisor, resolveDaemonEntry, resolveNodeExecPath } from "./supervisor.js";
 
 /** 应用版本（与 package.json 同步） */
@@ -982,7 +983,7 @@ async function ipcPickKnowledgeFile(): Promise<{ sourcePath: string; content: st
   const options = {
     title: "选择要入库的文档",
     buttonLabel: "导入",
-    filters: [{ name: "文档", extensions: ["md", "markdown", "txt"] }],
+    filters: [{ name: "文档", extensions: [...DOCUMENT_EXTENSIONS] }],
     properties: ["openFile"] as Array<"openFile">,
   };
   const picked =
@@ -991,7 +992,7 @@ async function ipcPickKnowledgeFile(): Promise<{ sourcePath: string; content: st
       : await dialog.showOpenDialog(options);
   if (picked.canceled || !picked.filePaths[0]) return null;
   const sourcePath = picked.filePaths[0];
-  const content = readFileSync(sourcePath, "utf8");
+  const content = extractDocumentText(sourcePath);
   if (Buffer.byteLength(content, "utf8") > 2_000_000) throw new Error("文档超过 2MB 限制");
   return { sourcePath, content };
 }
