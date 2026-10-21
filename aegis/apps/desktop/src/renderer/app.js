@@ -652,22 +652,27 @@ function splitList(value) {
   return value.split(",").map((s) => s.trim()).filter(Boolean);
 }
 
+/** 读取 IMAP 表单；宿主/用户名可空，但启用或测试时必须有值 */
+function readEmailMonitorForm() {
+  return {
+    enabled: $("email-monitor-enabled").checked,
+    ...($("email-monitor-host").value.trim() ? { host: $("email-monitor-host").value.trim() } : {}),
+    port: Number($("email-monitor-port").value),
+    secure: $("email-monitor-secure").checked,
+    ...($("email-monitor-user").value.trim() ? { user: $("email-monitor-user").value.trim() } : {}),
+    mailbox: $("email-monitor-mailbox").value.trim() || "INBOX",
+    pollIntervalS: Number($("email-monitor-interval").value),
+    useLlm: $("email-monitor-use-llm").checked,
+    senders: splitList($("email-monitor-senders").value),
+    keywords: splitList($("email-monitor-keywords").value),
+  };
+}
+
 $("btn-save-email-monitor").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
   btn.disabled = true;
   try {
-    await window.aegis.setEmailMonitor({
-      enabled: $("email-monitor-enabled").checked,
-      ...($("email-monitor-host").value.trim() ? { host: $("email-monitor-host").value.trim() } : {}),
-      port: Number($("email-monitor-port").value),
-      secure: $("email-monitor-secure").checked,
-      ...($("email-monitor-user").value.trim() ? { user: $("email-monitor-user").value.trim() } : {}),
-      mailbox: $("email-monitor-mailbox").value.trim() || "INBOX",
-      pollIntervalS: Number($("email-monitor-interval").value),
-      useLlm: $("email-monitor-use-llm").checked,
-      senders: splitList($("email-monitor-senders").value),
-      keywords: splitList($("email-monitor-keywords").value),
-    });
+    await window.aegis.setEmailMonitor(readEmailMonitorForm());
     $("email-monitor-hint").textContent = "已保存；下一轮轮询生效";
   } catch (err) {
     $("email-monitor-hint").textContent = `保存失败：${err.message}`;
@@ -698,9 +703,21 @@ $("btn-set-email-monitor-password").addEventListener("click", async (e) => {
 
 $("btn-test-email-monitor").addEventListener("click", async (e) => {
   const btn = e.currentTarget;
+  const settings = readEmailMonitorForm();
+  if (!settings.host || !settings.user) {
+    $("email-monitor-hint").textContent = "请先填写 IMAP host 和用户名";
+    return;
+  }
   btn.disabled = true;
-  $("email-monitor-hint").textContent = "连接中…";
+  $("email-monitor-hint").textContent = "保存设置并连接中…";
   try {
+    // 测试连接读的是 daemon 配置；先把当前表单落盘，避免“界面已填但服务端仍为空”。
+    await window.aegis.setEmailMonitor(settings);
+    const password = $("email-monitor-password").value.trim();
+    if (password) {
+      await window.aegis.setEmailMonitorPassword(password);
+      $("email-monitor-password").value = "";
+    }
     const r = await window.aegis.testEmailMonitor();
     $("email-monitor-hint").textContent = r.detail;
   } catch (err) {
