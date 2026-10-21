@@ -58,13 +58,14 @@ export class BriefingService {
    */
   maybeGenerate(): boolean {
     const base = this.#collect();
-    return base ? this.#create(base, base.body) : false;
+    if (!base || this.#hasDigest(base.date)) return false;
+    return this.#create(base, base.body);
   }
 
   /** 可选 LLM 润色；模型失败时仍用规则版生成 */
   async maybeGenerateAsync(): Promise<boolean> {
     const base = this.#collect();
-    if (!base) return false;
+    if (!base || this.#hasDigest(base.date)) return false;
     const cfg = loadConfig(this.#opts.configFile).config;
     let body = base.body;
     if (cfg.briefing.useLlm && this.#opts.llm) {
@@ -75,6 +76,15 @@ export class BriefingService {
       }
     }
     return this.#create(base, body);
+  }
+
+  /** 当天是否已经有 digest；必须在调用 LLM 之前检查，否则每个 tick 都会烧一次调用 */
+  #hasDigest(date: string): boolean {
+    return Boolean(
+      this.#opts.db
+        .prepare("SELECT 1 AS ok FROM notification WHERE dedupe_key = ? LIMIT 1")
+        .get(`briefing:${date}`),
+    );
   }
 
   /** 收集事实并检查时间门槛 */

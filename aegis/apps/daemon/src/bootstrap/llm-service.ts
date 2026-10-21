@@ -240,6 +240,19 @@ export class LlmService {
       if (err instanceof OutboundBlockedError) {
         return { ok: false, reason: "blocked", message: err.message };
       }
+      if (err instanceof ProviderError) {
+        const reason =
+          err.kind === "timeout"
+            ? `模型请求超时（${cfg.llm.timeoutMs}ms），请调大超时或检查网络`
+            : err.kind === "auth"
+              ? "模型鉴权失败，请检查 API Key"
+              : err.kind === "rate_limit"
+                ? "模型触发限流或额度不足，请稍后重试"
+                : err.kind === "network"
+                  ? "模型网络连接失败"
+                  : "模型返回异常，请查看审计";
+        return { ok: false, reason: "llm_unavailable", message: reason };
+      }
       return { ok: false, reason: "llm_unavailable", message: "模型调用失败，请查看审计" };
     }
   }

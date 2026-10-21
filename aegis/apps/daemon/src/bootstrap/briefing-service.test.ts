@@ -116,15 +116,21 @@ describe("BriefingService", () => {
         briefing: { enabled: true, time: "00:00", useLlm: true },
       }),
     );
+    let llmCalls = 0;
     const service = new BriefingService({
       configFile,
       db,
       clock,
       scheduler,
       monitorStatus: () => [],
-      llm: async () => "模型润色后的早报",
+      llm: async () => {
+        llmCalls += 1;
+        return "模型润色后的早报";
+      },
     });
     expect(await service.maybeGenerateAsync()).toBe(true);
+    expect(await service.maybeGenerateAsync()).toBe(false);
+    expect(llmCalls).toBe(1);
     const row = db.prepare("SELECT body FROM notification WHERE kind = 'digest'").get() as {
       body: string;
     };
