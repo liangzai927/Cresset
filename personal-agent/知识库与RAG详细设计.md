@@ -1,0 +1,1149 @@
+# 知识库与 RAG 详细设计（M4）
+
+> 状态：**设计稿，未实施**
+> 目标里程碑：**M4**（PRD §5.2：单员工工作能力 + RAG 与上下文压缩）
+> 设计日期：2026-10-21
+> 关联文档：
+> - `PRD-个人桌面Agent.md` §7.12 知识库与 RAG、§7.13 上下文管理
+> - `技术选型与架构设计.md` §4 数据模型、§5.3 知识库与检索、§10 D3/D4
+> - `M0+M1详细设计.md` 数据/安全/运行时基础
+
+---
+
+## 1. 结论摘要
+
+本设计把当前 M3 的“FTS5 关键词检索 + 引用问答”升级为完整 RAG：
+
+```text
+摄取 → 结构分块 → 本地嵌入 → FTS + 向量混合召回
+→ 确定性重排 → 上下文构造 → LLM 生成
+→ 引用机械校验 + 支持度校验 → 精确缓存 → 回答
+```
+
+核心决策：
+
+| 决策 | 结论 |
+| --- | --- |
+| RAG 定位 | M4 的准确性基础设施，不是聊天附加功能 |
+| 默认嵌入 | **本地 ONNX，模型随 App 打包；默认不联网下载** |
+| 云端嵌入 | 默认关闭；仅 L0/L1 且用户显式授权；按 L2 审计 |
+| 向量存储 | SQLite + `sqlite-vec`；BigInt rowid；加载时机遵守 C-1 |
+| 默认检索 | BM25 + 向量双路召回 + RRF 融合 |
+| 重排 | 先确定性轻量重排；cross-encoder 作为可选增强 |
+| 引用 | 结论必须带引用；引用回查原文哈希；失败降级/拒答 |
+| 支持度校验 | 逐句检查引用是否真的支持结论；高风险才走模型/NLI |
+| 缓存 | 只缓存**校验通过**的回答；key 带文档/索引/模型/提示词版本 |
+| 降级 | 模型/向量扩展/reranker 任一失败 → 回退 FTS |
+| 实施时机 | **M3 验收后再进入 M4**；本设计现在评审，不等于现在编码 |
+
+**一句话：** 完整 RAG 的价值不是“多一个向量库”，而是把“找依据、排序、回答、核对、缓存”做成一条可验证的流水线。
+
+---
+
+## 2. 目标与非目标
+
+### 2.1 目标
+
+1. 让知识库问答对自然语言问法有稳定召回，不再因问句成分零命中。
+2. 对专有名词、代码标识符、数字保留精确匹配能力。
+3. 每条结论可回溯到具体文档、位置和版本。
+4. 无依据时明确拒答，不把相似但无关的内容当证据。
+5. 引用必须真正支持结论，而不仅是编号合法。
+6. 高频问题不重复调用模型。
+7. 单个知识库支持 ≥10 万块；检索 P95 <500ms（本地）。
+8. 用户端无需安装 Ollama/数据库，打包后开箱可用。
+9. 索引可重建；原文是唯一真相源。
+10. 为 M6 团队知识隔离预留 scope/ACL 字段。
+
+### 2.2 非目标
+
+- 不在 M3 提前实现完整 RAG。
+- 不做通用互联网搜索。
+- 不做自动网页爬虫。
+- 不做团队共享的最终权限模型（M6 完成）。
+- 不做语义缓存（第一版只做精确缓存）。
+- 不做多模态（图片/音频）检索。
+- 不把 embedding 向量导出成可解释知识。
+- 不让模型直接修改知识库原文。
+
+---
+
+## 3. 与里程碑的关系
+
+当前 M3 已有：
+
+- Markdown/TXT/Word/RTF 导入
+- 800 字固定分块 + 100 重叠
+- FTS5 中文逐字索引
+- 问句清洗 + OR 召回 + 覆盖率过滤
+- Top 6 片段 + LLM 回答
+- 引用编号回查
+- 无依据拒答、L2 不外发
+
+M3 的定位是“基础检索 + 引用地基”，不包含：
+
+- 向量/embedding
+- 混合检索
+- rerank
+- 逐句引用支持度校验
+- 缓存
+- 知识冲突治理
+
+上述内容按 PRD 属于 **M4**。本设计是 M4 的开工依据，不是 M3 的补丁。
+
+> 如果产品负责人希望把 RAG 提前到 M3.5，需要单独记录范围变更/豁免；否则必须先完成 M3 验收。
+
+---
+
+## 4. 总体架构
+
+```text
+┌──────────────────────────────────────────────────────────────┐
+│                         摄取层                                │
+│  文件/代码/笔记 → Parser → 结构分块 → 元数据 → 内容哈希        │
+│                     ↓                                        │
+│              本地嵌入 Worker（可选）→ 向量                    │
+│                     ↓                                        │
+│        knowledge_source / knowledge_doc / chunk              │
+│        chunk_fts / chunk_vec / embedding_meta                │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│                         检索层                                │
+│  查询清洗 → 查询改写（可选）→ ACL/分级过滤                     │
+│       ├─ FTS5 BM25 Top N                                     │
+│       └─ 向量 KNN Top N                                      │
+│                 ↓                                            │
+│              RRF 融合 / 去重                                 │
+│                 ↓                                            │
+│        确定性重排（覆盖率/精确词/来源）                        │
+│                 ↓                                            │
+│        cross-encoder rerank（可选）                          │
+│                 ↓                                            │
+│              Top K（默认 5–6）                               │
+└──────────────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────────────┐
+│                         回答层                                │
+│  上下文拼装（带编号/边界）→ LLM → JSON 回答 + 引用             │
+│         ↓                                                    │
+│  引用解析：chunk 存在？哈希未变？                              │
+│         ↓                                                    │
+│  支持度校验：数字/实体/关键词/结论是否在引用片段中              │
+│         ↓                                                    │
+│  通过 → 精确缓存 → 返回；失败 → 删句/拒答                     │
+└──────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 5. 数据模型
+
+### 5.1 兼容原则
+
+当前 M3 已发布表：
+
+```text
+knowledge_document
+knowledge_chunk
+knowledge_fts
+```
+
+已发布迁移不可修改。M4 采用：
+
+- 保留现有表名与数据
+- 新增表/列（append-only migration）
+- 逻辑上映射到 PRD 的 `knowledge_source / knowledge_doc / chunk / chunk_fts / chunk_vec / embedding_meta / citation / knowledge_conflict`
+
+不重命名已发布表，避免破坏 M3 数据和回滚能力。
+
+### 5.2 逻辑模型
+
+#### knowledge_source
+
+一个可重复同步的来源（目录、文件集合、未来的 Git 仓库/网页源）。
+
+| 字段 | 说明 |
+| --- | --- |
+| id | UUID |
+| kind | file / directory / git / web / email / note |
+| uri | 来源标识（路径/URL/仓库地址） |
+| scope | personal / team / org / external |
+| team_id | M6 使用，M4 可为空 |
+| default_class | L0–L3 |
+| enabled | 是否继续同步 |
+| created_at / updated_at | 时间 |
+
+#### knowledge_document
+
+一个逻辑文档版本。
+
+| 字段 | 说明 |
+| --- | --- |
+| id | UUID |
+| source_id | 来源 |
+| title | 显示标题 |
+| path | 原始文件路径/位置 |
+| content_hash | 原文 SHA-256 |
+| version | 文档版本号 |
+| data_class | L0–L3 |
+| generated_by | user / employee / external |
+| authority | official / note / external / employee |
+| valid_from / valid_to | 有效时间 |
+| deleted_at | 软删除 |
+| updated_at | 更新时间 |
+
+> 现有 `knowledge_document` 通过迁移补 `source_id`、`version`、`generated_by`、`authority`、`valid_*` 等列；无值按保守默认。
+
+#### chunk
+
+最小检索单元。
+
+| 字段 | 说明 |
+| --- | --- |
+| id | UUID |
+| document_id | 文档 |
+| ordinal | 文档内序号 |
+| text | 原文片段 |
+| content_hash | 片段哈希 |
+| start_offset / end_offset | 字符偏移 |
+| page / line_start / line_end | PDF/代码位置 |
+| heading_path | 标题树，如 `安装 > 配置` |
+| token_count | 估算 token |
+| data_class | 继承/提升后的分级 |
+| created_at | 时间 |
+
+现有 `knowledge_chunk` 通过迁移补 `content_hash`、`heading_path`、`page`、`line_*`；当前回填可由原文重算。
+
+#### chunk_fts
+
+沿用现有 FTS5；保持“汉字逐字 + 拉丁词”的索引方式。
+
+M4 增强：
+
+- 查询侧使用“清洗 + OR + 覆盖率”
+- 不再把整句所有字符做 AND
+- FTS 仍然保留，作为精确词/降级通道
+
+#### chunk_vec
+
+`sqlite-vec` 虚表：
+
+```sql
+-- 逻辑示意，具体 DDL 在 M4 迁移中定稿
+CREATE VIRTUAL TABLE chunk_vec USING vec0(
+  embedding FLOAT[512]
+);
+
+CREATE TABLE chunk_vec_map (
+  rowid     INTEGER PRIMARY KEY,
+  chunk_id  TEXT NOT NULL UNIQUE
+);
+```
+
+约束：
+
+- `rowid` 用 **BigInt** 绑定（C-2）
+- 建库时必须 `allowExtension: true`（C-1）
+- 一条 chunk 对应一条向量
+- 换模型/维度必须新建索引，不能原地混用
+
+#### embedding_meta
+
+| 字段 | 说明 |
+| --- | --- |
+| id | UUID |
+| provider | local-onnx / cloud |
+| model | 模型名 |
+| dim | 维度 |
+| model_version | 模型版本/哈希 |
+| index_version | 索引代次 |
+| created_at | 时间 |
+| active | 当前是否用于检索 |
+
+每个索引代次只允许一个 active embedding_meta；切换时双写/重建，成功后原子切换。
+
+#### citation
+
+回答引用的持久化记录。
+
+| 字段 | 说明 |
+| --- | --- |
+| id | UUID |
+| answer_id / run_id | 回答 |
+| chunk_id | 引用片段 |
+| document_version | 文档版本 |
+| content_hash | 片段哈希 |
+| quote_start / quote_end | 引用子串位置 |
+| verified | 0/1 |
+| invalid_reason | 文件已删/哈希变化/越权 |
+| created_at | 时间 |
+
+#### knowledge_conflict
+
+| 字段 | 说明 |
+| --- | --- |
+| id | UUID |
+| topic | 冲突主题 |
+| chunk_a / chunk_b | 两个片段 |
+| status | open / resolved / ignored |
+| resolution | 采用哪个版本/人工裁决 |
+| resolved_by / resolved_at | 裁决人/时间 |
+
+#### rag_cache
+
+| 字段 | 说明 |
+| --- | --- |
+| key | 规范化问题 + 版本组合的哈希 |
+| question_norm | 规范化问题 |
+| scope/filters | 作用域/过滤条件 |
+| doc_versions_hash | 文档版本集合哈希 |
+| embedding_index_version | 向量索引代次 |
+| model / prompt_version / reranker_version | 组合版本 |
+| answer_json | 回答 + 引用 |
+| created_at / expires_at | TTL |
+| hit_count | 命中次数 |
+
+---
+
+## 6. 摄取与分块
+
+### 6.1 摄取管道
+
+```text
+选择来源
+→ 解析（保留标题/表格/代码块/页码）
+→ 清洗（去样板、统一换行）
+→ 内容哈希
+→ 结构分块
+→ 元数据/分级
+→ 脱敏预处理（外发嵌入时）
+→ 嵌入（本地）
+→ 入库
+→ FTS + 向量索引
+```
+
+### 6.2 解析器
+
+M4 首批：
+
+- Markdown / TXT
+- Word `.docx` / RTF（现有 textutil）
+- PDF（按页解析，保留页码）
+- 代码（按文件/函数边界；先支持常见语言，AST 解析失败回退段落）
+
+后续：
+
+- Git 仓库（浅克隆 + 白名单 + 忽略 `.git/node_modules/dist`）
+- 网页/RSS
+- 邮件/日历作为知识源
+
+### 6.3 分块策略
+
+原则：
+
+1. 结构优先：标题层级、段落、代码块、表格
+2. 表格与代码块**整体不切**
+3. 目标 400–800 tokens，重叠 10–15%
+4. 每块保留标题路径、页码/行号、字符偏移
+5. 超长代码函数可切，但保留函数名/文件路径
+
+禁止：
+
+- 固定 800 字硬切导致语义截断
+- 把标题和正文分离到不同块
+- 把表格拆成无表头的行
+
+### 6.4 增量与删除
+
+- 内容哈希相同 → 跳过
+- 内容变化 → 新版本 + 软删除旧 chunk
+- 文件删除 → 文档软删除，chunk 不再参与检索；citation 标记失效
+- 重建索引不阻塞主流程；旧索引可继续服务
+
+### 6.5 分级
+
+- 来源默认 L2（未知）
+- 文件/目录可指定 L0–L3
+- 分级只能升，不能由模型/员工下调
+- L3 不参与任何外部 embedding
+- 云端 embedding 只允许 L0/L1，且显式授权
+
+---
+
+## 7. Embedding
+
+### 7.1 Provider 接口
+
+```ts
+interface EmbeddingProvider {
+  readonly id: string;
+  readonly model: string;
+  readonly dim: number;
+  embed(texts: string[]): Promise<number[][]>;
+}
+```
+
+实现：
+
+1. `LocalOnnxEmbeddingProvider`（默认）
+2. `CloudEmbeddingProvider`（默认关闭）
+3. `NullEmbeddingProvider`（只 FTS；降级）
+
+### 7.2 本地模型
+
+建议：
+
+- 模型：`bge-small-zh-v1.5`（中文小模型，512 维）
+- 量化：INT8 / ONNX
+- 运行：ONNX Runtime（CPU）
+- 打包：模型随 App 放入 `Resources/models/`
+- 校验：启动时校验模型文件哈希；缺失/损坏 → 自动回退 FTS
+
+选择理由：
+
+- 中文语义尚可
+- 体积/内存可控
+- 不需要联网
+- 不把知识内容发给第三方
+
+### 7.3 本地嵌入进程
+
+不能直接在 daemon 主循环里跑大模型：
+
+```text
+daemon
+  └─ embedding worker（worker_threads / 独立进程）
+       ├─ 加载模型
+       ├─ 批量嵌入队列
+       ├─ 超时/取消
+       └─ 空闲卸载（可选）
+```
+
+约束：
+
+- 索引任务后台执行，不阻塞 tick
+- 单批大小有限（例如 16–32）
+- 超时/内存上限
+- 失败不影响 FTS 检索
+- 模型加载失败有可见状态
+
+### 7.4 云端嵌入（可选）
+
+仅在用户显式开启时：
+
+- 只允许 L0/L1
+- 必须经脱敏网关
+- 记录 `outbound_audit`
+- 不发送 L2/L3
+- 维度/模型版本写入 `embedding_meta`
+- 关闭后索引不可混用
+
+### 7.5 版本与重建
+
+- 文档哈希不变但模型变了 → 必须重建向量
+- 索引代次 `index_version` 递增
+- 重建期间旧索引可读
+- 完成后原子切换 active 索引
+- 缓存 key 包含 `embedding_index_version`
+
+---
+
+## 8. 向量索引
+
+- `sqlite-vec` 与主库同文件
+- 建库 `allowExtension: true`
+- `rowid` 使用 BigInt
+- 只索引 `chunk_vec_map` 中存在的 chunk
+- 删除文档时同步删除 map/vector
+- 索引重建可删除 `chunk_vec` 与 map 后重灌
+- 向量自身视为 L2 数据，不导出、不跨库复制
+
+降级：
+
+- 扩展加载失败 → `NullEmbeddingProvider` + FTS
+- 维度不匹配 → 拒绝启用，提示重建
+- 向量查询失败 → FTS 结果继续
+
+---
+
+## 9. 检索与重排
+
+### 9.1 查询处理
+
+1. 规范化：全半角、大小写、空白
+2. 问句清洗（沿用并增强 M3 修复）
+3. 可选查询改写：
+   - 拆关键词
+   - 补同义词
+   - 多轮检索（概念→细节）
+4. 保留原查询，用于 FTS 精确匹配
+5. 过滤条件先于排序：
+   - scope/team
+   - data_class ≤ 当前允许
+   - source kind
+   - 时间/有效性
+   - 排除软删除/越权
+
+### 9.2 双路召回
+
+```text
+FTS Top 50
+向量 Top 50
+```
+
+参数可配置：
+
+```json
+{
+  "ftsTop": 50,
+  "vecTop": 50,
+  "rrfK": 60,
+  "rerankTop": 30,
+  "finalTop": 6
+}
+```
+
+### 9.3 RRF 融合
+
+```text
+score = Σ 1 / (k + rank_i)
+```
+
+- 同 chunk 去重
+- 保留 FTS 精确词命中标记
+- 保留向量相似度分数
+- 低分/低覆盖率过滤
+
+### 9.4 重排
+
+#### Stage 1：确定性重排（默认开启）
+
+- 查询词覆盖率
+- 精确短语/代码标识符命中
+- 标题/heading_path 命中
+- 来源权威度
+- 新鲜度
+- employee 生成内容降权（FR-G99）
+
+#### Stage 2：cross-encoder（可选）
+
+- 本地 reranker，例如 bge-reranker 小模型
+- 只对 Top 20–30 重排
+- 默认关闭；在“准确率优先”配置下开启
+- 失败 → 保留 Stage 1 顺序
+- 额外体积/延迟必须计入预算
+
+#### 为什么先做确定性重排
+
+当前 M3 的失败主要是“召回零命中/泛字误命中”，不是排序模型不够强。
+
+先做确定性重排可以：
+
+- 零模型成本
+- 可解释
+- 不增加打包体积
+- 为 cross-encoder 提供稳定候选
+
+### 9.5 上下文构造
+
+- 默认 Top 5–6 块
+- 按 token 预算裁剪（例如 4k）
+- 去重叠
+- 每块带编号、标题、来源
+- 明确分隔“资料”和“指令”
+- 不把检索内容当系统指令（prompt injection 防护）
+
+---
+
+## 10. 生成、引用与拒答
+
+### 10.1 回答协议
+
+```json
+{
+  "found": true,
+  "answer": "...",
+  "claims": [
+    {
+      "text": "...",
+      "citations": [1, 2]
+    }
+  ],
+  "citations": [
+    {
+      "index": 1,
+      "quote": "原文中的支持句"
+    }
+  ]
+}
+```
+
+要求：
+
+- 每个 claim 至少一个 citation
+- citation 只能引用本次上下文编号
+- quote 必须能在对应 chunk 中找到
+- 找不到 → 该 claim 不可信
+
+### 10.2 机械校验（必须）
+
+1. citation 编号存在
+2. chunk_id 存在
+3. 文档未被删除
+4. chunk 内容哈希未变
+5. quote 是 chunk 的子串
+6. 数字/日期/专有名词出现在引用片段
+7. 越权/分级不允许 → 拒绝
+
+失败：
+
+- 单条 claim → 删除该 claim
+- 关键 claim → 整体拒答
+- 引用失效 → `citation.invalid_reason`
+
+### 10.3 支持度校验（逐句）
+
+低成本版（默认）：
+
+- 提取 claim 中的实体/数字/关键词
+- 检查是否出现在引用 chunk
+- 覆盖率低于阈值 → 不支持
+
+增强版（可选）：
+
+- 本地 NLI / cross-encoder 判断 entailment
+- 或小模型 verifier
+- 仅高风险/关键结论使用，避免每题增加延迟
+
+### 10.4 拒答
+
+- 检索为空
+- 重排后最高分低于阈值
+- 引用全部失效
+- 核心 claim 无支持
+- L2 超过外发上限
+- 模型返回非法 JSON
+- 模型返回无有效引用
+
+回答模板：
+
+```text
+知识库里没有找到足够依据，无法确认。
+可以：扩大检索范围 / 指定文档 / 提供资料。
+```
+
+### 10.5 引用失效
+
+文件被删除/修改：
+
+- citation 标记 `invalid_reason`
+- UI 显示“引用已失效”
+- 不自动用新版本替换旧引用；需重新检索
+
+---
+
+## 11. 精确缓存
+
+### 11.1 只缓存校验通过的回答
+
+```text
+生成 → 机械校验 → 支持度校验 → 通过 → 写缓存
+```
+
+不合格回答绝不入缓存。
+
+### 11.2 Key
+
+```text
+normalized_question
++ scope/filters
++ document_version_set_hash
++ embedding_provider/model/index_version
++ prompt_version
++ reranker_version
++ llm_model
+```
+
+### 11.3 失效
+
+- 文档新增/更新/删除
+- 索引重建
+- embedding 模型切换
+- prompt 版本变化
+- reranker 版本变化
+- 权限/分级变化
+- TTL 到期（默认 24h，可配置）
+
+### 11.4 不做什么
+
+第一版不做：
+
+- 语义缓存
+- 跨用户共享
+- 跨 team 共享
+- 缓存含 L3 的回答
+
+---
+
+## 12. 权限、安全与隐私
+
+### 12.1 检索前过滤
+
+必须先按 scope/team/data_class 过滤，再做相似度排序。
+
+不能：
+
+```text
+先向量召回，再把越权结果丢掉
+```
+
+因为越权内容已经进入候选/日志/模型上下文。
+
+### 12.2 数据分级
+
+- 知识库默认 L2
+- 向量视为 L2 数据
+- L3 不参与外部 embedding/云端 rerank
+- 云端 embedding 只允许 L0/L1 + 显式授权
+- 检索片段送模型前必须过脱敏网关
+
+### 12.3 Prompt injection
+
+导入文档是不可信数据：
+
+- 检索内容放进“资料”区块，不放进系统指令
+- 不允许文档内容改变工具权限
+- 文档内的“忽略之前指令”只当普通文本
+- 高风险动作仍需人工确认
+
+### 12.4 日志/审计
+
+- 不记录正文/向量/完整 prompt
+- 记录 purpose、topK、命中文档 id、分级、哈希、耗时
+- 外发审计记录 `rag-answer` / `rag-embedding-cloud`
+- 支持按 doc/chunk 追溯引用
+
+---
+
+## 13. 知识冲突与来源可信度
+
+### 13.1 冲突检测
+
+同一 topic/标题/接口名出现多版本：
+
+- 同一文档新旧版本
+- 不同来源的同名文档
+- 员工生成内容与正式文档
+
+### 13.2 处理
+
+1. 优先新版本
+2. 优先权威来源
+3. 仍冲突 → 提示用户裁决
+4. 裁决结果写入 `knowledge_conflict`
+5. 不自动删除旧版本
+
+### 13.3 来源权重
+
+```text
+正式交付物 > 手工笔记 > 外部公开资料 > 员工生成内容
+```
+
+员工生成内容：
+
+- `generated_by=employee`
+- 默认 `authority=employee`
+- 检索降权
+- 不得作为唯一依据
+
+---
+
+## 14. 增量、重建与迁移
+
+### 14.1 迁移策略
+
+M4 新迁移（示例编号，实际按顺序）：
+
+```text
+0006_rag_sources_and_metadata.sql
+0007_chunk_vectors.sql
+0008_rag_cache_and_citations.sql
+```
+
+原则：
+
+- 已发布迁移不改
+- 只加表/加列/加索引
+- 旧数据可继续 FTS 检索
+- 向量回填异步执行
+- 回填失败保留 FTS
+
+### 14.2 重建
+
+```text
+停用向量索引（active=false）
+→ 删除/重建 chunk_vec + map
+→ 重新分块/嵌入
+→ 校验数量/维度
+→ 原子切换 active
+```
+
+- 重建期间 FTS 可用
+- 重建不阻塞调度
+- 记录进度/错误
+
+### 14.3 容量
+
+- 目标 10 万块
+- 向量 512 维 float32 ≈ 2KB/块 ≈ 200MB（10 万）
+- 原文/索引/数据库总大小需监控
+- 容量告警阈值
+
+---
+
+## 15. 性能目标
+
+| 指标 | 目标 |
+| --- | --- |
+| 本地检索 P95 | <500ms |
+| 缓存命中 | <20ms |
+| 向量嵌入（批量） | 后台执行，不阻塞 tick |
+| 首次索引 | 可见进度，可取消 |
+| 内存增量 | 模型/索引可控，有上限 |
+| 100k 块检索 | 仍满足 P95 目标 |
+
+延迟预算：
+
+```text
+查询清洗/过滤   <20ms
+FTS 召回        <50ms
+向量 KNN        <100ms
+RRF/重排        <50ms
+模型生成        主要成本
+校验/缓存       <50ms
+```
+
+降级路径：
+
+```text
+向量不可用 → FTS + 确定性重排
+reranker 不可用 → 保留 RRF/确定性排序
+缓存异常 → 实时回答
+```
+
+---
+
+## 16. 配置、API 与界面
+
+### 16.1 配置
+
+```json
+{
+  "rag": {
+    "enabled": true,
+    "embedding": {
+      "provider": "local",
+      "model": "bge-small-zh-v1.5",
+      "dim": 512
+    },
+    "retrieval": {
+      "ftsTop": 50,
+      "vecTop": 50,
+      "rrfK": 60,
+      "rerank": "heuristic",
+      "finalTop": 6
+    },
+    "citation": {
+      "requireClaims": true,
+      "supportCheck": "lexical"
+    },
+    "cache": {
+      "enabled": true,
+      "ttlS": 86400
+    }
+  }
+}
+```
+
+### 16.2 IPC
+
+新增/扩展：
+
+```text
+knowledge.import        现有
+knowledge.reindex       新增：重建向量/索引
+knowledge.stats         新增：文档/块/索引/模型状态
+knowledge.search        扩展：筛选/混合检索
+knowledge.answer        扩展：RAG 选项
+knowledge.cancel        新增：取消索引任务
+rag.status              新增：模型/索引/缓存健康
+```
+
+### 16.3 界面
+
+设置 → 知识库：
+
+- 文档列表
+- 导入
+- 索引状态
+- 模型状态（本地/未加载/失败）
+- 重建索引
+- 缓存开关/TTL
+- 检索诊断（可选，显示 FTS/向量候选数和耗时）
+
+问答：
+
+- 引用可点击
+- 引用失效标记
+- 无依据提示
+- “仅本地检索”/“混合检索”状态
+- 不显示模型内部推理
+
+---
+
+## 17. 打包与运行
+
+### 17.1 用户端
+
+目标：**不需要安装 Ollama/Python/数据库**。
+
+打包内容：
+
+```text
+Aegis.app/Contents/Resources/
+├── app/
+├── daemon/
+├── models/
+│   └── bge-small-zh-v1.5/
+├── node/bin/node
+└── node_modules/（sqlite-vec、onnxruntime 等）
+```
+
+### 17.2 开发侧
+
+必须处理：
+
+- ONNX Runtime 原生库按架构打包
+- sqlite-vec 扩展加载
+- 模型文件哈希校验
+- 原生库签名/公证（正式版）
+- 模型许可证可再分发
+- App 体积预计 +100–200MB
+- daemon 内存增加，需懒加载/空闲卸载
+
+### 17.3 降级
+
+模型缺失/损坏/平台不支持：
+
+```text
+RAG 混合检索不可用
+→ 自动只用 FTS
+→ 界面显示“语义检索未启用”
+→ 不影响导入/引用/拒答
+```
+
+---
+
+## 18. 测试与评估
+
+### 18.1 单元测试
+
+- 分块：标题/代码/表格/超长
+- 哈希/增量/软删除
+- FTS 查询清洗
+- RRF 融合/去重
+- 过滤/分级/scope
+- 缓存 key/失效
+- 引用哈希/quote 校验
+- 支持度校验
+- 冲突检测
+- 降级路径
+
+### 18.2 集成测试
+
+- 临时 SQLite + 假 embedding provider（确定性向量）
+- 导入→索引→检索→回答→引用→缓存
+- 文档更新后缓存失效
+- 删除文档后引用失效
+- 向量扩展不可用回退 FTS
+- 10 万块规模压测（合成数据）
+
+### 18.3 评估集
+
+至少 30–50 题：
+
+| 类型 | 数量 |
+| --- | --- |
+| 精确关键词/代码标识符 | 8 |
+| 自然语言语义 | 10 |
+| 多文档归纳 | 6 |
+| 无依据（应拒答） | 8 |
+| 新旧版本冲突 | 4 |
+| 引用失效/权限 | 4 |
+| Prompt injection | 3 |
+
+指标：
+
+```text
+Recall@5 / Recall@10
+MRR
+引用支持率
+无依据拒答率
+回答正确率（人工）
+P50/P95 延迟
+缓存命中率
+索引时间
+```
+
+### 18.4 通过门槛
+
+- 语义题 Recall@5 ≥ 85%
+- 精确题 Recall@5 ≥ 95%
+- 无依据拒答率 ≥ 95%
+- 引用支持率 ≥ 95%
+- 引用可点击打开正确来源 ≥ 95%
+- 检索 P95 <500ms
+- 无严重越权/外发
+
+---
+
+## 19. 实施阶段
+
+> 按 M4 排期；M3 未验收前不开始。
+
+### Phase 0：评估与基线
+
+- 20–50 题评估集
+- 测当前 FTS baseline
+- 确认模型/打包方案
+- ADR
+
+### Phase 1：数据与摄取
+
+- 新迁移
+- source/doc/chunk 元数据
+- 结构分块
+- 增量/软删除
+- FTS 兼容
+
+### Phase 2：本地嵌入
+
+- EmbeddingProvider
+- ONNX worker
+- 模型打包/校验
+- 索引/重建
+- 降级
+
+### Phase 3：混合检索
+
+- 双路召回
+- RRF
+- 过滤
+- 确定性重排
+- topK/压缩
+
+### Phase 4：引用与缓存
+
+- claim 协议
+- 机械校验
+- 支持度校验
+- citation 表
+- 精确缓存/失效
+- 拒答路径
+
+### Phase 5：界面与验收
+
+- 索引状态/重建
+- 引用失效 UI
+- 评估
+- 打包
+- 验收
+
+### Phase 6（可选）
+
+- cross-encoder rerank
+- 查询改写 LLM
+- Git/PDF 高级解析
+- 冲突治理 UI
+
+---
+
+## 20. 验收清单
+
+- [ ] 5 类文档（MD/TXT/DOCX/RTF/PDF）可导入
+- [ ] 10 万块规模索引可建立
+- [ ] 混合检索可开关
+- [ ] 向量不可用时自动回退 FTS
+- [ ] 30+ 评估题达到门槛
+- [ ] 每个结论有可点击引用
+- [ ] 引用哈希/quote 校验通过
+- [ ] 无依据/低分明确拒答
+- [ ] L2 在 L1 上限下不外发
+- [ ] L3/越权内容检索不到
+- [ ] 文档更新后缓存失效
+- [ ] 删除文档后引用标记失效
+- [ ] 索引重建不阻塞调度
+- [ ] 打包产物离线可用（模型随包）
+- [ ] 无 Ollama/Python/外部数据库依赖
+- [ ] 正式签名/公证路径明确
+
+---
+
+## 21. 风险与开放问题
+
+| 风险 | 影响 | 缓解 |
+| --- | --- | --- |
+| ONNX Runtime 打包复杂 | 安装失败/体积 | 分架构构建、启动自检、FTS 降级 |
+| 模型许可证 | 不能分发 | 选可再分发模型，记录许可证 |
+| sqlite-vec 原生扩展 | 加载失败 | 建库时 allowExtension；启动探测；FTS 降级 |
+| 本地模型内存/CPU | 24/7 不稳 | worker、批处理、懒加载、上限 |
+| 向量维度/模型切换 | 旧索引不可用 | 索引代次/重建/原子切换 |
+| 缓存陈旧 | 错误复用 | 文档/索引/模型/prompt 版本 key |
+| reranker 增加延迟 | 体验下降 | 默认轻量重排，cross-encoder 可选 |
+| 引用校验误杀 | 回答变少 | 分级阈值、只对关键句严格 |
+| Prompt injection | 越权/错误 | 资料区隔离、无工具权限、人工确认 |
+| Git/PDF 解析质量 | 分块差 | 分阶段、可回退 |
+
+### 待产品决策
+
+1. 本地模型选型与可再分发许可证
+2. 是否默认启用 cross-encoder
+3. 云端 embedding 是否允许（仅 L0/L1）
+4. M4 是否包含 PDF/Git 摄取，还是后续
+5. 团队 scope 是否在 M4 预留空字段（建议预留）
+6. 引用支持度阈值与拒答策略
+
+---
+
+## 22. 与现有 M3 代码的衔接
+
+| 现有 | M4 处理 |
+| --- | --- |
+| `KnowledgeBase.ingest/list/search/remove` | 扩展 source/version/metadata，不破坏现有 IPC |
+| `searchForQuestion` 清洗+OR+覆盖率 | 保留为 FTS 通道；混合检索时作为候选源 |
+| `LlmService.answer` | 改为调用 `RagService.answer`；保留拒答/网关/审计 |
+| `knowledge_document/chunk/fts` | 保留；新增表/列 |
+| 引用回查 | 扩展为 citation 表 + 哈希/quote 校验 |
+| 800 字分块 | M4 新文档使用结构分块；旧文档可后台重建 |
+| 现有 M3 测试 | 全部保留；新增 RAG 测试 |
+
+**迁移原则：** 先双读/双写，稳定后切换默认；任何阶段都必须保留 FTS 可用路径。
+
+---
+
+## 23. 设计结论
+
+完整 RAG 是一个**检索质量 + 证据安全 + 性能缓存**的组合工程，不是“加一个向量库”。
+
+本设计的关键取舍：
+
+1. 本地 embedding 默认、随包分发、离线可用
+2. FTS 永不删除，始终作为精确匹配与降级通道
+3. 混合召回后先做确定性重排，cross-encoder 可选
+4. 引用校验分为“机械校验”和“支持度校验”两层
+5. 只缓存校验通过的回答，key 带完整版本
+6. 所有失败路径回退 FTS，不阻塞提醒/调度
+7. 按 M4 实施，不提前进 M3
+
+下一步：评审本设计 → 确认开放问题 → 建评估集 → 开 M4 Phase 0。
