@@ -1,0 +1,11 @@
+From: boss@example.com
+To: test@example.com
+Subject: 合同待确认：M3 验收
+Date: Wed, 21 Oct 2026 09:00:00 +0800
+Message-ID: <m3-contract-20261021@aegis.test>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+请确认 M3 验收合同，今天下班前需要回复。
+
+这是一封用于测试重要邮件监测的样例邮件。

@@ -205,6 +205,7 @@ pnpm verify                  # 依赖方向门禁 + typecheck + lint + 测试
 | [M3 邮件监测](docs/M3-EMAIL.md) | IMAP 规则、限制与凭据存储 |
 | [M3 优先级分流](docs/M3-ROUTING.md) | low/normal/high 分别走哪些渠道 |
 | [M3 验收清单](docs/acceptance/M3.md) | 当前证据、未满足项与验收前动作 |
+| [M3 缩短验收方案](docs/acceptance/M3-SHORT.md) | 2–3 天验证方案与豁免边界 |
 | 设置 → 监测器 | 添加/删除/启停监测器、立即扫描、一键验收场景；查看间隔、Skills、通知数与错误 |
 | 设置 → 模型（LLM） | 选服务商 → 填 Key → 连接并获取模型 → 切换模型；Key 只进钥匙串 |
 | 设置 → 知识库 | 导入 Markdown/TXT/Word/RTF、中文子串检索、打开引用来源 |

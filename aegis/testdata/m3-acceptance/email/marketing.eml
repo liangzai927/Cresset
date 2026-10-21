@@ -1,0 +1,11 @@
+From: news@example.com
+To: test@example.com
+Subject: 本周产品推荐与优惠
+Date: Wed, 21 Oct 2026 09:20:00 +0800
+Message-ID: <m3-marketing-20261021@aegis.test>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+本周产品推荐，点击查看优惠。
+
+这是一封用于测试“不应提醒”的营销邮件。

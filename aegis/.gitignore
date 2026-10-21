@@ -24,3 +24,6 @@ spike-artifacts/
 
 # 验收报告是本机证据
 docs/acceptance/*-report.md
+
+# M3 验收本机填写结果
+testdata/m3-acceptance/*-done.md

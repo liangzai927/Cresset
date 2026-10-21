@@ -1,0 +1,11 @@
+From: hr@example.com
+To: test@example.com
+Subject: 面试安排：周五 14:00
+Date: Wed, 21 Oct 2026 09:10:00 +0800
+Message-ID: <m3-interview-20261021@aegis.test>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=utf-8
+
+面试安排在本周五 14:00，请确认会议室。
+
+这是一封用于测试重要邮件监测的样例邮件。
