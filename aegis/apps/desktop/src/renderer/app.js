@@ -638,6 +638,7 @@ async function loadEmailMonitor() {
     $("email-monitor-user").value = v.user ?? "";
     $("email-monitor-mailbox").value = v.mailbox;
     $("email-monitor-interval").value = String(v.pollIntervalS);
+    $("email-monitor-since-days").value = String(v.sinceDays);
     $("email-monitor-use-llm").checked = v.useLlm;
     $("email-monitor-senders").value = v.senders.join(", ");
     $("email-monitor-keywords").value = v.keywords.join(", ");
@@ -662,6 +663,7 @@ function readEmailMonitorForm() {
     ...($("email-monitor-user").value.trim() ? { user: $("email-monitor-user").value.trim() } : {}),
     mailbox: $("email-monitor-mailbox").value.trim() || "INBOX",
     pollIntervalS: Number($("email-monitor-interval").value),
+    sinceDays: Number($("email-monitor-since-days").value),
     useLlm: $("email-monitor-use-llm").checked,
     senders: splitList($("email-monitor-senders").value),
     keywords: splitList($("email-monitor-keywords").value),

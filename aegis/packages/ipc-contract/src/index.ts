@@ -267,6 +267,7 @@ export const EmailMonitorSettingsSchema = z
     user: z.string().max(255).optional(),
     mailbox: z.string().max(255),
     pollIntervalS: z.number().int().min(60).max(3_600),
+    sinceDays: z.number().int().min(1).max(365).default(3),
     useLlm: z.boolean().default(false),
     senders: z.array(z.string().max(255)),
     keywords: z.array(z.string().max(50)),

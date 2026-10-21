@@ -172,6 +172,8 @@ export const DaemonConfigSchema = z
         mailbox: z.string().max(255).default("INBOX"),
         passwordSecret: z.string().max(255).default("email.imap.password"),
         pollIntervalS: z.number().int().min(60).max(3_600).default(300),
+        /** 只处理最近 N 天的未读邮件，避免把多年未读历史翻出来 */
+        sinceDays: z.number().int().min(1).max(365).default(3),
         maxPerPoll: z.number().int().min(1).max(50).default(20),
         /** 规则未命中时是否让 LLM 判断；只发送发件人+主题，L2 */
         useLlm: z.boolean().default(false),

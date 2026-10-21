@@ -37,6 +37,18 @@ export function isImportantEmail(header: EmailHeader, rules: EmailRules): boolea
   return rules.keywords.some((k) => k.trim() && subject.includes(k.trim().toLowerCase()));
 }
 
+/** 判断邮件内部日期是否在最近 N 天内；缺失日期按“不处理”处理 */
+export function isEmailWithinDays(
+  internalDate: Date | string | undefined,
+  now: number,
+  sinceDays: number,
+): boolean {
+  if (!internalDate) return false;
+  const ms = internalDate instanceof Date ? internalDate.getTime() : Date.parse(internalDate);
+  if (!Number.isFinite(ms)) return false;
+  return ms >= now - sinceDays * 86_400_000;
+}
+
 /** 注入点：测试可替换 IMAP 客户端 */
 export interface ImapClientLike {
   connect(): Promise<void>;
@@ -44,10 +56,11 @@ export interface ImapClientLike {
   search(query: { seen: boolean }, options: { uid: true }): Promise<number[] | false | undefined>;
   fetch(
     range: string,
-    query: { envelope: boolean; uid: true },
+    query: { envelope: boolean; uid: true; internalDate?: true },
     options: { uid: true },
   ): AsyncIterable<{
     uid: number;
+    internalDate?: Date | string;
     envelope?: { subject?: string; from?: Array<{ address?: string }> };
   }>;
   messageFlagsAdd(range: string, flags: string[], options: { uid: true }): Promise<boolean>;

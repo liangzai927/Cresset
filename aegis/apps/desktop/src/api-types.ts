@@ -252,6 +252,7 @@ export interface EmailMonitorSettings {
   user?: string;
   mailbox: string;
   pollIntervalS: number;
+  sinceDays: number;
   useLlm: boolean;
   senders: string[];
   keywords: string[];
