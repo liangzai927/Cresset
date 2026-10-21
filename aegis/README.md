@@ -203,6 +203,7 @@ pnpm verify                  # 依赖方向门禁 + typecheck + lint + 测试
 | [M3 本地日历](docs/M3-CALENDAR.md) | ICS 导入、早报展示与不支持范围 |
 | [M3 天气](docs/M3-WEATHER.md) | Open-Meteo 配置、缓存与限制 |
 | [M3 邮件监测](docs/M3-EMAIL.md) | IMAP 规则、限制与凭据存储 |
+| [M3 邮件配置指南](docs/M3-EMAIL-SETUP.md) | QQ/Gmail/iCloud 授权码、发送样本与排错 |
 | [M3 优先级分流](docs/M3-ROUTING.md) | low/normal/high 分别走哪些渠道 |
 | [M3 验收清单](docs/acceptance/M3.md) | 当前证据、未满足项与验收前动作 |
 | [M3 缩短验收方案](docs/acceptance/M3-SHORT.md) | 2–3 天验证方案与豁免边界 |

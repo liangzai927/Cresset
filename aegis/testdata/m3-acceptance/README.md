@@ -147,6 +147,8 @@ PORT=8788 node testdata/m3-acceptance/webhook-server.mjs
 
 ### 0.8（可选）配置 IMAP
 
+详细 IMAP 配置见 [docs/M3-EMAIL-SETUP.md](../../docs/M3-EMAIL-SETUP.md)。
+
 如果你有测试邮箱：
 
 - 设置 → 重要邮件（IMAP）
